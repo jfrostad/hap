@@ -37,9 +37,7 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather)
-
-repo <- file.path(h_root, '_code/lbd/hap/extract')
+pacman::p_load(data.table, dplyr, feather, readxl)
 
 #options
 date <- "2018_07_17"
@@ -47,16 +45,46 @@ date <- "2018_07_17"
 file.types <- c('poly', 'pt', 'ipums')
 file.types <- c('poly', 'pt')
 
-all.indicators <- c('cooking_fuel_mapped')
+all.indicators <- c('cooking')
+#***********************************************************************************************************************
 
-#### Load functions ####
+# ----IN/OUT------------------------------------------------------------------------------------------------------------
+###Input###
+#raw data
+data.dir <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
+doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
+def.file <- file.path(doc.dir, 'definitions.xlsx')
+
+###Output###
+
+#***********************************************************************************************************************
+
+# ---FUNCTIONS----------------------------------------------------------------------------------------------------------
+##function lib##
+#general functions#
+central.function.dir <- file.path(h_root, "_code/_lib/functions")
+# this pulls the general misc helper functions
+file.path(central.function.dir, "misc.R") %>% source
+#hap functions#
+hap.function.dir <- file.path(h_root, '_code/hap/extract/functions')
+#this pulls hap collapse helper functions
+file.path(hap.function.dir, '/collapse_fx.R') %>% source
+#shared functions#
+shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r")
+file.path(shared.function.dir, 'get_location_metadata.R') %>% source
+file.path(shared.function.dir, 'get_ids.R') %>% source
+file.path(shared.function.dir, 'get_covariate_estimates.R') %>% source
+
+#***********************************************************************************************************************
+
+# ---COLLAPSE-----------------------------------------------------------------------------------------------------------
+
 for (file_type in file.types){
   message(paste("Loading",file_type, "data"))
-  rm(pt_collapse)
-  message('Loading Data...')
+
   # Load data
   if (!("pt_collapse" %in% ls()) & file_type == 'pt') {
-    pt_collapse <- read_feather(paste0(j_root,'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/points_', date, ".feather")) %>% as.data.table
+    raw <- paste0(data.dir, 'points_', date, ".feather") %>% read_feather %>% as.data.table
     # Encoding(pt_collapse$w_source_drink) <- "UTF-8"
     # Encoding(pt_collapse$w_source_other) <- "UTF-8"
     # Encoding(pt_collapse$t_type) <- "UTF-8"
@@ -67,7 +95,7 @@ for (file_type in file.types){
   } 
     
   if (!("pt_collapse" %in% ls()) & file_type == 'poly') {
-    pt_collapse <- read_feather(paste0(j_root,'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/poly_', date, ".feather")) %>% as.data.table
+    raw <- paste0(data.dir, 'poly_', date, ".feather") %>% read_feather %>% as.data.table
     # Encoding(pt_collapse$w_source_drink) <- "UTF-8"
     # Encoding(pt_collapse$w_source_other) <- "UTF-8"
     # Encoding(pt_collapse$t_type) <- "UTF-8"
@@ -88,36 +116,19 @@ for (file_type in file.types){
     indicators <- all.indicators
   }
 
-    
-    ### Standardize iso3s
-    setnames(pt_collapse, 'iso3', 'ihme_loc_id')
-    pt_collapse[, iso3 := substr(pt_collapse$iso3, 1, 3)]
-    
     for (indi_fam in indicators) {
-    rm(definitions)
-    message(paste('Processing:', indi_fam))
+
+      message(paste('Processing:', indi_fam))
 
         message(paste("Collapsing ", indi_fam))
 
-        message("Importing functions...")
-        setwd(repo)
-        source('functions/initial_cleaning.R')
-        source('functions/hh_cw.R')
-        source('functions/address_missing.R')
-        source('functions/cw_indi.R')
-        source('functions/agg_wash.R')
-        source('functions/define_wash.R')
-        source('functions/write_cw.R')
-
         #### Subset & Shape Data ####
         message("Initial Cleaning...")
-        temp_list <- initial_cleaning(census = T)
-        ptdat <- temp_list[[1]]; ptdat_0 <- temp_list[[2]]
-        rm(temp_list)
+        ptdat <- initialCleaning(raw)
 
         #### Define Indicator ####
         message("Defining Indicator...")
-        ptdat <- define_indi(sdg_indi = T, census = ipums)
+        ptdat <- defIndicator(ptdat, debug=T)
 
         #### Address Missingness ####
         message("Addressing Missingness...")

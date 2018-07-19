@@ -1,11 +1,10 @@
-define_indi <- function(mydat = ptdat, var_family = indi_fam, define = definitions,
-                        define2 = definitions2,debug = F, sdg_indi = T, census) {
+define_indi <- function(dt, var_family = indi_fam, define = definitions,
+                        define2 = definitions2, debug = F, sdg_indi = T, census) {
+  
+  #first see if we are working on IPUMS
+  census <- ifelse(dt$survey_series %>% any(.%like%'IPUMS', na.rm=T), T, F)
+  
   if (debug) {browser()}
-
-  if ("data.table" %in% class(mydat)){
-    #make sure you are not passing this data.tables. DT drops specific strings when merging large objects together.
-    message('ALERT: YOU ARE PASSING DATA.TABLES INTO THE MERGE. LARGE DATA.TABLES DROP STINGS. PLEASE MAKE THEM DATA.FRAMES.')
-  }
 
   if (var_family == 'hw') {
     message('Nothing to define! HW is numeric!')
