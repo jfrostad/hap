@@ -104,23 +104,53 @@ defIndicator <- function(dt, definitions=def.file, var_family = indi_fam, debug 
     out <- merge(data, defs, by.x=this.var, by.y='value', all.x=T) #merge onto data using original values
     
     #assert that merge was successful
-    if(nrow(out) != og.count){ 
+    if (nrow(out) != og.count) { 
+      
       stop(this.var, ': remap is causing data loss, investigate!!')
-    } else out[, c('row_id', new.cols), with=F] %>% setkey(., row_id) %>% return #keep only the new variables and the identifying row info
+      
+    } else out[, c('row_id', new.cols), with=F] %>% setkey(., row_id) %>% return #keep only the new vars and ID
 
   }
   
   maps <- lapply(unique(def.dt$variable), mergeDef, data=dt, defs=def.dt)
 
-  merged <- Reduce(function(...) merge(..., all = T), list(dt, maps))
+  #merge the new mapped vars with the original data (note that they all need to be keyed on row ID)
+  Reduce(function(...) merge(..., all = T), list(dt, maps)) %>% return
+
+}
+
+#***********************************************************************************************************************
+
+# ----Missingness-------------------------------------------------------------------------------------------------------
+#function to address missing 
+idMissing <- function(input.dt, this.var, dt_type = data_type, criteria=.2, wt.var=NA, debug=F) {
   
-  if (var_family == 'cooking') {
-    
-    #right now we are only doing binary solid fuel use
-    
-    
-  }
+  #allow for interactive debugs
+  if (debug) browser()
   
-  return(dt)
+  #set as copy so you dont save the new vars
+  dt <- copy(input.dt)
+  
+  #set the original row count in order to print the data loss due to missingness
+  og.count <- nrow(dt)
+  
+  #define the weight variable 
+  if (is.na(wt.var)) {
+    dt[, wt := 1]
+  } else dt[, wt := get(wt.var)]
+
+  # Calculate data missingness by cluster for given variable
+  dt[, miss := get(this.var) %>% is.na %>% as.numeric]
+  #TODO why is hh_size missing so often?
+  #TODO missingness seems to be all or none depending by cluster..f/u in raw data
+  dt[, pct_miss := sum(miss*wt, na.rm=T)/sum(wt, na.rm=T), by=cluster_id] #calc pct miss, weight by hh_size
+
+  # Return the IDs of any clusters with more than 20% weighted missingness
+  message("identified #", dt[pct_miss>.2, cluster_id] %>% uniqueN, " clusters...or \n", 
+          round((nrow(dt[pct_miss>.2])/og.count)*100), 
+          "% of rows based on criteria of <=", criteria*100, "% missingness of ", this.var)
+  
+  dt[pct_miss>.2, cluster_id] %>% unique %>% return
   
 }
+

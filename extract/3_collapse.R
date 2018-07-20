@@ -128,19 +128,25 @@ for (file_type in file.types){
 
         #### Define Indicator ####
         message("Defining Indicator...")
-        ptdat <- defIndicator(ptdat, debug=T)
+        ptdat <- defIndicator(ptdat)
 
         #### Address Missingness ####
         message("Addressing Missingness...")
         
-        # Remove clusters with more than 20% weighted missingness
-        ptdat <- rm_miss()
+        # ID clusters with more than 20% weighted missingness
+        #TODO set this up to loop over all vars
+        missing.vars <- idMissing(ptdat, this.var="bin_cooking_fuel_mapped", criteria=.2, wt.var='hh_size') 
+        ptdat <- ptdat[!(cluster_id %in% missing.vars)] #remove these clusters
         if (nrow(ptdat) == 0) {
           next
         }
 
-        # Remove cluster_ids with missing hhweight or invalid hhs
-        miss_wts <- unique(ptdat$id_short[which(is.na(ptdat$hhweight))])
+        # Remove cluster_ids with missing hhweight or invalid 
+        missing.wts <- idMissing(ptdat, this.var="hhweight", criteria=0, wt.var=NA, debug=T) 
+        
+        ptdat <- ptdat[!(cluster_id %in% missing.wts)] #remove these clusters
+        ptdat <- ptdat[!()]
+        miss_wts <- unique(ptdat$cluster_id[which(is.na(ptdat$hhweight))])
         ptdat <- filter(ptdat, !(id_short %in% miss_wts))
         ptdat <- filter(ptdat, hhweight != 0)
 
