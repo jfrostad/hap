@@ -78,8 +78,9 @@ file.path(shared.function.dir, 'get_covariate_estimates.R') %>% source
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
-
+#loop over points and polygons to collapse
 for (file_type in file.types){
+  
   message(paste("Loading",file_type, "data"))
 
   # Load data
@@ -116,124 +117,125 @@ for (file_type in file.types){
     indicators <- all.indicators
   }
 
-    for (indi_fam in indicators) {
+  #loop over various families of indicators
+  for (indi_fam in indicators) {
 
-      message(paste('Processing:', indi_fam))
+    message(paste('Processing:', indi_fam))
 
-        message(paste("Collapsing ", indi_fam))
+    #### Subset & Shape Data ####
+    message("Initial Cleaning...")
+    ptdat <- initialCleaning(raw)
 
-        #### Subset & Shape Data ####
-        message("Initial Cleaning...")
-        ptdat <- initialCleaning(raw)
+    #### Define Indicator ####
+    message("Defining Indicator...")
+    ptdat <- defIndicator(ptdat)
 
-        #### Define Indicator ####
-        message("Defining Indicator...")
-        ptdat <- defIndicator(ptdat)
+    #### Address Missingness ####
+    message("Addressing Missingness...")
+    
+    # ID clusters with more than 20% weighted missingness
+    #TODO set this up to loop over all vars
+    missing.vars <- idMissing(ptdat, this.var="bin_cooking_fuel_mapped", criteria=.2, wt.var='hh_size') 
+    ptdat <- ptdat[!(cluster_id %in% missing.vars)] #remove these clusters
+    if (nrow(ptdat) == 0) {
+      next
+    }
 
-        #### Address Missingness ####
-        message("Addressing Missingness...")
-        
-        # ID clusters with more than 20% weighted missingness
-        #TODO set this up to loop over all vars
-        missing.vars <- idMissing(ptdat, this.var="bin_cooking_fuel_mapped", criteria=.2, wt.var='hh_size') 
-        ptdat <- ptdat[!(cluster_id %in% missing.vars)] #remove these clusters
-        if (nrow(ptdat) == 0) {
-          next
-        }
+    #Remove cluster_ids with missing hhweight or invalid 
+    #TODO confirm with Ani why zero tolerance for this? id #534 only has one missing weight
+    missing.wts <- idMissing(ptdat, this.var="hhweight", criteria=0, wt.var=NA)
+    ptdat <- ptdat[!(cluster_id %in% missing.wts)] #remove these clusters
+    #TODO, investigate these rows, about 25% of data & they always have missing hh_size too
+    invalid.wts <- unique(ptdat[hhweight==0, cluster_id]) 
+    ptdat <- ptdat[!(cluster_id %in% invalid.wts)] #remove these clusters
+    #TODO, none of these after the last filter, but there are missing hhsizes to investigate...
+    invalid.sizes <- unique(ptdat[hh_size<=0, cluster_id]) 
+    ptdat <- ptdat[!(cluster_id %in% invalid.sizes)] #remove these clusters
+    #ID missing hh sizes, talk to ani about crosswalk specs
+    missing.sizes <- idMissing(ptdat, this.var="hh_size", criteria=0, wt.var=NA)
+    ptdat <- ptdat[!(cluster_id %in% missing.sizes)] #remove these clusters
 
-        # Remove cluster_ids with missing hhweight or invalid 
-        missing.wts <- idMissing(ptdat, this.var="hhweight", criteria=0, wt.var=NA, debug=T) 
-        
-        ptdat <- ptdat[!(cluster_id %in% missing.wts)] #remove these clusters
-        ptdat <- ptdat[!()]
-        miss_wts <- unique(ptdat$cluster_id[which(is.na(ptdat$hhweight))])
-        ptdat <- filter(ptdat, !(id_short %in% miss_wts))
-        ptdat <- filter(ptdat, hhweight != 0)
+    if (nrow(ptdat) == 0) {
+      next
+    }
 
-        invalid_hhs <- unique(ptdat$id_short[which(ptdat$hh_size <= 0)])
-        ptdat <- filter(ptdat, !(id_short %in% invalid_hhs))
+    # Crosswalk missing household size data
+    #TODO discuss this part with ani after learning more, for now just remove the missing HH sizes
+    
+    # message("Crosswalking HH Sizes...")
+    # if (!ipums) {
+    #   ptdat <- hh_cw_reg(data = ptdat)
+    # } else {
+    #   ptdat <- assign_ipums_hh()
+    # }
+    
+    # Remove missing observations
+    #TODO ask ani why just this var?
+    #ptdat <- filter(ptdat, !is.na(imp))
 
-        if (nrow(ptdat) == 0) {
-          next
-        }
+    if (nrow(ptdat) == 0) {
+      next
+    }
+    
+    message(paste("Collapsing ", indi_fam))
 
-        # Crosswalk missing household size data
-        message("Crosswalking HH Sizes...")
-        if (!ipums) {
-          ptdat <- hh_cw_reg(data = ptdat)
-        } else {
-          ptdat <- assign_ipums_hh()
-        }
-        
-        # Remove missing observations
-        ptdat <- filter(ptdat, !is.na(imp))
+    #### Aggregate Data ####
+    # Bookmarking dataset so it can be looped over for conditional switch
+    # ptdat_preagg <- ptdat
+    
+    # Conditional switch is to switch collapsing for conditional vs unconditional indicators
+    #conditional <- 'unconditional' 
+    #TODO talk to ani about this option
 
-        if (nrow(ptdat) == 0) {
-          next
-        }
+    # Aggregate indicator to cluster level
+    message("Aggregating Data...")
+    ptdat <- agg_indi(ptdat, this.var='bin_cooking_fuel_mapped', debug=T)
 
-        #### Aggregate Data ####
-        # Bookmarking dataset so it can be looped over for conditional switch
-        ptdat_preagg <- ptdat
-        
-        # Conditional switch is to switch collapsing for conditional vs unconditional indicators
-        conditional <- 'unconditional'
+    # Skip the rest of the process if no rows of data are left
+    if (nrow(ptdat) == 0) {
+      next
+    }
 
-        # Reseting the dataset to preagregate
-        ptdat <- ptdat_preagg
-        message(paste("Conditional variables status:",conditional))
-       
-        # Aggregate indicator to cluster level
-        message("Aggregating Data...")
-        ptdat <- agg_indi()
+    # Delete cw dictionary if ipums already added to it previously
+    if (index == 1 & ipums) {
+      message('Checking if IPUMS already added to CW data previously')
+      original <- try(read.csv('/home/j/WORK/11_geospatial/wash/definitions/cw_sani.csv', stringsAsFactors = F),
+                    silent = T)
+    
+      if (class(original) == 'try-error') {
+        rm(original)
+      }  else {
+        if ('ipums' %in% original$data_type) {
+         system('rm /home/j/WORK/11_geospatial/wash/definitions/cw_sani.csv')
+        } 
+        rm(original)
+      }  
+    }
+    
+    # Write crosswalking dictionary
+    message('Output CW files')    
+    write_cw_ratio(census = ipums)
 
-        # Skip the rest of the process if no rows of data are left
-        if (nrow(ptdat) == 0) {
-          next
-        }
-
-        # Delete cw dictionary if ipums already added to it previously
-        if (index == 1 & ipums) {
-          message('Checking if IPUMS already added to CW data previously')
-          original <- try(read.csv('/home/j/WORK/11_geospatial/wash/definitions/cw_sani.csv', stringsAsFactors = F),
-                        silent = T)
-        
-          if (class(original) == 'try-error') {
-            rm(original)
-          }  else {
-            if ('ipums' %in% original$data_type) {
-             system('rm /home/j/WORK/11_geospatial/wash/definitions/cw_sani.csv')
-            } 
-            rm(original)
-          }  
-        }
-        
-        # Write crosswalking dictionary
-        message('Output CW files')    
-        write_cw_ratio(census = ipums)
-
-        #save poly and point collapses
-        message("Saving Collapsed Data...")
-        today <- gsub("-", "_", Sys.Date())
-        
-        if (!ipums) {
-          if (data_type == "poly") {
-            polydat <- ptdat
-            rm(ptdat)
-            write_feather(polydat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/polydat_",
-                          indi_fam, '_', conditional, '_', today, ".feather"))
-          } else{
-            write_feather(ptdat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/ptdat_",
-                          indi_fam, '_', conditional, '_', today, ".feather"))
-          }
-        }
-        
-        if (ipums) {
-          write_feather(ptdat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/IPUMS/feather/",
-                          indi_fam, '_', conditional, '_', today, '_', files[index]))
-        }
-        
+    #save poly and point collapses
+    message("Saving Collapsed Data...")
+    today <- gsub("-", "_", Sys.Date())
+    
+    if (!ipums) {
+      if (data_type == "poly") {
+        polydat <- ptdat
+        rm(ptdat)
+        write_feather(polydat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/polydat_",
+                      indi_fam, '_', conditional, '_', today, ".feather"))
+      } else{
+        write_feather(ptdat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/ptdat_",
+                      indi_fam, '_', conditional, '_', today, ".feather"))
       }
     }
+    
+    if (ipums) {
+      write_feather(ptdat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/IPUMS/feather/",
+                      indi_fam, '_', conditional, '_', today, '_', files[index]))
+    }
+    
   }
 }
