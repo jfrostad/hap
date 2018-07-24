@@ -40,12 +40,9 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(data.table, dplyr, feather, readxl)
 
 #options
-date <- "2018_07_17"
-
-file.types <- c('poly', 'pt', 'ipums')
-file.types <- c('poly', 'pt')
-
+date <- "2018_07_17" #date of working post-extraction
 all.indicators <- c('cooking')
+file.type <- "!PUMS" #need to change this structure when i add in IPUMS extractions and review
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -56,7 +53,7 @@ doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
 
 ###Output###
-
+out.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -74,91 +71,69 @@ shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r
 file.path(shared.function.dir, 'get_location_metadata.R') %>% source
 file.path(shared.function.dir, 'get_ids.R') %>% source
 file.path(shared.function.dir, 'get_covariate_estimates.R') %>% source
-
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
 #loop over points and polygons to collapse
-for (file_type in file.types){
+for (point in T:F) {
   
-  message(paste("Loading",file_type, "data"))
+  message("Loading data, point=[", point, "]")
 
   # Load data
-  if (!("pt_collapse" %in% ls()) & file_type == 'pt') {
-    raw <- paste0(data.dir, 'points_', date, ".feather") %>% read_feather %>% as.data.table
-    # Encoding(pt_collapse$w_source_drink) <- "UTF-8"
-    # Encoding(pt_collapse$w_source_other) <- "UTF-8"
-    # Encoding(pt_collapse$t_type) <- "UTF-8"
-    # pt_collapse$w_source_drink <- tolower(pt_collapse$w_source_drink)
-    # pt_collapse$w_source_other <- tolower(pt_collapse$w_source_other)
-    # pt_collapse$t_type <- tolower(pt_collapse$t_type)
-    data_type <- 'pt'
-  } 
-    
-  if (!("pt_collapse" %in% ls()) & file_type == 'poly') {
-    raw <- paste0(data.dir, 'poly_', date, ".feather") %>% read_feather %>% as.data.table
-    # Encoding(pt_collapse$w_source_drink) <- "UTF-8"
-    # Encoding(pt_collapse$w_source_other) <- "UTF-8"
-    # Encoding(pt_collapse$t_type) <- "UTF-8"
-    # pt_collapse$w_source_drink <- tolower(pt_collapse$w_source_drink)
-    # pt_collapse$w_source_other <- tolower(pt_collapse$w_source_other)
-    # pt_collapse$t_type <- tolower(pt_collapse$t_type)
-     data_type <- 'poly'
-  }
+    raw <- paste0(data.dir, ifelse(point, 'points_', 'poly_'), date, ".feather") %>% 
+      read_feather %>% 
+      as.data.table
 
-  if (file_type == 'ipums') {
+  #TODO set this up to handle IPUMS when extracted
+  if (file.type == 'ipums') {
+    ipums <- T
     ipums_dir <- '/home/j/LIMITED_USE/LU_GEOSPATIAL/geo_matched/wash/IPUMS_feathers'
     files <- list.files(ipums_dir, '.feather')
     files_length <- length(files)
     indicators <- all.indicators
   } else {
-    files <- list(pt_collapse)
-    files_length <- length(files)
+    ipums <- F
     indicators <- all.indicators
   }
 
   #loop over various families of indicators
-  for (indi_fam in indicators) {
+  for (this.family in indicators) {
 
-    message(paste('Processing:', indi_fam))
+    message(paste('Processing:', this.family))
 
     #### Subset & Shape Data ####
     message("Initial Cleaning...")
-    ptdat <- initialCleaning(raw)
+    dt <- initialClean(raw)
 
     #### Define Indicator ####
     message("Defining Indicator...")
-    ptdat <- defIndicator(ptdat)
+    dt <- defIndicator(dt)
 
     #### Address Missingness ####
     message("Addressing Missingness...")
     
     # ID clusters with more than 20% weighted missingness
     #TODO set this up to loop over all vars
-    missing.vars <- idMissing(ptdat, this.var="bin_cooking_fuel_mapped", criteria=.2, wt.var='hh_size') 
-    ptdat <- ptdat[!(cluster_id %in% missing.vars)] #remove these clusters
-    if (nrow(ptdat) == 0) {
-      next
-    }
+    missing.vars <- idMissing(dt, this.var="bin_cooking_fuel_mapped", criteria=.2, wt.var='hh_size') 
+    dt <- dt[!(cluster_id %in% missing.vars)] #remove these clusters
 
     #Remove cluster_ids with missing hhweight or invalid 
     #TODO confirm with Ani why zero tolerance for this? id #534 only has one missing weight
-    missing.wts <- idMissing(ptdat, this.var="hhweight", criteria=0, wt.var=NA)
-    ptdat <- ptdat[!(cluster_id %in% missing.wts)] #remove these clusters
+    missing.wts <- idMissing(dt, this.var="hhweight", criteria=0, wt.var=NA)
+    dt <- dt[!(cluster_id %in% missing.wts)] #remove these clusters
     #TODO, investigate these rows, about 25% of data & they always have missing hh_size too
-    invalid.wts <- unique(ptdat[hhweight==0, cluster_id]) 
-    ptdat <- ptdat[!(cluster_id %in% invalid.wts)] #remove these clusters
+    invalid.wts <- unique(dt[hhweight==0, cluster_id]) 
+    dt <- dt[!(cluster_id %in% invalid.wts)] #remove these clusters
     #TODO, none of these after the last filter, but there are missing hhsizes to investigate...
-    invalid.sizes <- unique(ptdat[hh_size<=0, cluster_id]) 
-    ptdat <- ptdat[!(cluster_id %in% invalid.sizes)] #remove these clusters
+    invalid.sizes <- unique(dt[hh_size<=0, cluster_id]) 
+    dt <- dt[!(cluster_id %in% invalid.sizes)] #remove these clusters
     #ID missing hh sizes, talk to ani about crosswalk specs
-    missing.sizes <- idMissing(ptdat, this.var="hh_size", criteria=0, wt.var=NA)
-    ptdat <- ptdat[!(cluster_id %in% missing.sizes)] #remove these clusters
+    missing.sizes <- idMissing(dt, this.var="hh_size", criteria=0, wt.var=NA)
+    dt <- dt[!(cluster_id %in% missing.sizes)] #remove these clusters
 
-    if (nrow(ptdat) == 0) {
-      next
-    }
-
+    # Skip the rest of the process if no rows of data are left
+    if (nrow(dt) == 0) next
+    
     # Crosswalk missing household size data
     #TODO discuss this part with ani after learning more, for now just remove the missing HH sizes
     
@@ -168,16 +143,8 @@ for (file_type in file.types){
     # } else {
     #   ptdat <- assign_ipums_hh()
     # }
-    
-    # Remove missing observations
-    #TODO ask ani why just this var?
-    #ptdat <- filter(ptdat, !is.na(imp))
 
-    if (nrow(ptdat) == 0) {
-      next
-    }
-    
-    message(paste("Collapsing ", indi_fam))
+    message("Collapsing vars for: ", this.family)
 
     #### Aggregate Data ####
     # Bookmarking dataset so it can be looped over for conditional switch
@@ -188,38 +155,18 @@ for (file_type in file.types){
     #TODO talk to ani about this option
 
     # Aggregate indicator to cluster level
-    message("Aggregating Data...")
-    ptdat <- agg_indi(ptdat, this.var='bin_cooking_fuel_mapped', debug=T)
+    agg.dt <- aggIndicator(dt) #list of variables to aggregate
 
     # Skip the rest of the process if no rows of data are left
-    if (nrow(ptdat) == 0) {
-      next
-    }
-
-    # Write crosswalking dictionary
-    message('Output CW files')    
-    write_cw_ratio(census = ipums)
+    if (nrow(dt) == 0) next
 
     #save poly and point collapses
     message("Saving Collapsed Data...")
-    today <- gsub("-", "_", Sys.Date())
-    
-    if (!ipums) {
-      if (data_type == "poly") {
-        polydat <- ptdat
-        rm(ptdat)
-        write_feather(polydat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/polydat_",
-                      indi_fam, '_', conditional, '_', today, ".feather"))
-      } else{
-        write_feather(ptdat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/ptdat_",
-                      indi_fam, '_', conditional, '_', today, ".feather"))
-      }
-    }
-    
-    if (ipums) {
-      write_feather(ptdat, paste0(j_root,"LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/IPUMS/feather/",
-                      indi_fam, '_', conditional, '_', today, '_', files[index]))
-    }
+    today <- Sys.Date() %>% gsub("-", "_", .)
+
+    paste0(out.dir, "/", ifelse(point, 'points_', 'poly_'), "data_", this.family, '_', today, ".feather") %>%
+      write_feather(agg.dt, path=.)
+
     
   }
 }

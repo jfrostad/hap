@@ -33,7 +33,7 @@ folder_out <- paste0(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where 
 
 ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
 
-today <- gsub("-", "_", Sys.Date())
+today <- Sys.Date() %>% gsub("-", "_", .)
 stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
 package_lib    <- sprintf('%s_code/_lib/pkg', h)
 ## Load libraries and  MBG project functions.
