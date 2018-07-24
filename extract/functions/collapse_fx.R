@@ -31,8 +31,8 @@ initialClean <- function(input.dt, var.fam, is.point) {
   
   if (is.point) {
     
-    message('--->Change weight to 1 if collapsing point data')
-    message('---->Change shapefile and location code to missing if collapsing point data')
+    message('--->Change weight to 1 for point data')
+    message('---->Change shapefile/location_code to NA for point data')
     
     dt[, hhweight := 1]
     dt[, c('shapefile', 'location_code') := NA]
@@ -161,7 +161,7 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   dt[, (these.vars) := lapply(.SD, function(x, wt) sum(x*wt, na.rm=T)/sum(wt, na.rm=T), wt=hhweight*hh_size), 
      .SDcols=these.vars, by=key(dt)] #aggregate each variable and modify in place
   
-  dt[, total_hh := sum(hhweight*hh_size)^2/sum(hhweight^2*hh_size), by=key(dt)]
+  dt[, N := sum(hhweight*hh_size)^2/sum(hhweight^2*hh_size), by=key(dt)]
   
   #for polygon data, urbanicity status is no longer meaningful
   if(!is.point) dt[, urban := NA] #TODO what did urbanicity status for poly data originally mean?

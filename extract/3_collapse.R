@@ -36,11 +36,11 @@ if (Sys.info()["sysname"] == "Linux") {
   #          1) #number of cores provided to multicore functions
 }
 
+#load packages
+pacman::p_load(data.table, dplyr, feather, raster, readxl, seegSDM, seegMBG, sf) 
+
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
-
-#load packages
-pacman::p_load(data.table, dplyr, feather, readxl)
 
 #options
 date <- "2018_07_17" #date of working post-extraction
@@ -78,6 +78,7 @@ file.path(shared.function.dir, 'get_covariate_estimates.R') %>% source
 #loop over points and polygons to collapse
 collapseData <- function(point, census, this.family) {
   
+  message("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
   message("Loading data...[point=", point, "]/[census=", census, "]")
 
   #TODO set this up to handle IPUMS when extracted
@@ -133,12 +134,15 @@ collapseData <- function(point, census, this.family) {
   #   ptdat <- assign_ipums_hh()
   # }
 
-  message("\nBegin Collapsing Variables")
+
 
   #### Aggregate Data ####
   # Aggregate indicator to cluster level
+  message("\nBegin Collapsing Variables")
   agg.dt <- aggIndicator(dt, var.fam=this.family, is.point=point) #list of variables to aggregate
-
+  agg.dt[, polygon := !(point)]
+  message("->Complete!")
+  
   # Skip the rest of the process if no rows of data are left
   if (nrow(dt) == 0) message('no data left to return!')
   else return(agg.dt)
