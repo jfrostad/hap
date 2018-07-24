@@ -7,9 +7,10 @@
 
 # ----Cleaning----------------------------------------------------------------------------------------------------------
 #function to do some initial cleaning and prep for the data
-initialClean <- function(input.dt, var.fam=this.family, is.point=point, census=ipums) {
+initialClean <- function(input.dt, var.fam, is.point) {
   
-  message('Subset to relevant variables')
+  message("\nBegin Initial Cleaning...")
+  message('->Subset to relevant variables')
   
   if (var.fam == 'cooking') {
     dt <- input.dt[, .(nid, iso3, lat, long, survey_series, hhweight, urban, cooking_fuel_mapped, hh_size, year_start, shapefile, location_code)]
@@ -21,7 +22,7 @@ initialClean <- function(input.dt, var.fam=this.family, is.point=point, census=i
   setnames(dt, 'iso3', 'ihme_loc_id')
   dt[, iso3 := substr(ihme_loc_id, 1, 3)]
   
-  message('Create a unique cluster id')
+  message('-->Create a unique cluster id')
   if (is.point) {
     dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, year_start)]
   } else {
@@ -30,8 +31,8 @@ initialClean <- function(input.dt, var.fam=this.family, is.point=point, census=i
   
   if (is.point) {
     
-    message('Change weight to 1 if collapsing point data')
-    message('Change shapefile and location code to missing if collapsing point data')
+    message('--->Change weight to 1 if collapsing point data')
+    message('---->Change shapefile and location code to missing if collapsing point data')
     
     dt[, hhweight := 1]
     dt[, c('shapefile', 'location_code') := NA]
@@ -49,7 +50,9 @@ initialClean <- function(input.dt, var.fam=this.family, is.point=point, census=i
 
 # ----Definitions-------------------------------------------------------------------------------------------------------
 #function to convert extracted variables based on current definitions
-defIndicator <- function(dt, definitions=def.file, var.fam=this.family, census=ipums, debug=F) {
+defIndicator <- function(dt, var.fam, definitions, debug=F) {
+  
+  message("\nBegin Indicator Definition...")
   
   #allow for interactive debugs
   if (debug) browser()
@@ -119,9 +122,9 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, debug=F) {
   dt[, pct_miss := sum(miss*wt, na.rm=T)/sum(wt, na.rm=T), by=cluster_id] #calc pct miss, weight by hh_size
 
   # Return the IDs of any clusters with more than 20% weighted missingness
-  message("identified #", dt[pct_miss>criteria, cluster_id] %>% uniqueN, " clusters...or \n~", 
+  message("\nidentified #", dt[pct_miss>criteria, cluster_id] %>% uniqueN, " clusters...or ~", 
           round((nrow(dt[pct_miss>criteria])/og.count)*100), 
-          "% of rows based on criteria of <=", criteria*100, "% missingness of ", this.var)
+          "% of rows \n based on criteria of <=", criteria*100, "% missingness of ", this.var)
   
   dt[pct_miss>criteria, cluster_id] %>% 
     unique %>% 
@@ -137,7 +140,7 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, debug=F) {
 
 # ----Aggregate---------------------------------------------------------------------------------------------------------
 #aggregate the given indicator
-aggIndicator <- function(input.dt, var.fam=this.family, is.point=point, debug=F) {
+aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   
   #allow for interactive debugs
   if (debug) browser()
