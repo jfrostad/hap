@@ -37,7 +37,13 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, raster, readxl, seegSDM, seegMBG, sf) 
+pacman::p_load(data.table, dplyr, feather, readxl) 
+#TODO verify which of these are actually necessary, took from a random image in Ani's wash dir
+#/share/geospatial/mbg/wash/s_imp/model_image_history
+pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign', 'gbm', 'ggplot2', 'glmnet', 
+              'grid', 'gridExtra', 'gtools', 'magrittr', 'pacman', 'parallel', 'plyr', 'raster', 'rgdal', 'rgeos',
+              'seegMBG', 'seegSDM', 'tictoc') #will be loaded by MBG setup
+
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -55,6 +61,7 @@ def.file <- file.path(doc.dir, 'definitions.xlsx')
 
 ###Output###
 out.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
+model.dir  <- file.path(j_root,'WORK/11_geospatial/10_mbg/input_data/hap')
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -68,10 +75,14 @@ hap.function.dir <- file.path(h_root, '_code/hap/extract/functions')
 #this pulls hap collapse helper functions
 file.path(hap.function.dir, '/collapse_fx.R') %>% source
 #shared functions#
-shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r")
-file.path(shared.function.dir, 'get_location_metadata.R') %>% source
-file.path(shared.function.dir, 'get_ids.R') %>% source
-file.path(shared.function.dir, 'get_covariate_estimates.R') %>% source
+gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r")
+file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
+file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
+file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
+
+lbd.shared.function.dir <- file.path('/share/code/geospatial/lbd_core/mbg_central')
+file.path(lbd.shared.function.dir, 'setup.R') %>% source
+  mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
@@ -134,8 +145,6 @@ collapseData <- function(point, census, this.family) {
   #   ptdat <- assign_ipums_hh()
   # }
 
-
-
   #### Aggregate Data ####
   # Aggregate indicator to cluster level
   message("\nBegin Collapsing Variables")
@@ -153,7 +162,7 @@ collapseData <- function(point, census, this.family) {
 cooking <- mapply(collapseData, point=T:F, census=F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
 
 #Redfine the row_id
-cooking[, row_id := .I] 
+cooking[, row_id := .I]
 setkey(cooking, row_id)
 
 #save poly and point collapses
@@ -161,3 +170,18 @@ setkey(cooking, row_id)
 this.family='cooking'
 paste0(out.dir, "/", "data_", this.family, '_', today, ".feather") %>%
   write_feather(cooking, path=.)
+#***********************************************************************************************************************
+
+# ---RESAMPLE-----------------------------------------------------------------------------------------------------------
+#prep for resampling
+cooking[, cooking_fuel := N * bin_cooking_fuel_mapped]
+
+#run core resampling code
+dt <- resample_polygons(data = cooking,
+                        cores = 10,
+                        indic = 'cooking_fuel',
+                        density = 0.001)
+
+#save resampled data
+paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
+  write_feather(dt, path=.)

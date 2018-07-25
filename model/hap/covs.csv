@@ -1,0 +1,4 @@
+covariate,measure,gbd,include
+access,mean,F,T
+evi,median,F,T
+ldi_pc,mean,T,T
