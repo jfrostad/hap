@@ -141,6 +141,8 @@ geo <- geo[, long := as.numeric(long)]
 message("make types between merging datasets match")
 if (class(topics$nid) == "numeric"){
   geo[, nid := as.numeric(nid)]
+} else if (class(topics$nid) == "integer"){
+  geo[, nid := as.integer(nid)]
 } else if (class(topics$nid) == "character"){
   geo[, nid := as.character(nid)]
 } else{
@@ -190,11 +192,7 @@ if (length(missing_nids) > 0){
 
 message("Adding year_experiment column")
 
-all[, start_year := year_start]
-all[, year_dummy := start_year]
-all[, year_experiment := year_dummy]
-
-all[, year_experiment := round(mean(x=year_dummy, na.rm=T)), by=.(nid, iso3)]
+all[, year_experiment := round(mean(year_start, na.rm=T)), by=.(nid, iso3)]
 
 all[(!is.na(int_year) & int_year <= year_start+5 & int_year >= year_start), year_experiment := round(mean(int_year, na.rm=T)), by=c("nid", "iso3")]
 
@@ -216,9 +214,9 @@ message("end of table")
 ######################### TOPIC-SPECIFIC CODE #######################
 #####################################################################
 
-if (topic == "wash"){
-  message("WaSH-specific Fixes")
-  file.path(h, "_code/lbd/hap/extract/hap_custom_postextract.R") %>% source
+if (topic == "hap"){
+  message("HAP-specific Fixes")
+  file.path(h, "_code/lbd/housing/extract/2a_hap_custom_postextract.R") %>% source
 }
 
 #####################################################################
