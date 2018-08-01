@@ -15,8 +15,9 @@ rm(list=ls())
 
 ## Set core_repo location and indicator group
 user              <- Sys.info()['user']
-core_repo         <- '/homes/jfrostad/_code/'
-core_repo         <- file.path(my_repo, 'lbd/lbd_core/')
+code_dir         <- '/homes/jfrostad/_code/lbd'
+core_repo         <- file.path(code_dir, '/lbd_core/')
+my_repo         <- file.path(code_dir, '/housing/model')
 remote            <- 'origin'
 branch            <- 'master'
 indicator_group   <- 'hap'
@@ -30,6 +31,9 @@ sharedir       <- paste('/share/geospatial/mbg', indicator_group, indicator, sep
 commondir      <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', sep = '/')
 package_list <- c(t(read.csv(paste(commondir, 'package_list.csv', sep = '/'), header = FALSE)))
 
+#this dir is necessary to save model images
+file.path(sharedir, 'model_image_history') %>% dir.create(recursive = T)
+
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
 source(paste0(core_repo, '/mbg_central/setup.R'))
@@ -39,17 +43,17 @@ mbg_setup(package_list = package_list, repos = core_repo)
 # mbg_setup(package_list = package_list, repos = c(core_repo, '/share/code/geospatial/lbd_core/training'))
 
 ## Read config file and save all parameters in memory
-config <- load_config(repo            = core_repo,
+config <- load_config(repo            = my_repo,
                       indicator_group = indicator_group,
                       indicator       = indicator,
                       ## config_name     = 'config_training_gp',
                       ## config_name     = 'config_training_stack',
-                      config_name     = 'config',
+                      config_name     = 'config_ors',
                       ## config_name     = 'config_training_raw',
                       ## config_name     = 'config_training_raw_oos',
                       ## config_name     = 'config_training_raw_gp',
                       ## config_name     = 'config_training_stack_gp_tmb',
-                      covs_name       = 'covs')
+                      covs_name       = 'covs_ors')
 
 ## Ensure you have defined all necessary settings in your config
 check_config()
@@ -121,13 +125,16 @@ for(i in 1:nrow(loopvars)){
   message(paste(loopvars[i,2],as.character(loopvars[i,1]),loopvars[i,3]))
 
   # make a qsub string
+  #TODO this fx breaks if havent created model_image_history dir in sharedir, could happen recursively?
   qsub <- make_qsub_share(age           = loopvars[i,2],
                           reg           = as.character(loopvars[i,1]),
                           holdout       = loopvars[i,3],
-                          test          = TRUE,
+                          test          = F,
                           indic         = indicator,
                           saveimage     = TRUE,
-                          addl_job_name = eval(parse(text = jn)), ## from config
+                          #TODO jn doesnt seem to be defined anywhere else in this file??
+                          #TODO removed eval parse, jn is read in as string when placed in config
+                          #addl_job_name = jn, ## from config
                           memory        = 10,
                           cores         = 10,
                           singularity   = "default",
@@ -206,11 +213,12 @@ if(as.logical(individual_countries) == F) {
   ###############################################################################
   # View results at https://shiny.ihme.washington.edu/connect/#/apps/119/
 
-  make_model_diagnostics(indic      = indicator,
-                         ig         = indicator_group,
-                         rd         = run_date,
-                         geo_nodes  = TRUE,
-                         cores      = 10)
+  make_model_diagnostics(indic        = indicator,
+                         ig           = indicator_group,
+                         log_location = 'sharedir',
+                         rd           = run_date,
+                         geo_nodes    = TRUE,
+                         cores        = 10)
 
   ###############################################################################
   ## Aggregate to admin2, admin1, and national levels

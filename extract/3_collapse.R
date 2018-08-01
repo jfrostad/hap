@@ -61,7 +61,8 @@ def.file <- file.path(doc.dir, 'definitions.xlsx')
 
 ###Output###
 out.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
-model.dir  <- file.path(j_root,'WORK/11_geospatial/10_mbg/input_data/hap')
+model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
+share.model.dir  <- file.path('/share/geospatial/mbg/input_data/')
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -185,3 +186,16 @@ dt <- resample_polygons(data = cooking,
 #save resampled data
 paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
   write_feather(dt, path=.)
+
+#prep for MDG
+setnames(dt,
+         c('iso3', 'year_start'),
+         c('country', 'year'))
+
+#TODO should simplify dataset by dropping useless vars
+dt <- dt[, list(nid, country, year, latitude, longitude, survey_series, urban, cooking_fuel, N, 
+                cluster_id, polygon, shapefile, location_code, weight, pseudocluster)]
+
+#save into MDG dir
+file.path(share.model.dir, 'cooking_fuel.RDS') %>% saveRDS(dt, file=.)
+file.path(share.model.dir, 'cooking_fuel.csv') %>% write.csv(dt, file=., row.names=F)

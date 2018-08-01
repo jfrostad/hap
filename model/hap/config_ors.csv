@@ -2,8 +2,8 @@ use_share,TRUE
 indicator_family,binomial
 keep_inla_files,FALSE
 Regions,c('per')
-individual_countries,FALSE
-year_list,c(2000:2015)
+individual_countries,TRUE
+year_list,c(2000:2016)
 yearload,annual
 interval_mo,12
 withtag,FALSE
@@ -18,19 +18,20 @@ lat_col,latitude
 n_ho_folds,5
 ho_ts,500
 ho_mb,10
-slots,10
-inla_cores,5
+slots,20
+inla_cores,10
+stacking_cores,5
 test,FALSE
-test_pct,100
+test_pct,5
 transform,inverse-logit
-stacked_fixed_effects,gam + lasso + ridge
+stacked_fixed_effects,gam + gbm + lasso 
 other_weight,
 use_child_country_fes,FALSE
 gbm_tc,3
 gbm_lr,0.005
 gbm_bf,0.75
 skiptoinla,FALSE
-skiptoinla_from_rundate,2017_06_16_17_22_04
+skiptoinla_from_rundate,
 skipinla,FALSE
 stackers_in_transform_space,TRUE
 coefs_sum1,TRUE
@@ -38,18 +39,29 @@ constrain_children_0_inf,FALSE
 use_stacking_covs,TRUE
 use_raw_covs,FALSE
 use_inla_country_fes,FALSE
-use_inla_country_res,FALSE
+use_inla_country_res,TRUE
 use_gp,TRUE
-use_inla_nugget,FALSE
-mesh_s_max_edge,"c(2.5, 5)"
+use_inla_nugget,TRUE
+nugget_prior,"list(prior = 'loggamma', param = c(2, 1))"
+ctry_re_prior,"list(prior = 'loggamma', param = c(2, 1))"
+mesh_s_max_edge,"c(0.25, 5)"
 mesh_s_offset,"c(1, 5)"
 intercept_prior,0
 mesh_t_knots,"c(1,6,11,16)"
 intstrat,eb
-samples,100
-rake_transform,none
+samples,500
+rake_transform,logit
 pop_measure,a0004t
 st_targ,0.05
 target_type,less
-summstats,"c('mean','cirange')"
-jn,hello_world
+use_geos_nodes,TRUE
+spat_strat,qt
+temp_strat,prop
+skip.stacking,0
+skip.inla,0
+fit_with_tmb,FALSE
+gbd_fixed_effects_age,"c(2, 3, 4, 5)"
+summstats,"c('mean', 'cirange')"
+z_list,0
+zcol,z_column_default_blank
+scale_gaussian_variance_N,TRUE

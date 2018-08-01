@@ -28,12 +28,11 @@ cores <- 10
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/snfs1/")
 h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/jfrostad/")
-folder_in <- paste0(j, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/", topic) #where your extractions are stored
-folder_out <- paste0(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
+folder_in <- file.path(j, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
+folder_out <- file.path(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
 
 ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
 
-today <- Sys.Date() %>% gsub("-", "_", .)
 stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
 package_lib    <- sprintf('%s_code/_lib/pkg', h)
 ## Load libraries and  MBG project functions.
@@ -48,6 +47,9 @@ packages <- lapply(packages, library, character.only=T)
 #dplyr for distinct (strange behavior from data.table unique)
 #parallel for mclapply
 #doParallel for parallelized foreach
+
+#timestamp
+today <- Sys.Date() %>% gsub("-", "_", .)
 
 
 #####################################################################
@@ -71,7 +73,7 @@ read_add_name_col <- function(file){
 ######################## BIND UBCOV EXTRACTS ########################
 #####################################################################
 #Generate list of extraction filepaths
-extractions <- list.files(folder_in, full.names=T, pattern = ".dta", ignore.case=T, recursive = F)
+extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F)
 extractions <- grep("IPUMS_CENSUS", extractions, invert=T, value = T) #IPUMS is handled separately
 extractions <- grep("234353|233917", extractions, invert=T, value=T)
 #234353 is a massive India dataset that slows everything down and gets us killed on the cluster. It is handled separately.
@@ -86,8 +88,8 @@ if(cluster == TRUE) {
   registerDoParallel(cl)
   message("Start foreach")
   #Read in each .dta file in parallel - returns a list of data frames
-  top <- foreach(i=1:length(extractions), .packages="haven") %dopar% {
-    dta <- read_dta(extractions[i], encoding = 'latin1')
+  top <- foreach(i=1:length(extractions), .packages="data.table") %dopar% {
+    dt <- fread(extractions[i])
   }
   message("Foreach finished")
   message("Closing cluster")
@@ -95,8 +97,8 @@ if(cluster == TRUE) {
 } else if(cluster == FALSE) {
   top <- foreach(i=1:length(extractions)) %do% {
     message(paste0("Reading in: ", extractions[i]))
-    dta <- read_dta(extractions[i])
-    return(dta)
+    dt <- fread(extractions[i])
+    return(dt)
   }
 }
 
