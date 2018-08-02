@@ -49,7 +49,7 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-date <- "2018_07_17" #date of working post-extraction
+date <- "2018_08_01" #date of current post-extraction
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -72,7 +72,7 @@ central.function.dir <- file.path(h_root, "_code/_lib/functions")
 # this pulls the general misc helper functions
 file.path(central.function.dir, "misc.R") %>% source
 #hap functions#
-hap.function.dir <- file.path(h_root, '_code/hap/extract/functions')
+hap.function.dir <- file.path(h_root, '_code/lbd/housing/extract/functions')
 #this pulls hap collapse helper functions
 file.path(hap.function.dir, '/collapse_fx.R') %>% source
 #shared functions#
@@ -81,7 +81,7 @@ file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
 file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 
-lbd.shared.function.dir <- file.path('/share/code/geospatial/lbd_core/mbg_central')
+lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
   mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
 #***********************************************************************************************************************
@@ -176,6 +176,11 @@ paste0(out.dir, "/", "data_", this.family, '_', today, ".feather") %>%
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
 #prep for resampling
 cooking[, cooking_fuel := N * bin_cooking_fuel_mapped]
+
+#drop weird shapefiles for now
+#TODO investigate these issues
+cooking <- cooking[shapefile!="IND_adm2_2021"]
+cooking <- cooking[shapefile!="gadm_3_4_vnm_adm3"]
 
 #run core resampling code
 dt <- resample_polygons(data = cooking,

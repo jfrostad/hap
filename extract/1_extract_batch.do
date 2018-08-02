@@ -82,4 +82,5 @@ local thisvar = "cooking_fuel_mapped"
                  store_vals_path("/share/temp/sgeoutput/`c(username)'") ///
                  logs_path("/share/temp/sgeoutput/`c(username)'") ///
                  run_log_path("/share/temp/sgeoutput/`c(username)'") ///
-                 db_path("/share/temp/sgeoutput/`c(username)'")
+                 db_path("/share/temp/sgeoutput/`c(username)'") ///
+                 keep

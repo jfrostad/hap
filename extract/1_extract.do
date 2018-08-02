@@ -63,7 +63,7 @@ init, topics(`topics')
 */
 //Enter path where you'd like your extracts saved below between the quotes
 //DO NOT EXTRACT DATA FROM LIMITED USE TO THE J DRIVE. YOU CAN GET IN BIG TROUBLE. If you need to extract from LIMITED_USE contact IT and your PO to organize a workaround. 
-local outpath = "J:/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/"
+local outpath = "J:/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/serial"
 
 //Troublemakers
 local array 4514 4664 4962 5801 4549 //come back to this one: error=variables ihme_loc_id admin_1 do not uniquely identify observations in the using data 
