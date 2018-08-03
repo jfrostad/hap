@@ -179,8 +179,8 @@ cooking[, cooking_fuel := N * bin_cooking_fuel_mapped]
 
 #drop weird shapefiles for now
 #TODO investigate these issues
-cooking <- cooking[shapefile!="IND_adm2_2021"]
-cooking <- cooking[shapefile!="gadm_3_4_vnm_adm3"]
+cooking <- cooking[!(shapefile %like% "2021")] 
+cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
 
 #run core resampling code
 dt <- resample_polygons(data = cooking,
