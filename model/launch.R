@@ -135,9 +135,12 @@ for(i in 1:nrow(loopvars)){
                           #TODO jn doesnt seem to be defined anywhere else in this file??
                           #TODO removed eval parse, jn is read in as string when placed in config
                           #addl_job_name = jn, ## from config
+                          #code = "xxx" #use to run a custom parallel model from your indicator specific folder
                           memory        = 10,
                           cores         = 10,
                           singularity   = "default",
+                          singularity_opts = list(SET_OMP_THREADS=1, SET_MKL_THREADS=10),
+                          addl_job_name = 'config_ors',
                           geo_nodes     = TRUE)
 
   system(qsub)

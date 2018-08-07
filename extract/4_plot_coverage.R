@@ -38,37 +38,40 @@ setwd(repo)
 #source('mbg_central/shapefile_functions.R')
 
 indicator <- 'hap' #water or sani
-var <- 'cooking_fuel' #imp, unimp, surface, od, piped
+var <- 'bin_cooking_fuel_mapped' #imp, unimp, surface, od, piped
 
 title <- "Cooking Fuel"
 
-polydat <-  read_feather('/home/j/LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/polydat_water_unconditional__2018_05_12.feather')
-ptdat <- read_feather('/home/j/LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/ptdat_water_unconditional__2018_05_11.feather')
-w_collapsed <- rbind(polydat, ptdat)
+date <- "2018_08_02"
+data.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
+coverage_data <-  paste0(data.dir, "data_cooking_", date, ".feather") %>% read_feather %>% as.data.table
 
 #import dataset (written during collapse code)
-coverage_data <- as.data.table(w_collapsed)
 coverage_data <- coverage_data[!(shapefile == 'mombasa' & is.na(lat)),]
 coverage_data$point <- ifelse(is.na(coverage_data$lat), 0, 1)
 
-#keep only the surveys that have cooking fuel extracted
-load("/home/j/LIMITED_USE/LU_GEOSPATIAL/collapsed/wash/hap_nids.Rdata", verbose=T)
-coverage_data <- coverage_data[nid %in% nids]
-coverage_data[, cooking_fuel := 1]
+#rename some vars
+setnames(coverage_data,
+         c('iso3', 'lat', 'long', 'year_start', 'survey_series'),
+         c('country', 'latitude', 'longitude', 'year', 'source'))
 
-library(plyr)
-coverage_data <- plyr::rename(coverage_data, c("total_hh"="N", "svy_id"="nid", "start_year"="year", "id_short" = "cluster_id",
-                                               "iso3" = "country", "lat" = "latitude", "long" = "longitude", "year_start" = "year",
-                                               "survey_series" = "source"))
+#create indicator
+coverage_data[, cooking_fuel := N * bin_cooking_fuel_mapped]
 
 
 #run loop
 source('mbg_central/graph_data_coverage.R')
-#regions <- c('africa', 'latin_america', 'middle_east','south_asia','se_asia')
+regions <- c('africa', 'latin_america', 'middle_east','south_asia','se_asia')
+#regions <- c('south_asia','se_asia')
 regions <- 'se_asia'
 
 #fix problem with a se asia shapefile (naming issue)
 coverage_data <- coverage_data[shapefile == "lg_g2015_2007_1", shapefile := "lf_g2015_2007_1"]
+#drop weird shapefiles for now
+#TODO investigate these issues
+coverage_data <- coverage_data[!(shapefile %like% "2021")] 
+coverage_data <-coverage_data[!(shapefile %like% "gadm_3_4_vnm_adm3")]
+coverage_data <- coverage_data[!(country %like% "MDV")] 
 
 for (reg in regions){
   coverage_maps <- graph_data_coverage_values(df = coverage_data,
