@@ -18,9 +18,10 @@ rm(list=ls())
 
 #Define values
 topic <- "hap"
+redownload <- F #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
 geos <- FALSE #running on geos nodes true/false
-cores <- 10
+cores <- 20
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/snfs2/HOME/gmanny/backups/Documents/Repos/geospatial-data-prep/common/post_extraction_3.R')
@@ -30,28 +31,21 @@ j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/snfs1/")
 h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/jfrostad/")
 folder_in <- file.path(j, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
 folder_out <- file.path(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
+setwd(folder_in)
 
-####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-
-stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
 package_lib    <- sprintf('%s_code/_lib/pkg', h)
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
 
+####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
+
+stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
+
 #Load packages
-packages <- c('haven', 'stringr', 'data.table', 'dplyr', 'magrittr', 'parallel', 'doParallel')
-pacman::p_load(packages)
-packages <- lapply(packages, library, character.only=T)
-#haven to read in stata
-#data.table for speed & syntax
-#dplyr for distinct (strange behavior from data.table unique)
-#parallel for mclapply
-#doParallel for parallelized foreach
+pacman::p_load(haven, stringr, data.table, dplyr, magrittr, parallel, doParallel, googledrive, readxl)
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
-
-
 #####################################################################
 ######################## DEFINE FUNCTIONS ###########################
 #####################################################################
@@ -78,6 +72,13 @@ extractions <- grep("IPUMS_CENSUS", extractions, invert=T, value = T) #IPUMS is 
 extractions <- grep("234353|233917", extractions, invert=T, value=T)
 #234353 is a massive India dataset that slows everything down and gets us killed on the cluster. It is handled separately.
 #233917 is another IND survey that isn't quite as large but it also has to be loaded and collapsed separately.
+
+#Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
+if(redownload=T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd903zfg'), overwrite=T)
+codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
+codebook[, output_name := paste0(ihme_loc_id, '_', survey_name, '_', year_start, '_', year_end, '_', nid, '.csv')]
+new.files <- codebook[assigned=='qnguyen1', output_name] %>% unique %>% paste(., collapse="|")
+extractions <- grep(new.files, extractions, invert=T, value=T)
 
 #append all ubcov extracts together
 if(cluster == TRUE) {
