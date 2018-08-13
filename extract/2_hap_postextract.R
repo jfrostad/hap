@@ -20,8 +20,8 @@ rm(list=ls())
 topic <- "hap"
 redownload <- F #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
-geos <- FALSE #running on geos nodes true/false
-cores <- 20
+geos <- TRUE #running on geos nodes true/false
+cores <- 30
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/snfs2/HOME/gmanny/backups/Documents/Repos/geospatial-data-prep/common/post_extraction_3.R')
@@ -42,7 +42,7 @@ package_lib    <- sprintf('%s_code/_lib/pkg', h)
 stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
 
 #Load packages
-pacman::p_load(haven, stringr, data.table, dplyr, magrittr, parallel, doParallel, googledrive, readxl)
+pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -70,15 +70,18 @@ read_add_name_col <- function(file){
 extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F)
 extractions <- grep("IPUMS_CENSUS", extractions, invert=T, value = T) #IPUMS is handled separately
 extractions <- grep("234353|233917", extractions, invert=T, value=T)
+extractions <- grep("157050", extractions, invert=T, value=T)
 #234353 is a massive India dataset that slows everything down and gets us killed on the cluster. It is handled separately.
 #233917 is another IND survey that isn't quite as large but it also has to be loaded and collapsed separately.
 
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if(redownload=T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd903zfg'), overwrite=T)
+if(redownload==T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd903zfg'), overwrite=T)
 codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
-codebook[, output_name := paste0(ihme_loc_id, '_', survey_name, '_', year_start, '_', year_end, '_', nid, '.csv')]
+#create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
+codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
 new.files <- codebook[assigned=='qnguyen1', output_name] %>% unique %>% paste(., collapse="|")
-extractions <- grep(new.files, extractions, invert=T, value=T)
+extractions <- grep(new.files, extractions, invert=F, value=T)
+#extractions <- grep('PER', extractions, invert=F, value=T) #only working on peru
 
 #append all ubcov extracts together
 if(cluster == TRUE) {
@@ -106,9 +109,10 @@ if(cluster == TRUE) {
 message("rbindlist all extractions together")
 topics <- rbindlist(top, fill=T, use.names=T)
 rm(top)
+gc()
 
 ##Save raw data file, if desired
-#save(topics, file=paste0(folder_out, "/topics_no_geogs_", today, ".Rdata"))
+write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feather"))
 
 #####################################################################
 ######################## PULL IN GEO CODEBOOKS ######################

@@ -141,7 +141,7 @@ for(i in 1:nrow(loopvars)){
                           singularity   = "default",
                           singularity_opts = list(SET_OMP_THREADS=1, SET_MKL_THREADS=10),
                           addl_job_name = 'config_ors',
-                          geo_nodes     = TRUE)
+                          geo_nodes     = F)
 
   system(qsub)
 }

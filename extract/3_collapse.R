@@ -44,12 +44,11 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
               'grid', 'gridExtra', 'gtools', 'magrittr', 'pacman', 'parallel', 'plyr', 'raster', 'rgdal', 'rgeos',
               'seegMBG', 'seegSDM', 'tictoc') #will be loaded by MBG setup
 
-
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-date <- "2018_08_01" #date of current post-extraction
+date <- "2018_08_09" #date of current post-extraction
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -182,11 +181,16 @@ cooking[, cooking_fuel := N * bin_cooking_fuel_mapped]
 cooking <- cooking[!(shapefile %like% "2021")] 
 cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
 
+#only work on PER for now
+cooking <- cooking[iso3 == "PER"]
+
 #run core resampling code
 dt <- resample_polygons(data = cooking,
                         cores = 10,
                         indic = 'cooking_fuel',
-                        density = 0.001)
+                        density = 0.001,
+                        gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_gaul_codes) %>% unlist %>% unique)
+                        #gaul_list = lapply(c('stage1','stage2'), get_gaul_codes) %>% unlist %>% unique)
 
 #save resampled data
 paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
@@ -194,7 +198,7 @@ paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
 
 #prep for MDG
 setnames(dt,
-         c('iso3', 'year_start'),
+         c('iso3', 'int_year'),
          c('country', 'year'))
 
 #TODO should simplify dataset by dropping useless vars

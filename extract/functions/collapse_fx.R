@@ -11,9 +11,9 @@ initialClean <- function(input.dt, var.fam, is.point) {
   
   message("\nBegin Initial Cleaning...")
   message('->Subset to relevant variables')
-  
+
   if (var.fam == 'cooking') {
-    dt <- input.dt[, .(nid, iso3, lat, long, survey_series, hhweight, urban, cooking_fuel_mapped, hh_size, year_start, shapefile, location_code)]
+    dt <- input.dt[, .(nid, iso3, lat, long, survey_series, hhweight, urban, cooking_fuel_mapped, hh_size, year_start, int_year, shapefile, location_code)]
   } 
 
   problem_list <- dt[hh_size <=0] #TODO output this list somewhere?
@@ -24,9 +24,9 @@ initialClean <- function(input.dt, var.fam, is.point) {
   
   message('-->Create a unique cluster id')
   if (is.point) {
-    dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, year_start)]
+    dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, int_year)]
   } else {
-    dt[, cluster_id := .GRP, by=.(iso3, shapefile, location_code, nid, year_start)]
+    dt[, cluster_id := .GRP, by=.(iso3, shapefile, location_code, nid, int_year)]
   }
   
   if (is.point) {
@@ -151,7 +151,7 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   } 
   
   #point data needs to be collapsed using urbanicity
-  key.cols <- c('cluster_id', 'nid', 'lat', 'long', 'survey_series', 'year_start', 'shapefile', 'location_code', 
+  key.cols <- c('cluster_id', 'nid', 'lat', 'long', 'survey_series', 'int_year', 'shapefile', 'location_code', 
                 switch(is.point, NULL, 'urban')) #if points data, add urbanicity to key
 
   #set as copy so you dont save the new vars
