@@ -9,6 +9,7 @@
 
 # INSTRUCTIONS:
 # UBCOV OUTPUTS MUST BE SAVED IN LIMITED USE DIRECTORY
+# source('/homes/jfrostad/_code/lbd/housing/extract/2_hap_postextract.R')
 #####################################################################
 
 #####################################################################
@@ -18,9 +19,9 @@ rm(list=ls())
 
 #Define values
 topic <- "hap"
-redownload <- F #update the codebook from google drive
+redownload <- T #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
-geos <- TRUE #running on geos nodes true/false
+geos <- F #running on geos nodes true/false
 cores <- 30
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
@@ -79,7 +80,7 @@ if(redownload==T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd90
 codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
-new.files <- codebook[assigned=='qnguyen1', output_name] %>% unique %>% paste(., collapse="|")
+new.files <- codebook[assigned=='qnguyen1' | assigned == 'jfrostad', output_name] %>% unique %>% paste(., collapse="|")
 extractions <- grep(new.files, extractions, invert=F, value=T)
 #extractions <- grep('PER', extractions, invert=F, value=T) #only working on peru
 

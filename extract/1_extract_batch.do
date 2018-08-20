@@ -65,7 +65,7 @@ init, topics(`topics')
 */
 //Enter path where you'd like your extracts saved below between the quotes
 //DO NOT EXTRACT DATA FROM LIMITED USE TO THE J DRIVE. YOU CAN GET IN BIG TROUBLE. If you need to extract from LIMITED_USE contact IT and your PO to organize a workaround. 
-local outpath = "`j'/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch_keep"
+local outpath = "`j'/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch"
 local thisvar = "cooking_fuel_mapped"
 
    get, vars
@@ -82,5 +82,4 @@ local thisvar = "cooking_fuel_mapped"
                  store_vals_path("/share/temp/sgeoutput/`c(username)'") ///
                  logs_path("/share/temp/sgeoutput/`c(username)'") ///
                  run_log_path("/share/temp/sgeoutput/`c(username)'") ///
-                 db_path("/share/temp/sgeoutput/`c(username)'") ///
-                 keep
+                 db_path("/share/temp/sgeoutput/`c(username)'") 

@@ -23,6 +23,8 @@ branch            <- 'master'
 indicator_group   <- 'hap'
 indicator         <- 'cooking_fuel'
 pullgit           <- FALSE
+keep_run-date     <- FALSE
+last_run_date     <- "2018_08_20_11_18_04"
 
 ## sort some directory stuff and pull newest code into share
 if(pullgit) system(sprintf('cd %s\ngit pull %s %s', core_repo, remote, branch))
@@ -42,24 +44,35 @@ mbg_setup(package_list = package_list, repos = core_repo)
 # can be loaded in as well by doing:
 # mbg_setup(package_list = package_list, repos = c(core_repo, '/share/code/geospatial/lbd_core/training'))
 
+# Load custom functions
+source(paste0(my_repo, '/_lib/fx.R'))
+
+#GBD functions for getting IDs
+gbd.function.dir <- file.path("/home/j/temp/central_comp/libraries/current/r")
+file.path(gbd.function.dir, "get_ids.R") %>% source
+#risk_ids <- get_ids('rei')
+gbd_id <- 'pollution_indoor_total_prev' #(all solid fuels)
+
 ## Read config file and save all parameters in memory
 config <- load_config(repo            = my_repo,
                       indicator_group = indicator_group,
                       indicator       = indicator,
                       ## config_name     = 'config_training_gp',
                       ## config_name     = 'config_training_stack',
-                      config_name     = 'config_ors',
+                      config_name     = 'config',
                       ## config_name     = 'config_training_raw',
                       ## config_name     = 'config_training_raw_oos',
                       ## config_name     = 'config_training_raw_gp',
                       ## config_name     = 'config_training_stack_gp_tmb',
-                      covs_name       = 'covs_ors')
+                      covs_name       = 'covs')
 
 ## Ensure you have defined all necessary settings in your config
 check_config()
 
 ## Create run date in correct format
-run_date <- make_time_stamp(TRUE)
+if(keep_run_date==T) { run_date <- last_run_date
+} else run_date <- make_time_stamp(TRUE)
+
 
 ## Print the core_repo hash and check it
 message("Printing git hash for 'core_repo' and checking against LBD Core Code master repo")
@@ -140,10 +153,12 @@ for(i in 1:nrow(loopvars)){
                           cores         = 10,
                           singularity   = "default",
                           singularity_opts = list(SET_OMP_THREADS=1, SET_MKL_THREADS=10),
-                          addl_job_name = 'config_ors',
+                          addl_job_name = 'hap_model',
+                          code = 'parallel_mod_savecov',
                           geo_nodes     = F)
 
   system(qsub)
+  
 }
 
 
@@ -169,9 +184,9 @@ if(as.logical(individual_countries) == F) {
   save(strata, file = paste0(sharedir, '/fit_stats/strata.RData'))
 
   ## Load GBD Estimates for this indicator which will be used in raking
-  gbd <- load_gbd_data(gbd_type     = "output",
-                       gbd_name     = 302,
-                       gaul_list    = get_gaul_codes('africa'),
+  gbd <- load_gbd_data2(gbd_type     = "covariate",
+                       gbd_name     = gbd_id,
+                       gaul_list    = get_gaul_codes('per'),
                        measure_id   = 5,
                        age_group_id = 1,
                        metric_id    = 3,
@@ -193,7 +208,7 @@ if(as.logical(individual_countries) == F) {
                               log_location = 'sharedir',
                               memory        = 10,
                               singularity   = "default",
-                              geo_nodes     = TRUE,
+                              geo_nodes     = F,
                               cores         = 10)
     system(qsub)
   }
@@ -220,8 +235,9 @@ if(as.logical(individual_countries) == F) {
                          ig           = indicator_group,
                          log_location = 'sharedir',
                          rd           = run_date,
-                         geo_nodes    = TRUE,
-                         cores        = 10)
+                         geo_nodes    = F,
+                         cores        = 10,
+                         singularity  ='default')
 
   ###############################################################################
   ## Aggregate to admin2, admin1, and national levels
@@ -238,7 +254,7 @@ if(as.logical(individual_countries) == F) {
                             regions         = strata,
                             corerepo        = core_repo,
                             log_dir         = paste0(sharedir, "/output/", run_date, "/"),
-                            geo_nodes       = TRUE,
+                            geo_nodes       = F,
                             singularity     = "default",
                             slots           = 8)
 
@@ -270,140 +286,265 @@ if(as.logical(individual_countries) == F) {
   write.csv(csv_master, file=paste0(sharedir, '/output/', run_date, '/input_data.csv'))
 
   ###############################################################################
-  ## Create AROC objects & do projections
+  ## Make simple maps and plots
   ###############################################################################
-
-  make_aroc(ind_gp           = indicator_group,
-            ind              = indicator,
-            rd               = run_date,
-            matrix_pred_name = NULL,
-            type             = c("cell", "admin"),
-            measure          = "prevalence",
-            year_list        = c(2000:2015),
-            uselogit         = FALSE,
-            raked            = FALSE,
-            weighting_res    = 'domain',
-            weighting_type   = 'exponential',
-            pow              = 1,
-            input_data = read.csv(sprintf('/share/geospatial/mbg/%s/%s/output/%s/input_data.csv',
-                                          indicator_group, indicator, run_date)),
-            mult_emp_exp     = FALSE,
-            extra_file_tag = "_exp_domain")
-
-  make_proj(ind_gp     = indicator_group,
-            ind        = indicator,
-            rd         = run_date,
-            type       = c("cell", "admin"),
-            proj_years = c(2020, 2025, 2030),
-            measure    = "prevalence",
-            skip_cols  = NULL,
-            year_list  = c(2000:2015),
-            uselogit   = FALSE,
-            extra_file_tag = "_exp_domain")
-
+  
+  ## Covariate importance plots
+  if (use_stacking_covs) {
+    source(paste0(indic_repo, "4_post_estimation/get_cov_weights.R"))
+    get_cov_weights(indicator, indicator_group, run_date, Regions, outputdir)
+  }
+  
+  ## Simple 5km x 5km map 
+  library(raster)
+  setwd(outputdir)
+  
+  files <- list.files(pattern = 'tif')
+  mean_raster <- files[grep(paste0(Regions, '_mean'), files)]
+  mean_raster <- brick(mean_raster)
+  
+  dir.create(paste0(outputdir, '/results_maps/'))
+  png(paste0(outputdir, '/results_maps/', Regions, '_', indicator, '_', run_date, '.png'), 1800, 1200)
+  
+  print(spplot(mean_raster))
+  dev.off()
+  
+  # set back to core repo
+  setwd(core_repo)
+  
   ###############################################################################
-  # Look at performance against goals
+  ## Aggregate to admin2, admin1, and national levels
   ###############################################################################
-
-  # Define goals: start by initializing goal object
-  goals <- add_goal(target_year = 2030,
-                    target = 0.03,
-                    target_type = "less",
-                    abs_rel = "absolute",
-                    pred_type = c("cell", "admin"))
-
-  # Add goals to existing goal object by specifying goal_obj
-  goals <- add_goal(goal_obj = goals,
-                    target_year = 2020,
-                    target = 0.04,
-                    target_type = "less",
-                    abs_rel = "absolute",
-                    pred_type = c("cell", "admin"))
-
-  # Run comparisons
-  compare_to_target(ind_gp = indicator_group,
-                    ind = indicator,
-                    rd = run_date,
-                    goal_obj = goals,
-                    measure = "prevalence",
-                    year_list = c(2000:2015),
-                    uselogit = FALSE)
-
+  
+  # submit custom aggregation script to launch custom aggregate_results function if modeling individual countries
+  submit_aggregation_script(indicator       = indicator, 
+                            indicator_group = indicator_group,
+                            run_date        = run_date,
+                            raked           = FALSE,
+                            pop_measure     = pop_measure,
+                            overwrite       = T,
+                            ages            = 0,
+                            holdouts        = 0,
+                            regions         = strata, # cannot be a gaul list; if individual country must be e.g. "PER"
+                            corerepo        = core_repo,
+                            log_dir         = outputdir,
+                            slots           = ifelse(use_geos_nodes, 5, 45),
+                            geo_nodes       = use_geos_nodes,
+                            singularity     = 'default')
+  
+  
+  # wait for aggregation to finish
+  waitforaggregation(rd       = run_date,
+                     indic    = indicator,
+                     ig       = indicator_group,
+                     ages     = 0,
+                     regions  = strata,
+                     holdouts = 0,
+                     raked    = F)
+  
+  # cobmine aggregation
+  combine_aggregation(rd       = run_date,
+                      indic    = indicator,
+                      ig       = indicator_group,
+                      ages     = 0,
+                      regions  = strata,
+                      holdouts = 0,
+                      raked    = F)
+  
+  # summarize admins
+  summarize_admins(ad_levels = c(0,1,2), raked = F)
+  
+  # aggregate stackers for admin 0
+  if (use_stacking_covs) {
+    aggregate_stackers_admin0(indicator       = indicator,
+                              indicator_group = indicator_group,
+                              run_date        = run_date,
+                              age             = 0,
+                              holdout         = 0,
+                              regions         = Regions,
+                              year_list       = year_list,
+                              pop_measure     = pop_measure,
+                              results_file    = paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_stackers.csv'),
+                              stackers_logit_transform = TRUE,
+                              predictor_logit_transform = TRUE)
+  }
+  
+  
+  
   ###############################################################################
-  # Make summary metrics
+  ## Make time series plots
   ###############################################################################
-
-  # Get in and out of sample draws
-  run_in_oos <- get_is_oos_draws(ind_gp = indicator_group,
-                                 ind = indicator,
-                                 rd = run_date,
-                                 ind_fm = 'binomial',
-                                 model_domain = 'africa',
-                                 age = 0,
-                                 nperiod = 16,
-                                 yrs = 2000:2015,
-                                 get.oos = as.logical(makeholdouts),
+  
+  ## Set run_date, indicator, indicator_group, out_dir per your preferences
+  in_dir <- paste0(outputdir, '/pred_derivatives/admin_summaries/')
+  in_file_ad0 <- paste0(in_dir, indicator, '_admin_0_unraked_summary.csv')
+  in_file_ad1 <- paste0(in_dir, indicator, '_admin_1_unraked_summary.csv')
+  in_file_ad2 <- paste0(in_dir, indicator, '_admin_2_unraked_summary.csv')
+  
+  ## Prepare input predictions
+  ad0_df <- fread(in_file_ad0)
+  ad1_df <- fread(in_file_ad1)
+  ad2_df <- fread(in_file_ad2)
+  
+  ## Prepare input data
+  input_data <- fread(paste0('/share/geospatial/mbg/input_data/', indicator, '.csv'))
+  admin_data <- input_aggregate_admin(indicator = indicator, 
+                                      indicator_group = indicator_group, 
+                                      regions = Regions, 
+                                      run_date = run_date,
+                                      input_data = input_data)
+  ad0_data <- admin_data$ad0
+  ad1_data <- admin_data$ad1
+  ad2_data <- admin_data$ad2
+  
+  ## Create output directory
+  dir.create(paste0(outputdir, '/time_series_plots/'))
+  
+  ## Run the plotting code
+  subnational_ts_plots(ad0_df = ad0_df,
+                       ad1_df = ad1_df,
+                       ad2_df = ad2_df,
+                       ind_title = indicator,
+                       out_dir = paste0(outputdir, '/time_series_plots/'),
+                       highisbad = F,
+                       verbose = T,
+                       plot_levels = 'ad1',
+                       plot_data = T,
+                       ad0_data = ad0_data,
+                       ad1_data = ad1_data,
+                       ad2_data = ad2_data)
+  
+  
+  ###############################################################################
+  ## Make time series plots to compare model runs
+  ###############################################################################
+  
+  ## Set runs to plot
+  run_dates = c('2018_08_03_13_34_27', '2018_08_01_10_30_14', '2018_08_01_14_10_58')
+  run_label <- c('4 knots', '8 knots', '16 knots')
+  share_dir <- paste0("/share/geospatial/mbg/", indicator_group, "/",
+                      indicator, "/output/", run_dates, "/")
+  in_dir <- paste0(share_dir, "pred_derivatives/admin_summaries/")
+  
+  ## Set run_date, indicator, indicator_group, out_dir per your preferences
+  in_file_ad0 <- paste0(in_dir, indicator, '_admin_0_unraked_summary.csv')
+  in_file_ad1 <- paste0(in_dir, indicator, '_admin_1_unraked_summary.csv')
+  in_file_ad2 <- paste0(in_dir, indicator, '_admin_2_unraked_summary.csv')
+  
+  ## Prepare input predictions
+  ad0_df <- lapply(in_file_ad0, fread) %>% add_run_label(run_label)
+  ad1_df <- lapply(in_file_ad1, fread) %>% add_run_label(run_label)
+  ad2_df <- lapply(in_file_ad2, fread) %>% add_run_label(run_label)
+  
+  ## Create output directory
+  dir.create(paste0(outputdir, '/time_series_plots_multi_runs/'))
+  
+  ## Run the plotting code
+  subnational_ts_plots(ad0_df = ad0_df,
+                       ad1_df = ad1_df,
+                       ad2_df = ad2_df,
+                       ind_title = indicator,
+                       out_dir = paste0(outputdir, '/time_series_plots_multi_runs/'),
+                       highisbad = F,
+                       verbose = T,
+                       plot_levels = ifelse(individual_countries, c('ad2', 'ad1'), c('ad0', 'ad1', 'ad2')),
+                       plot_data = T,
+                       ad0_data = ad0_data,
+                       ad1_data = ad1_data,
+                       ad2_data = ad2_data,
+                       multiple_runs = T)
+  
+  
+  ###############################################################################
+  ## Make time series with child models plots for admin 0
+  ###############################################################################
+  
+  # Load function
+  source(paste0(indic_repo, "4_post_estimation/plot_admin_time_series.R"))
+  
+  # Prep data, if necessary
+  setnames(ad0_data, c('svy_id', 'outcome'), c('nid', 'rate'))
+  setnames(ad1_data, c('svy_id', 'outcome'), c('nid', 'rate'))
+  
+  # Run the plotting code
+  admin0_data_and_estimates_plots(indicator_group = indicator_group, 
+                                  indicator = indicator,
+                                  run_date = run_date,
+                                  ad0_data = ad0_data,
+                                  admin1 = FALSE, # haven't gotten this part up and running yet
+                                  ad1_data = ad1_data)
+  
+  ###############################################################################
+  ## Make summary metrics
+  ###############################################################################
+  
+  ## Combine csv files
+  csvs <- list.files(outputdir, pattern = 'input_data_(.*).csv', full.names = T)
+  csv_master <- rbindlist(lapply(csvs, fread))
+  csv_master[, V1 := NULL]
+  write.csv(csv_master, file=paste0(outputdir, '/input_data.csv'))
+  
+  ## Get in and out of sample draws
+  run_in_oos <- get_is_oos_draws(ind_gp        = indicator_group,
+                                 ind           = indicator,
+                                 rd            = run_date,
+                                 ind_fm        = 'binomial',
+                                 model_domain  = 'south_america', # <- ?
+                                 age           = 0,
+                                 nperiod       = length(year_list),
+                                 yrs           = year_list,
+                                 get.oos       = as.logical(makeholdouts),
+                                 year_col      = 'year',
                                  write.to.file = TRUE)
-
-  ## set out_dir
-  out_dir <- paste0(sharedir, "/output/", run_date, "/summary_metrics/")
-  dir.create(out_dir, recursive = T, showWarnings = F)
-
-  ## for admin0
-  draws.df <- fread(sprintf("/share/geospatial/mbg/%s/%s/output/%s/output_draws_data.csv",
-                            indicator_group, indicator, run_date))
-
-  country.pvtable <- get_pv_table(d = draws.df,
-                                  indicator_group = indicator_group,
-                                  rd = run_date,
-                                  indicator=indicator,
-                                  aggregate_on='country',
-                                  draws = as.numeric(samples),
-                                  out.dir = out_dir)
-
-  write.csv(country.pvtable,
-            file = sprintf("/share/geospatial/mbg/%s/%s/output/%s/summary_metrics/country_metrics.csv",
-                           indicator_group, indicator, run_date))
-
-  ad1.pvtable <- get_pv_table(d = draws.df,
-                              indicator_group = indicator_group,
-                              rd = run_date,
-                              indicator=indicator,
-                              aggregate_on='ad1',
-                              draws = as.numeric(samples),
-                              out.dir = out_dir)
-  write.csv(ad1.pvtable,
-            file = sprintf("/share/geospatial/mbg/%s/%s/output/%s/summary_metrics/ad1_metrics.csv",
-                           indicator_group, indicator, run_date))
-  ad2.pvtable <- get_pv_table(d = draws.df,
-                              indicator_group = indicator_group,
-                              rd = run_date,
-                              indicator=indicator,
-                              aggregate_on='ad2',
-                              draws = as.numeric(samples),
-                              out.dir = out_dir)
-  write.csv(ad2.pvtable,
-            file = sprintf("/share/geospatial/mbg/%s/%s/output/%s/summary_metrics/ad2_metrics.csv",
-                           indicator_group, indicator, run_date))
-
+  
+  ## Set out_dir
+  dir.create(paste0(outputdir, '/summary_metrics/'), recursive = T, showWarnings = F)
+  
+  ## Calculate and save PV summary statistics
+  draws.df <- fread(paste0(outputdir, '/output_draws_data.csv'))
+  # country summary stats
+  pvtab_country <- get_pv_table(d               = draws.df,
+                                indicator_group = indicator_group,
+                                rd              = run_date,
+                                indicator       = indicator,
+                                result_agg_over = c('year', 'oos', 'region'),
+                                aggregate_on    = 'country',
+                                draws           = as.numeric(samples),
+                                out.dir         = paste0(outputdir, '/summary_metrics/'))
+  # admin 1 summary stats
+  pvtab_admin1 <-  get_pv_table(d               = draws.df,
+                                indicator_group = indicator_group,
+                                rd              = run_date,
+                                indicator       = indicator,
+                                result_agg_over = c('year', 'oos', 'region'),
+                                aggregate_on    = 'ad1',
+                                draws           = as.numeric(samples),
+                                out.dir         = paste0(outputdir, '/summary_metrics/'))
+  # admin 2 summary stats
+  pvtab_admin2 <-  get_pv_table(d               = draws.df,
+                                indicator_group = indicator_group,
+                                rd              = run_date,
+                                indicator       = indicator,
+                                result_agg_over = c('year', 'oos', 'region'),
+                                aggregate_on    = 'ad2',
+                                draws           = as.numeric(samples),
+                                out.dir         = paste0(outputdir, '/summary_metrics/'))
+  # combine into one file
+  pvtab <- rbindlist(list(pvtab_country[[1]][, Level := names(pvtab_country)], 
+                          pvtab_admin1[[1]][, Level := names(pvtab_admin1)], 
+                          pvtab_admin2[[1]][, Level := names(pvtab_admin2)]), use.names = TRUE)
+  write.csv(pvtab, paste0(outputdir, '/summary_metrics/pv_metrics.csv'), row.names = FALSE)
+  
+  
   ###############################################################################
-  ## Launch Validation Report (deprecated)
+  ## Make validation plots
   ###############################################################################
-
-  # dir.create(paste0(sharedir, '/output/', run_date, '/val_logs/'))
-
-  # ## Launch validation reports
-  # lapply(strata, submit_validation_report,
-  #                    indicator       = indicator,
-  #                    indicator_group = indicator_group,
-  #                    run_date        = run_date,
-  #                    pop_measure     = pop_measure,
-  #                    repo            = repo,
-  #                    log_dir         = paste0(sharedir, '/output/', run_date, '/val_logs/'),
-  #                    target_type     = target_type,
-  #                    target
-  #                            = as.numeric(st_targ),
-  #                    geo_nodes       = TRUE)
+  
+  ## Validation results
+  source(paste0(indic_repo, '4_post_estimation/plot_pv_results.r'))
+  plot_pv_results(indicator, indicator_group, run_date, 
+                  save_file = paste0('/share/geospatial/mbg/ort/ors/output/', run_date, '/summary_metrics/pv_metrics.pdf'))
+  
 
 } # Close loop for individual countries
 

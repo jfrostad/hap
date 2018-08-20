@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 06/12/2018
 # Purpose: Collapse data for HAP
-# source("/homes/jfrostad/_code/hap//extract/3_collapse.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/housing/extract/3_collapse.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-date <- "2018_08_09" #date of current post-extraction
+date <- "2018_08_15" #date of current post-extraction
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -182,7 +182,7 @@ cooking <- cooking[!(shapefile %like% "2021")]
 cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
 
 #only work on PER for now
-cooking <- cooking[iso3 == "PER"]
+#cooking <- cooking[iso3 == "PER"]
 
 #run core resampling code
 dt <- resample_polygons(data = cooking,

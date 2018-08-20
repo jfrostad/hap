@@ -3,7 +3,7 @@
 ######                Scott Swartz | 8/29/2017                    ######
 ########################################################################
 
-#source('/homes/jfrostad/_code/risks/air_hap/extraction/hap_plot.R')
+#source("/homes/jfrostad/_code/lbd/housing/extract/4_plot_coverage.R", echo=T)
 
 # ---CONFIG----------------------------------------------------------------------------------------------------------------------
 # clear memory
@@ -42,7 +42,7 @@ var <- 'bin_cooking_fuel_mapped' #imp, unimp, surface, od, piped
 
 title <- "Cooking Fuel"
 
-date <- "2018_08_02"
+date <- "2018_08_15"
 data.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 coverage_data <-  paste0(data.dir, "data_cooking_", date, ".feather") %>% read_feather %>% as.data.table
 
@@ -63,7 +63,7 @@ coverage_data[, cooking_fuel := N * bin_cooking_fuel_mapped]
 source('mbg_central/graph_data_coverage.R')
 regions <- c('africa', 'latin_america', 'middle_east','south_asia','se_asia')
 #regions <- c('south_asia','se_asia')
-regions <- 'se_asia'
+#regions <- 'se_asia'
 
 #fix problem with a se asia shapefile (naming issue)
 coverage_data <- coverage_data[shapefile == "lg_g2015_2007_1", shapefile := "lf_g2015_2007_1"]
@@ -103,11 +103,11 @@ for (reg in regions){
 
                                               color_scheme = "classic",
                                               color_scheme_scatter = "brewer",
-                                              high_is_bad = FALSE,
+                                              high_is_bad = TRUE,
                                               cap = 90,
                                               cap_type = "percentile",
                                               legend_min = 0,
-                                              legend_max = 1.1,
+                                              legend_max = 1,
                                               endemic_gauls = NULL,
                                               stage_3_gray = TRUE,
                                               simplify_polys = TRUE,
