@@ -42,7 +42,7 @@ var <- 'bin_cooking_fuel_mapped' #imp, unimp, surface, od, piped
 
 title <- "Cooking Fuel"
 
-date <- "2018_08_15"
+date <- "2018_09_17"
 data.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 coverage_data <-  paste0(data.dir, "data_cooking_", date, ".feather") %>% read_feather %>% as.data.table
 

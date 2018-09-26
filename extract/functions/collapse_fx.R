@@ -60,7 +60,7 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
   #read in the appropriate definitions file
   def.dt <- read_xlsx(path=definitions, sheet=var.fam) %>% as.data.table
   def.dt[, notes := NULL] #cleanup for reshaping
-  
+
   #define a function to merge on definitions for each variable
   mergeDef <- function(data, defs, this.var) {
 
@@ -68,11 +68,12 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
     og.count <- nrow(data)
     
     defs <- defs[variable==this.var] #subset defs to working var
-    
+
     #reshape the definitions and capture the new variable names for output
-    defs <- dcast(defs, value~variable, value.var=c('bin', 'ord'), sep='_')
-    new.cols <- names(defs)[!(names(defs) %like% 'value')]
-    
+    new.cols <- names(defs)[!(names(defs) %in% c('variable', 'value'))]
+    defs <- dcast(defs, value~variable, value.var=new.cols, sep='_')
+    new.cols <- names(defs)[!(names(defs) %in% c('variable', 'value'))] #account for new var names (added stub)
+
     #remap
     data[get(this.var)=="", c(this.var) := 'unknown' ] #TODO are blank responses (as opposed to NA) unknown?
     out <- merge(data, defs, by.x=this.var, by.y='value', all.x=T) #merge onto data using original values
@@ -162,6 +163,7 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
      .SDcols=these.vars, by=key(dt)] #aggregate each variable and modify in place
   
   dt[, N := sum(hhweight*hh_size)^2/sum(hhweight^2*hh_size), by=key(dt)]
+  dt[, sum_of_sample_weights := sum(hhweight)]
   
   #for polygon data, urbanicity status is no longer meaningful
   if(!is.point) dt[, urban := NA] #TODO what did urbanicity status for poly data originally mean?

@@ -48,7 +48,7 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-date <- "2018_08_15" #date of current post-extraction
+date <- "2018_09_17" #date of current post-extraction
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -108,10 +108,12 @@ collapseData <- function(point, census, this.family) {
 
   #loop over various families of indicators
   message(paste('->Processing:', this.family))
+  
+  browser()
 
   #### Subset & Shape Data ####
   dt <- initialClean(raw, var.fam=this.family, is.point=point) %>% 
-    defIndicator(., var.fam=this.family, definitions=def.file)
+    defIndicator(., var.fam=this.family, definitions=def.file, debug=F)
 
   #### Address Missingness ####
   message("\nBegin Addressing Missingness...")
@@ -202,7 +204,7 @@ setnames(dt,
          c('country', 'year'))
 
 #TODO should simplify dataset by dropping useless vars
-dt <- dt[, list(nid, country, year, latitude, longitude, survey_series, urban, cooking_fuel, N, 
+dt <- dt[, list(nid, country, year, latitude, longitude, survey_series, urban, cooking_fuel, N, sum_of_sample_weights,
                 cluster_id, polygon, shapefile, location_code, weight, pseudocluster)]
 
 #save into MDG dir
