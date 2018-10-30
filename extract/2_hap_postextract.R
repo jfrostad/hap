@@ -19,6 +19,7 @@ rm(list=ls())
 
 #Define values
 topic <- "hap"
+extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
 geos <- F #running on geos nodes true/false
@@ -80,7 +81,7 @@ if(redownload==T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd90
 codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
-new.files <- codebook[assigned=='qnguyen1' | assigned == 'jfrostad', output_name] %>% unique %>% paste(., collapse="|")
+new.files <- codebook[assigned %in% extractor_ids, output_name] %>% unique %>% paste(., collapse="|")
 extractions <- grep(new.files, extractions, invert=F, value=T)
 #extractions <- grep('PER', extractions, invert=F, value=T) #only working on peru
 

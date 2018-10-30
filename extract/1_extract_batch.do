@@ -77,7 +77,7 @@ local thisvar = "cooking_fuel_mapped"
 
      batch_extract, topics(`topics') ubcov_ids(`ubcov_ids') /// 
                  central_root(`central_root') ///
-                 cluster_project(proj_geospatial) ///
+                 cluster_project(proj_geo_nodes_dia) ///
                  output_path("`outpath'") ///
                  store_vals_path("/share/temp/sgeoutput/`c(username)'") ///
                  logs_path("/share/temp/sgeoutput/`c(username)'") ///

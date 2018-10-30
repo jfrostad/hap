@@ -7,13 +7,20 @@
 
 # ----Cleaning----------------------------------------------------------------------------------------------------------
 #function to do some initial cleaning and prep for the data
-initialClean <- function(input.dt, var.fam, is.point) {
+initialClean <- function(input.dt, var.fam, is.point, this.out.temp=NULL) {
   
   message("\nBegin Initial Cleaning...")
   message('->Subset to relevant variables')
 
   if (var.fam == 'cooking') {
-    dt <- input.dt[, .(nid, iso3, lat, long, survey_series, hhweight, urban, cooking_fuel_mapped, hh_size, year_start, int_year, shapefile, location_code)]
+    dt <- input.dt[, .(nid, iso3, lat, long, survey_series, hhweight, urban, hh_size, 
+                       year_start, int_year, shapefile, location_code,
+                       cooking_fuel_mapped, cooking_location_mapped, cooking_type_mapped, cooking_type_chimney_mapped)]
+  } else if (var.fam == 'housing') {
+    dt <- input.dt[, .(nid, iso3, lat, long, survey_series, hhweight, urban, hh_size, 
+                       year_start, int_year, shapefile, location_code,
+                       housing_roof, housing_wall, housing_floor,
+                       housing_roof_num, housing_wall_num, housing_floor_num)]
   } 
 
   problem_list <- dt[hh_size <=0] #TODO output this list somewhere?
@@ -37,6 +44,16 @@ initialClean <- function(input.dt, var.fam, is.point) {
     dt[, hhweight := 1]
     dt[, c('shapefile', 'location_code') := NA]
     
+  }
+  
+  #output an intermediate file prior to collapse for preliminary analysis
+  if (!is.null(this.out.temp)) { 
+    message('----->Save raw data to temp folder')
+    saveRDS(dt, 
+            file=file.path(this.out.temp,
+                           var.fam,
+                           paste0('uncollapsed_',
+                                  ifelse(is.point, 'points', 'poly'), '.RDS')))
   }
   
   #define a row id for other operations and key on it
@@ -75,7 +92,7 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
     new.cols <- names(defs)[!(names(defs) %in% c('variable', 'value'))] #account for new var names (added stub)
 
     #remap
-    data[get(this.var)=="", c(this.var) := 'unknown' ] #TODO are blank responses (as opposed to NA) unknown?
+    #data[get(this.var)=="", c(this.var) := 'unknown' ] #TODO are blank responses (as opposed to NA) unknown?
     out <- merge(data, defs, by.x=this.var, by.y='value', all.x=T) #merge onto data using original values
     
     #assert that merge was successful
@@ -149,6 +166,10 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   #set the variables to work on based on the indicator family
   if (var.fam == 'cooking') {
     these.vars <- 'bin_cooking_fuel_mapped'
+    these.vars <- c('bin_cooking_fuel_mapped',
+                    'cat_cooking_type_mapped',
+                    'cat_cooking_type_chimney_mapped',
+                    'cat_cooking_location_mapped')
   } 
   
   #point data needs to be collapsed using urbanicity

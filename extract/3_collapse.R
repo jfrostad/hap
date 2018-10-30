@@ -48,13 +48,14 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-date <- "2018_09_17" #date of current post-extraction
+date <- "2018_10_02" #date of current post-extraction
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #raw data
 data.dir <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
+census.dir <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
 
@@ -87,32 +88,40 @@ file.path(lbd.shared.function.dir, 'setup.R') %>% source
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
 #loop over points and polygons to collapse
-collapseData <- function(point, census, this.family) {
+collapseData <- function(this.family,
+                         point=NULL,
+                         census.file=NULL,
+                         out.temp=NULL) {
   
   message("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
-  message("Loading data...[point=", point, "]/[census=", census, "]")
+  #if you want to output temp files, create this dir
+  if (!is.null(out.temp)) file.path(out.temp, this.family) %>% dir.create(recursive=T)
 
-  #TODO set this up to handle IPUMS when extracted
-  if (census) {
-    ipums <- T
-    ipums_dir <- '/home/j/LIMITED_USE/LU_GEOSPATIAL/geo_matched/wash/IPUMS_feathers'
-    files <- list.files(ipums_dir, '.feather')
-    files_length <- length(files)
+  #ipums files are done in parallel due to size
+  if (!missing(census.file)) {
+    message("CENSUS FILE=", census.file)
+    census <- T
+    # Load data
+    raw <- read_feather(census.file) %>% 
+      as.data.table
+    # Determine if point or poly
+    point <- !all(raw[, lat] %>% unique %>% is.na)
+    
   } else {
-    ipums <- F
+    census <- F
     # Load data
     raw <- paste0(data.dir, ifelse(point, 'points_', 'poly_'), date, ".feather") %>% 
       read_feather %>% 
       as.data.table
   }
+  
+  message("Loading data...[point=", point, "]/[census=", census, "]")
 
   #loop over various families of indicators
   message(paste('->Processing:', this.family))
-  
-  browser()
 
   #### Subset & Shape Data ####
-  dt <- initialClean(raw, var.fam=this.family, is.point=point) %>% 
+  dt <- initialClean(raw, var.fam=this.family, is.point=point, this.out.temp=out.temp) %>% 
     defIndicator(., var.fam=this.family, definitions=def.file, debug=F)
 
   #### Address Missingness ####
@@ -146,6 +155,8 @@ collapseData <- function(point, census, this.family) {
   # } else {
   #   ptdat <- assign_ipums_hh()
   # }
+  
+  browser()
 
   #### Aggregate Data ####
   # Aggregate indicator to cluster level
@@ -159,9 +170,15 @@ collapseData <- function(point, census, this.family) {
   else return(agg.dt)
 
 }
+  
+#populate vector of IPUMS filepaths
+ipums.files = list.files(census.dir, full.names = T)
 
 #Run fx for each family
-cooking <- mapply(collapseData, point=T:F, census=F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+cooking.census <- mapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+# housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLIFY=F,
+#                   out.temp='/share/geospatial/jfrostad') %>% rbindlist
 
 #Redfine the row_id
 cooking[, row_id := .I]
