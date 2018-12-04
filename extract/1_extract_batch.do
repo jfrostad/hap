@@ -24,9 +24,9 @@ set obs 1
 
 // Settings
 local central_root "`j'/WORK/01_covariates/common/ubcov_central"
-local central_root "/homes/jfrostad/_code/ubcov_central"
+// local central_root "/homes/jfrostad/_code/ubcov_central"
 local topics hap //ENTER YOUR TOPIC HERE
-local username jfrostad
+local username qnguyen1
 
 // Load functions
 cd "`central_root'"
@@ -65,7 +65,7 @@ init, topics(`topics')
 */
 //Enter path where you'd like your extracts saved below between the quotes
 //DO NOT EXTRACT DATA FROM LIMITED USE TO THE J DRIVE. YOU CAN GET IN BIG TROUBLE. If you need to extract from LIMITED_USE contact IT and your PO to organize a workaround. 
-local outpath = "`j'/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch"
+local outpath = "`L'/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch"
 local thisvar = "cooking_fuel_mapped"
 
    get, vars
@@ -77,7 +77,7 @@ local thisvar = "cooking_fuel_mapped"
 
      batch_extract, topics(`topics') ubcov_ids(`ubcov_ids') /// 
                  central_root(`central_root') ///
-                 cluster_project(proj_geo_nodes_dia) ///
+                 cluster_project(proj_geo_nodes) ///
                  output_path("`outpath'") ///
                  store_vals_path("/share/temp/sgeoutput/`c(username)'") ///
                  logs_path("/share/temp/sgeoutput/`c(username)'") ///
