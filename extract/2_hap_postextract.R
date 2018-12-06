@@ -31,8 +31,9 @@ cores <- 30
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/snfs1/")
 h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/jfrostad/")
-folder_in <- file.path(j, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
-folder_out <- file.path(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
+l <- ifelse(Sys.info()[1]=="Windows", "L:/") 
+folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
+folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
 setwd(folder_in)
 
 package_lib    <- sprintf('%s_code/_lib/pkg', h)
@@ -246,5 +247,5 @@ gnid <- unique(geo$nid)
 fix <- subset(all, !(all$nid %in% gnid))
 fix_collapse <- distinct(fix[,c("nid", "iso3", "year_start", "survey_name"), with=T])
 fix_collapse <- merge(fix_collapse, stages, by.x="iso3", by.y="alpha.3", all.x=T)
-fix_outpath <- paste0(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/new_geographies_to_match.csv")
+fix_outpath <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/new_geographies_to_match.csv")
 write.csv(fix_collapse, fix_outpath, row.names=F, na="")

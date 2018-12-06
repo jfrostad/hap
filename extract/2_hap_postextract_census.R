@@ -13,8 +13,9 @@ cores <- 5
 
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/snfs1/")
-folder_in <- file.path(j, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
-folder_out <- paste0(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
+l <- ifelse(Sys.info()[1]=="Windows", "L:/")
+folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
+folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
 
 ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
 #Load packages
@@ -39,9 +40,9 @@ packages <- lapply(packages, library, character.only=T)
 message("Getting common column names")
 if (topic == "hap" & geos){
   #get the most recent pt and poly feathers and parse them for column names
-  pt <- paste0(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% list.files(pattern="points", full.names=T) %>% grep(pattern=".feather$", value=T)
+  pt <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% list.files(pattern="points", full.names=T) %>% grep(pattern=".feather$", value=T)
   pt <- pt[length(pt)] %>% feather_metadata
-  poly <- paste0(j, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% list.files(pattern="points", full.names=T) %>% grep(pattern=".feather$", value=T)
+  poly <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% list.files(pattern="points", full.names=T) %>% grep(pattern=".feather$", value=T)
   poly <- poly[length(poly)] %>% feather_metadata
   pt_names <- pt[3] %>% unlist %>% names %>% gsub(pattern="types.", replacement="")
   poly_names <- poly[3] %>% unlist %>% names %>% gsub(pattern="types.", replacement="")

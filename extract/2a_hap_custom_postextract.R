@@ -32,19 +32,24 @@ all[, obs := .N, by=nid]
 all[, pct_miss_hh_size := 100 * missingHHsize / obs]
 all[, is_hh := pct_miss_hh_size > 0]
 
-#subset cases where all hh_sizes are present. in these, each row is a HH
-has_hh_size <- all[pct_miss_hh_size > 0, ]
-has_hh_size[, uq_id := paste(nid, psu, hh_id, year_start, lat, long, shapefile, location_code, sep="_")] #includes space-time
-has_hh_size[, prev_uq_id := paste(nid, psu, hh_id, sep="_")]
-diff <- length(unique(has_hh_size$uq_id)) - length(unique(has_hh_size$prev_uq_id))
+#subset cases where all hh_sizes are present. Make sure each Row is a HH
+has_hh_size_no_id <- all[!is.na(hh_size) & is.na(hh_id), ]
+has_hh_size_id <- all[!is.na(hh_size) & !is.na(hh_id), ]
+has_hh_size_id[, uq_id := paste(nid, psu, geospatial_id, hh_id, year_start, lat, long, shapefile, location_code, sep="_")] #includes space-time
+has_hh_size_id[, prev_uq_id := paste(nid, psu, hh_id, sep="_")]
+diff <- length(unique(has_hh_size_id$uq_id)) - length(unique(has_hh_size_id$prev_uq_id))
 message(paste("There are", diff, "more unique households from including spacetime than excluding."))
-hhhs <- distinct(has_hh_size, uq_id, .keep_all=T)
+hhhs <- distinct(has_hh_size_id, uq_id, .keep_all=T)
 
-#subset cases where all hh_sizes are missing. these are HHM
-missing_hh_size <- all[pct_miss_hh_size <= 0, ]
+#subset cases where all hh_sizes are missing and each row is not a HH. Set hh_size to 1
+missing_hh_size <- all[is.na(hh_size) & survey_module != 'HH', ]
 missing_hh_size[, hh_size := 1]
 
-packaged <- rbind(hhhs, missing_hh_size, fill=T)
+missing_hh_size_hh <- all[is.na(hh_size) & survey_module == 'HH', ]
+
+packaged <- rbind(hhhs, has_hh_size_no_id, fill=T)
+packaged <- rbind(packaged, missing_hh_size, fill=T)
+packaged <- rbind(packaged, missing_hh_size_hh, fill=T)
 
 nids_that_need_hh_size_crosswalk <- c(20998, #MACRO_DHS_IN UGA 1995 WN
                                       32144, 32138, 1301, 1308, 1322, #BOL/INTEGRATED_HH_SURVEY_EIH
