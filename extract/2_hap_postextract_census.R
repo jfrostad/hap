@@ -12,8 +12,8 @@ cores <- 5
 #source('/homes/jfrostad/_code/lbd/housing/extract/2_hap_postextract_census.R')
 
 #Setup
-j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/snfs1/")
-l <- ifelse(Sys.info()[1]=="Windows", "L:/")
+j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
+l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/")
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
 folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
 
@@ -24,13 +24,13 @@ pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, d
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
 
-stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
+stages <- read.csv(paste0(j, "/temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
 if (geos){
-  package_lib <- '/snfs1/temp/geospatial/geos_packages'
+  package_lib <- '/temp/geospatial/geos_packages'
   .libPaths(package_lib)
   library(feather) #as of 11/20/2017 feather does not work on prod
 } else {
-  package_lib <- '/snfs1/temp/geospatial/packages'}
+  package_lib <- '/temp/geospatial/packages'}
 .libPaths(package_lib)
 
 #Load packages
@@ -72,7 +72,7 @@ extractions <- grep(new.files, extractions, invert=F, value=T)
 # files <- grep(africa, files, value=T)
 
 message("Read in IPUMS Geo Codebook")
-geo <- read.csv(paste0(j, "WORK/11_geospatial/05_survey shapefile library/codebooks/IPUMS_CENSUS.csv"), stringsAsFactors = F, encoding="windows-1252")
+geo <- read.csv(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks/IPUMS_CENSUS.csv"), stringsAsFactors = F, encoding="windows-1252")
 geo <- geo[, c("nid", "iso3", 'shapefile', 'location_code', 'lat', 'long', 'admin_level', 'point', 'geospatial_id', 'start_year', 'end_year')]
 
 #define function to merge IPUMS files with geographies

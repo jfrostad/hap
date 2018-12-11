@@ -23,15 +23,15 @@ extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
 geos <- F #running on geos nodes true/false
-cores <- 30
+cores <- 50
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/snfs2/HOME/gmanny/backups/Documents/Repos/geospatial-data-prep/common/post_extraction_3.R')
 
 #Setup
-j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/snfs1/")
-h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/jfrostad/")
-l <- ifelse(Sys.info()[1]=="Windows", "L:/") 
+j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
+h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/albrja/") #Your username
+l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/") 
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
 folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
 setwd(folder_in)
@@ -42,7 +42,7 @@ package_lib    <- sprintf('%s_code/_lib/pkg', h)
 
 ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
 
-stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
+stages <- read.csv(paste0(j, "/temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
 
 #Load packages
 pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
@@ -122,7 +122,7 @@ write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feat
 #####################################################################
 #Get all geog codebooks and package them together
 message("Retrieve geo codebook filepaths")
-files <- list.files(paste0(j, "WORK/11_geospatial/05_survey shapefile library/codebooks"), pattern=".csv$", ignore.case = T, full.names = T)
+files <- list.files(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks"), pattern=".csv$", ignore.case = T, full.names = T)
 files <- grep("IPUMS|special", files, value = T, invert = T) # list any strings from geo codebooks you want excluded here
 
 message("Read geo codebooks into list")
@@ -224,8 +224,9 @@ message("end of table")
 
 if (topic == "hap"){
   message("HAP-specific Fixes")
-  file.path(h, "_code/lbd/housing/extract/2a_hap_custom_postextract.R") %>% source
+  file.path(h, "hap//extract/2a_hap_custom_postextract.R") %>% source
 }
+#File path where this is located in your repo.
 
 #####################################################################
 ######################### CLEAN UP & SAVE ###########################
