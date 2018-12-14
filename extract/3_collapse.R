@@ -12,7 +12,7 @@ rm(list=ls())
 # runtime configuration
 if (Sys.info()["sysname"] == "Linux") {
   j_root <- "/home/j/"
-  h_root <- "/homes/jfrostad/"
+  h_root <- file.path("/homes", Sys.info()["user"])
   arg <- commandArgs()[-(1:3)] # First args are for unix use only
   
   if (length(arg)==0) {
