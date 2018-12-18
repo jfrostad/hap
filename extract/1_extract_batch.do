@@ -4,7 +4,7 @@
  Project: ubCov
  Purpose: Run Script
 ***********************************************************************************************************/
-// do /homes/jfrostad/_code/lbd/housing/extract/1_extract_batch.do
+// do /homes/jfrostad/_code/lbd/hap/extract/1_extract_batch.do
 
 //////////////////////////////////
 // Setup
@@ -12,10 +12,12 @@
 
 if c(os) == "Unix" {
     local j "/home/j"
+    local L "/ihme/limited_use/"
     set odbcmgr unixodbc
 }
 else if c(os) == "Windows" {
     local j "J:"
+    local L "L:"
 }
 
 clear all
