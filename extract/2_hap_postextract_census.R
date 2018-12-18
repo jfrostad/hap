@@ -6,22 +6,23 @@ extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
 geos <- TRUE #running on geos nodes true/false
-cores <- 5
+cores <- 35
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/homes/jfrostad/_code/lbd/housing/extract/2_hap_postextract_census.R')
 
 #Setup
+h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/albrja/") #Your username
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/")
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
 folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
 
-####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-#Load packages
-pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
-
-#timestamp
+# ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
+# #Load packages
+# pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
+# 
+# #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 stages <- read.csv(paste0(j, "/temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
@@ -36,6 +37,7 @@ if (geos){
 #Load packages
 packages <- c('haven', 'stringr', 'data.table', 'dplyr', 'magrittr', 'parallel', 'doParallel')
 packages <- lapply(packages, library, character.only=T)
+library(gsheet, lib.loc = '/homes/albrja/_code/_lib/pkg/')
 
 message("Getting common column names")
 if (topic == "hap" & geos){
@@ -48,7 +50,7 @@ if (topic == "hap" & geos){
   poly_names <- poly[3] %>% unlist %>% names %>% gsub(pattern="types.", replacement="")
   noms <- c(pt_names, poly_names) %>% unique
 } else{
-  message("The error you're about to get has to do with the fact that you're not running on geos and/or you're not prepping wash data.")
+  message("The error you're about to get has to do with the fact that you're not running on geos and/or you're not prepping hap data.")
   stop("I don't know how to parse .Rdata files for column headers in a timely way. Please figure something out and make a pull request.")
 }
 
@@ -56,8 +58,10 @@ message("List IPUMS dtas")
 extractions <- list.files(folder_in, pattern="IPUMS_CENSUS", full.names=T)
 
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if(redownload==T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd903zfg'), overwrite=T)
-codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
+# if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+# codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
+codebook <- gsheet2tbl('https://docs.google.com/spreadsheets/d/1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o/edit#gid=0')
+codebook <- as.data.table(codebook)
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
 new.files <- codebook[assigned %in% extractor_ids, output_name] %>% unique %>% paste(., collapse="|")
@@ -138,4 +142,5 @@ ipums_merge <- function(file, geo, folder_out, noms){
 message("starting mclapply")
 bad_nids <- mclapply(extractions, ipums_merge, geo=geo, folder_out=folder_out, noms=noms, mc.cores=cores) %>% unlist
 write.csv(bad_nids, paste0(folder_out, "/fix_these_nids.csv"), row.names = F, na='')
-#write.csv(to_do, to_do_outpath, row.names=F)
+  #write.csv(to_do, to_do_outpath, row.names=F)
+
