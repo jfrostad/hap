@@ -33,10 +33,10 @@ message('Looking for things in the config that will be needed for this script to
 
 ## Read config file and save all parameters in memory
 config <- load_config(repo            = core_repo,
-                      indicator_group = '',
-                      indicator       = '',
-                      config_name     = paste0('housing/model/config_', config_par),
-                      covs_name       = paste0('housing/model/covs_', cov_par))
+                      indicator_group = indicator_group,
+                      indicator       = indicator,
+                      config_name     = paste0('/model/configs/config_', config_par),
+                      covs_name       = paste0('/model/configs/covs_', cov_par))
 
 ## Set xgboost hyperparameter filepath
 ## TODO investigate
@@ -57,7 +57,7 @@ individual_countries <- commandArgs()[17]
 
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
-dir.create(outputdir)
+dir.create(outputdir, recursive=T)
 
 ## Create directory structure for this model run
 create_dirs(indicator_group = indicator_group, indicator = indicator)
@@ -78,7 +78,7 @@ if (individual_countries) {
 
 ## Set BRT parameters from optimizer sheet
 ## TODO investigate
-# gbm_params <- read.csv(paste0(core_repo, '/housing/3_modeling/gbm_params_ors.csv'), stringsAsFactors = F)
+# gbm_params <- read.csv(paste0(core_repo, '/hap/3_modeling/gbm_params_ors.csv'), stringsAsFactors = F)
 # gbm_tc <- as.numeric(select(filter(gbm_params, indi == indicator, region == Regions), gbm_tc))
 # gbm_lr <- as.numeric(select(filter(gbm_params, indi == indicator, region == Regions), gbm_lr))
 # gbm_bf <- as.numeric(select(filter(gbm_params, indi == indicator, region == Regions), gbm_bf))
@@ -92,7 +92,7 @@ if (individual_countries) {
 #                   covariate_plotting_only, individual_countries, Regions, 
 #                   config_par, cov_par, fixed_effects, gbd_fixed_effects,
 #                   stacked_fixed_effects, mesh_t_knots, rho_prior, makeholdouts, parallel_script)
-# load(paste0(core_repo, '/housing/model/gs_authorization_token.RData'))
+# load(paste0(core_repo, '/hap/gs_authorization_token.RData'))
 # gs_auth(token = ttt)
 # orz_tracker <- gs_title('ORZ model tracker')
 # gs_add_row(orz_tracker, ws = 'Sheet1', input = model_params)

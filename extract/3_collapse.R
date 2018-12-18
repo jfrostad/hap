@@ -156,7 +156,7 @@ collapseData <- function(this.family,
   #   ptdat <- assign_ipums_hh()
   # }
   
-  browser()
+  #browser()
 
   #### Aggregate Data ####
   # Aggregate indicator to cluster level
@@ -225,5 +225,8 @@ dt <- dt[, list(nid, country, year, latitude, longitude, survey_series, urban, c
                 cluster_id, polygon, shapefile, location_code, weight, pseudocluster)]
 
 #save into MDG dir
-file.path(share.model.dir, 'cooking_fuel.RDS') %>% saveRDS(dt, file=.)
-file.path(share.model.dir, 'cooking_fuel.csv') %>% write.csv(dt, file=., row.names=F)
+file.path(share.model.dir, 'cooking_clean.RDS') %>% saveRDS(dt, file=.)
+file.path(share.model.dir, 'cooking_clean.csv') %>% write.csv(dt, file=., row.names=F)
+#save both ways so that you can try modelling from either end
+file.path(share.model.dir, 'cooking_dirty.RDS') %>% saveRDS(dt, file=.)
+file.path(share.model.dir, 'cooking_dirty.csv') %>% write.csv(dt, file=., row.names=F)

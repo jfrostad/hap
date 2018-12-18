@@ -9,20 +9,20 @@
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ## indicate whether running interactively
-interactive <- TRUE
+interactive <- F
 
 ## if running interactively, set arguments
 if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 's2_cssa'
+  reg                      <- 'dia_s_america'
   age                      <- 0
-  run_date                 <- '2018_10_01_17_01_44'
+  run_date                 <- "2018_12_17_13_50_33"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_clean'
-  indicator_group          <- 'hap'
+  indicator_group          <- 'cooking'
   
   ## make a pathaddin that gets used widely
   pathaddin <- paste0('_bin',age,'_',reg,'_',holdout)
@@ -818,7 +818,7 @@ sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp
                   '-pe multi_slot ', mycores, proj, 
                   '-v sing_image=default -v SET_OMP_THREADS=1 -v SET_MKL_THREADS=1 -N ', jname, ' ')
 r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- '/share/code/geospatial/kewiens/ort/ors/3_modeling/aggregate_ort.R'
+script <- file.path(repo, indicator_group, 'modeling/aggregate_hap.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 
               use_geos_nodes, run_date, measure)
 

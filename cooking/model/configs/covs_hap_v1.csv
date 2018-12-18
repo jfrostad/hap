@@ -1,0 +1,54 @@
+covariate,measure,gbd,include
+access ,mean,F,T
+access2 ,mean,F,T
+aridity,mean,F,F
+cattle,mean,F,F
+crutsard,mean,F,F
+crutscld,mean,F,T
+crutsdtr,mean ,F,T
+crutsfrs,sum ,F,T
+crutspet,mean,F,T
+crutspre ,sum,F,F
+crutstmn,mean,F,T
+crutstmp,mean,F,T
+crutstmx,mean,F,T
+crutswet,sum,F,F
+depratio,youngage,F,T
+distrivers ,mean,F,T
+distriverslakes,mean,F,F
+dmspntl,mean,F,T
+edu_mean_unraked,mean,F,F
+elevation,mean,F,T
+escroplandarea,mean,F,T
+evi,median,F,T
+fertility ,mean,F,T
+gdp,percapita,F,F
+ghslurbanicity,mean,F,T
+gpcpprecip,mean,F,F
+growingseason,mean,F,T
+herreronyieldcalcium,calcium,F,F
+herreronyieldfolate,folate,F,F
+herreronyieldiron,iron,F,F
+herreronyieldprotein,protein,F,F
+herreronyieldvita ,vita,F,F
+herreronyieldvitb12,vitb12,F,F
+herreronyieldzinc,zinc,F,F
+herreroshannondiversity,mean,F,T
+ihmepm25,mean,F,T
+irrigation,mean,F,T
+ldi_pc,mean,T,F
+lstavg ,median ,F,T
+lstday,median,F,T
+lstdiurnaldiff,median,F,T
+lstnight,median,F,T
+mapincidence,mean ,F,F
+mdavector,pct,F,F
+nexndvi,mean,F,T
+sanitation_prop,mean,T,F
+sgocstha ,sum005to100cm,F,F
+sgphihox ,mean005to030cm,F,F
+tcb,median,F,T
+tcw,median,F,T
+viirsntl,mean,F,F
+worldpop ,total ,F,F
+mswep,sum,F,F
