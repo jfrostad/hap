@@ -9,7 +9,7 @@ geos <- TRUE #running on geos nodes true/false
 cores <- 35
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
-#source('/homes/jfrostad/_code/lbd/housing/extract/2_hap_postextract_census.R')
+#source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract_census.R')
 
 #Setup
 h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
@@ -19,9 +19,6 @@ folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 
 folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
 
 # ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-# #timestamp
-today <- Sys.Date() %>% gsub("-", "_", .)
-
 stages <- read.csv(paste0(j, "/temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
 if (geos){
   package_lib <- '/temp/geospatial/geos_packages'
@@ -35,6 +32,9 @@ if (geos){
 packages <- c('haven', 'stringr', 'data.table', 'dplyr', 'magrittr', 'parallel', 'doParallel')
 packages <- lapply(packages, library, character.only=T)
 library(gsheet, lib.loc = file.path(h, '_code/_lib/pkg'))
+
+#timestamp
+today <- Sys.Date() %>% gsub("-", "_", .)
 
 message("Getting common column names")
 if (topic == "hap" & geos){
@@ -101,8 +101,6 @@ ipums_merge <- function(file, geo, folder_out, noms){
     return(nid)
   }
 
-  browser()
-  
   if (!missing_gid) dt[, geospatial_id := as.character(geospatial_id)] #force geospatial IDs to character to match the sheet
   m <- try(merge(dt, geo, by.x=c("nid", "ihme_loc_id", 'geospatial_id'), by.y=c("nid", 'iso3', 'geospatial_id'), all.x=T))
 

@@ -77,9 +77,15 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
   #read in the appropriate definitions file
   def.dt <- read_xlsx(path=definitions, sheet=var.fam) %>% as.data.table
   def.dt[, notes := NULL] #cleanup for reshaping
-
+  
+  #impute cooking vars
+  #TODO use a more sophisticated imputation process
+  if (var.fam == 'cooking') { 
+    impute.vars <- c('cooking_location_mapped', 'cooking_type_mapped', 'cooking_type_chimney_mapped')
+  }
+  
   #define a function to merge on definitions for each variable
-  mergeDef <- function(data, defs, this.var) {
+  mergeDef <- function(data, defs, this.var, impute.vars=NULL) {
 
     #set the original row count in order to alert if anything goes wrong in remapping merges
     og.count <- nrow(data)
@@ -92,7 +98,8 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
     new.cols <- names(defs)[!(names(defs) %in% c('variable', 'value'))] #account for new var names (added stub)
 
     #remap
-    #data[get(this.var)=="", c(this.var) := 'unknown' ] #TODO are blank responses (as opposed to NA) unknown?
+    #TODO workaround because blank/NA vars cant get merged on to my codebook
+    if (this.var %in% impute.vars) data[get(this.var) %>% is.na | get(this.var) == "", c(this.var) := 'unknown' ]
     out <- merge(data, defs, by.x=this.var, by.y='value', all.x=T) #merge onto data using original values
     
     #assert that merge was successful
@@ -104,12 +111,33 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
 
   }
   
-  maps <- lapply(unique(def.dt$variable), mergeDef, data=dt, defs=def.dt)
+  maps <- lapply(unique(def.dt$variable), mergeDef, data=dt, defs=def.dt, impute.vars=impute.vars)
 
   #merge the new mapped vars with the original data (note that they all need to be keyed on row ID)
-  Reduce(function(...) merge(..., all = T), list(dt, maps)) %>% 
+  out <- Reduce(function(...) merge(..., all = T), list(dt, maps))
+  
+  #generate final indicators based on the intermediate vars
+  if (var.fam == 'cooking') {
+    
+    ord.vars <- names(out)[names(out) %like% 'ord_c']
+    out[, cooking_risk := rowSums(.SD), .SDcols=ord.vars] #sum the indicators in order to generate aggregated risk
+    ind.vars <- c('cooking_clean', 'cooking_med', 'cooking_dirty')
+    out[!is.na(cooking_risk), (ind.vars) := 0] #initialize, then fill based on risk
+    #TODO investigate assumptions
+    out[cooking_risk<6, cooking_clean := 1]
+    out[cooking_risk==6, cooking_med := 1]
+    out[cooking_risk>6, cooking_dirty := 1]
+    
+    #cleanup intermediate vars
+    remove.vars <- names(out)[names(out) %like% "row_id|mapped"]
+    out <- out[, (remove.vars) := NULL]
+    
+  }
+  
+  #redefine a row id for other operations and key on it
+  out[, row_id := .I] 
+  setkey(out, row_id) %>%
     return
-
 }
 
 #***********************************************************************************************************************
@@ -165,11 +193,9 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   
   #set the variables to work on based on the indicator family
   if (var.fam == 'cooking') {
-    these.vars <- 'bin_cooking_fuel_mapped'
-    these.vars <- c('bin_cooking_fuel_mapped',
-                    'cat_cooking_type_mapped',
-                    'cat_cooking_type_chimney_mapped',
-                    'cat_cooking_location_mapped')
+    these.vars <- c('cooking_clean',
+                    'cooking_med',
+                    'cooking_dirty')
   } 
   
   #point data needs to be collapsed using urbanicity

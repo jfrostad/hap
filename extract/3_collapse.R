@@ -49,19 +49,20 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-date <- "2018_10_02" #date of current post-extraction
+manual_date <- "2018_10_02" #set this value to use a manually specified extract date
+latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #raw data
-data.dir <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
-census.dir <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
+data.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
+census.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
 
 ###Output###
-out.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
+out.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
 share.model.dir  <- file.path('/share/geospatial/mbg/input_data/')
 #***********************************************************************************************************************
@@ -73,7 +74,7 @@ central.function.dir <- file.path(h_root, "_code/_lib/functions")
 # this pulls the general misc helper functions
 file.path(central.function.dir, "misc.R") %>% source
 #hap functions#
-hap.function.dir <- file.path(h_root, '_code/lbd/housing/extract/functions')
+hap.function.dir <- file.path(h_root, '_code/lbd/hap/extract/functions')
 #this pulls hap collapse helper functions
 file.path(hap.function.dir, '/collapse_fx.R') %>% source
 #shared functions#
@@ -88,6 +89,14 @@ file.path(lbd.shared.function.dir, 'setup.R') %>% source
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
+#automatically pull latest date if manual date not provided
+# get input version from most recently modified data file
+if (latest_date==T) { 
+  file_date <- gsub('.feather|points_|poly_', 
+                    '', 
+                    sort(list.files(data.dir, pattern = '*points'), decreasing=T)[1]) #pull latest poitns filename
+} else file_date <- manual_date
+  
 #loop over points and polygons to collapse
 collapseData <- function(this.family,
                          point=NULL,
@@ -111,7 +120,7 @@ collapseData <- function(this.family,
   } else {
     census <- F
     # Load data
-    raw <- paste0(data.dir, ifelse(point, 'points_', 'poly_'), date, ".feather") %>% 
+    raw <- paste0(data.dir, ifelse(point, 'points_', 'poly_'), file_date, ".feather") %>% 
       read_feather %>% 
       as.data.table
   }
@@ -120,7 +129,7 @@ collapseData <- function(this.family,
 
   #loop over various families of indicators
   message(paste('->Processing:', this.family))
-
+  
   #### Subset & Shape Data ####
   dt <- initialClean(raw, var.fam=this.family, is.point=point, this.out.temp=out.temp) %>% 
     defIndicator(., var.fam=this.family, definitions=def.file, debug=F)
@@ -130,7 +139,7 @@ collapseData <- function(this.family,
   
   # ID clusters with more than 20% weighted missingness
   #TODO set this up to loop over all vars
-  missing.vars <- idMissing(dt, this.var="bin_cooking_fuel_mapped", criteria=.2, wt.var='hh_size') 
+  missing.vars <- idMissing(dt, this.var="cooking_risk", criteria=.2, wt.var='hh_size') 
   dt <- dt[!(cluster_id %in% missing.vars)] #remove these clusters
 
   #Remove cluster_ids with missing hhweight or invalid 
@@ -156,8 +165,6 @@ collapseData <- function(this.family,
   # } else {
   #   ptdat <- assign_ipums_hh()
   # }
-  
-  #browser()
 
   #### Aggregate Data ####
   # Aggregate indicator to cluster level
