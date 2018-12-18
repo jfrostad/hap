@@ -12,16 +12,13 @@ cores <- 35
 #source('/homes/jfrostad/_code/lbd/housing/extract/2_hap_postextract_census.R')
 
 #Setup
-h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/albrja/") #Your username
+h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/")
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
 folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
 
 # ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-# #Load packages
-# pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
-# 
 # #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
 
@@ -37,7 +34,7 @@ if (geos){
 #Load packages
 packages <- c('haven', 'stringr', 'data.table', 'dplyr', 'magrittr', 'parallel', 'doParallel')
 packages <- lapply(packages, library, character.only=T)
-library(gsheet, lib.loc = '/homes/albrja/_code/_lib/pkg/')
+library(gsheet, lib.loc = file.path(h, '_code/_lib/pkg'))
 
 message("Getting common column names")
 if (topic == "hap" & geos){

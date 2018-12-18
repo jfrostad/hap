@@ -36,7 +36,7 @@ folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 
 folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
 setwd(folder_in)
 
-package_lib    <- file.path(h_root, '_code/_lib/pkg')
+package_lib    <- file.path(h, '_code/_lib/pkg')
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
 
