@@ -9,7 +9,7 @@
 
 # INSTRUCTIONS:
 # UBCOV OUTPUTS MUST BE SAVED IN LIMITED USE DIRECTORY
-# source('/homes/jfrostad/_code/lbd/housing/extract/2_hap_postextract.R')
+# source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract.R')
 #####################################################################
 
 #####################################################################
@@ -21,8 +21,8 @@ rm(list=ls())
 topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
-cluster <- TRUE #running on cluster true/false
-geos <- F #running on geos nodes true/false
+cluster <- T #running on cluster true/false
+geos <- T #running on geos nodes true/false
 cores <- 50
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
@@ -30,13 +30,13 @@ cores <- 50
 
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
-h <- ifelse(Sys.info()[1]=="Windows", "H:/", "/homes/albrja/") #Your username
+h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/") 
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
 folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
 setwd(folder_in)
 
-package_lib    <- sprintf('%s_code/_lib/pkg', h)
+package_lib    <- file.path(h_root, '_code/_lib/pkg')
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
 
@@ -78,7 +78,7 @@ extractions <- grep("157050", extractions, invert=T, value=T)
 #233917 is another IND survey that isn't quite as large but it also has to be loaded and collapsed separately.
 
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if(redownload==T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd903zfg'), overwrite=T)
+if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
 codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
@@ -224,7 +224,13 @@ message("end of table")
 
 if (topic == "hap"){
   message("HAP-specific Fixes")
-  file.path(h, "hap//extract/2a_hap_custom_postextract.R") %>% source
+  #accomodating my file structure
+  #TODO make more flexible
+  if (h %like% 'jfrostad') {
+    
+    file.path(h, "_code/lbd", "hap/extract/2a_hap_custom_postextract.R") %>% source
+    
+  } else file.path(h, "hap/extract/2a_hap_custom_postextract.R") %>% source
 }
 #File path where this is located in your repo.
 

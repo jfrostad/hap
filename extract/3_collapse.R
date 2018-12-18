@@ -12,7 +12,7 @@ rm(list=ls())
 # runtime configuration
 if (Sys.info()["sysname"] == "Linux") {
   j_root <- "/home/j/"
-  h_root <- file.path("/homes", Sys.info()["user"])
+  h_root <- file.path("/ihme/homes", Sys.info()["user"])
   arg <- commandArgs()[-(1:3)] # First args are for unix use only
   
   if (length(arg)==0) {
@@ -21,8 +21,9 @@ if (Sys.info()["sysname"] == "Linux") {
     #          1) #number of cores provided to multicore functions
   }
   
-  package_lib    <- sprintf('%s_code/_lib/pkg',h_root)
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
   ## Load libraries and  MBG project functions.
+  .libPaths(c( .libPaths(), package_lib))
   .libPaths(package_lib)
   
   # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)

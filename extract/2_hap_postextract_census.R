@@ -9,16 +9,19 @@ geos <- TRUE #running on geos nodes true/false
 cores <- 5
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
-#source('/homes/jfrostad/_code/lbd/housing/extract/2_hap_postextract_census.R')
+#source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract_census.R')
 
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
+h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/")
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
-folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
+folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "census") #where you want to save the big csv of all your extractions together
 
 ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-#Load packages
+#Load packages in custom library
+package_lib    <- file.path(h_root, '_code/_lib/pkg')
+.libPaths(package_lib)
 pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
 
 #timestamp
@@ -56,7 +59,7 @@ message("List IPUMS dtas")
 extractions <- list.files(folder_in, pattern="IPUMS_CENSUS", full.names=T)
 
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if(redownload==T) drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd903zfg'), overwrite=T)
+if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
 codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
@@ -100,8 +103,6 @@ ipums_merge <- function(file, geo, folder_out, noms){
     return(nid)
   }
 
-  browser()
-  
   if (!missing_gid) dt[, geospatial_id := as.character(geospatial_id)] #force geospatial IDs to character to match the sheet
   m <- try(merge(dt, geo, by.x=c("nid", "ihme_loc_id", 'geospatial_id'), by.y=c("nid", 'iso3', 'geospatial_id'), all.x=T))
 
