@@ -21,7 +21,7 @@ if (interactive) {
   run_date                 <- "2018_12_17_13_50_33"
   test                     <- 0
   holdout                  <- 0
-  indicator                <- 'cooking_clean'
+  indicator                <- 'cooking_dirty'
   indicator_group          <- 'cooking'
   
   ## make a pathaddin that gets used widely

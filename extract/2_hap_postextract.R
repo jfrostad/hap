@@ -72,10 +72,11 @@ read_add_name_col <- function(file){
 #Generate list of extraction filepaths
 extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F)
 extractions <- grep("IPUMS_CENSUS", extractions, invert=T, value = T) #IPUMS is handled separately
-extractions <- grep("234353|233917", extractions, invert=T, value=T)
+extractions <- grep("234353|233917|23219", extractions, invert=T, value=T)
 extractions <- grep("157050", extractions, invert=T, value=T)
 #234353 is a massive India dataset that slows everything down and gets us killed on the cluster. It is handled separately.
 #233917 is another IND survey that isn't quite as large but it also has to be loaded and collapsed separately.
+#23219 is the same, causing our feather reads to crash. # TODO find a way to handle separately
 
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
 if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)

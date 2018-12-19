@@ -49,6 +49,7 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
+cores <- 10
 manual_date <- "2018_10_02" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 #***********************************************************************************************************************
@@ -120,10 +121,10 @@ collapseData <- function(this.family,
   } else {
     census <- F
     # Load data
-    raw <- paste0(data.dir, ifelse(point, 'points_', 'poly_'), file_date, ".feather") %>% 
-      read_feather %>% 
-      as.data.table
-  }
+      raw <- paste0(data.dir, ifelse(point, 'points_', 'poly_'), file_date, ".feather") %>% 
+        read_feather %>% 
+        as.data.table
+  } 
   
   message("Loading data...[point=", point, "]/[census=", census, "]")
 
@@ -174,21 +175,27 @@ collapseData <- function(this.family,
   message("->Complete!")
   
   # Skip the rest of the process if no rows of data are left
-  if (nrow(dt) == 0) message('no data left to return!')
-  else return(agg.dt)
+  if (nrow(dt) == 0) { 
+    message('no data left to return!')
+    return(NULL)
+  } else return(agg.dt)
 
 }
   
 #populate vector of IPUMS filepaths
-ipums.files = list.files(census.dir, full.names = T)
+ipums.files = list.files(census.dir, pattern='*.feather', full.names = T)
 
-#Run fx for each family
+#Run fx for each point/poly
 cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
-cooking.census <- mapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+
+#Run fx for each census file
+cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
+  rbindlist
 # housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLIFY=F,
 #                   out.temp='/share/geospatial/jfrostad') %>% rbindlist
 
-#Redfine the row_id
+#Combine and redefine the row_id
+cooking <- list(cooking, cooking.census) %>% rbindlist
 cooking[, row_id := .I]
 setkey(cooking, row_id)
 
@@ -201,12 +208,17 @@ paste0(out.dir, "/", "data_", this.family, '_', today, ".feather") %>%
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
 #prep for resampling
-cooking[, cooking_fuel := N * bin_cooking_fuel_mapped]
+cooking[, cooking_clean := N * cooking_clean]
+cooking[, cooking_med := N * cooking_med]
+cooking[, cooking_dirty := N * cooking_dirty]
+
 
 #drop weird shapefiles for now
 #TODO investigate these issues
 cooking <- cooking[!(shapefile %like% "2021")] 
 cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
+cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
+cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
 
 #only work on PER for now
 #cooking <- cooking[iso3 == "PER"]
@@ -214,7 +226,7 @@ cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
 #run core resampling code
 dt <- resample_polygons(data = cooking,
                         cores = 10,
-                        indic = 'cooking_fuel',
+                        indic = c('cooking_clean', 'cooking_med', 'cooking_dirty'),
                         density = 0.001,
                         gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_gaul_codes) %>% unlist %>% unique)
                         #gaul_list = lapply(c('stage1','stage2'), get_gaul_codes) %>% unlist %>% unique)

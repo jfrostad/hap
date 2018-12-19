@@ -98,6 +98,8 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
     new.cols <- names(defs)[!(names(defs) %in% c('variable', 'value'))] #account for new var names (added stub)
 
     #remap
+    #coerce to character because sometimes NA vars = logical & this cannot merge to the codebook
+    data[, (this.var) := get(this.var) %>% as.character] 
     #TODO workaround because blank/NA vars cant get merged on to my codebook
     if (this.var %in% impute.vars) data[get(this.var) %>% is.na | get(this.var) == "", c(this.var) := 'unknown' ]
     out <- merge(data, defs, by.x=this.var, by.y='value', all.x=T) #merge onto data using original values
