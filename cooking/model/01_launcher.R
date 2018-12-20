@@ -58,7 +58,7 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa',
 #regions <- c('dia_s_america')
 
 # list indicators
-indics <- 'cooking_dirty'
+indics <- 'cooking_clean'
 
 ## Run launch scripts -------------------------------------------------------------------------
 

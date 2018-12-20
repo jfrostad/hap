@@ -18,7 +18,7 @@ if (interactive) {
   ## set arguments
   reg                      <- 'dia_s_america'
   age                      <- 0
-  run_date                 <- "2018_12_17_13_50_33"
+  run_date                 <- "2018_12_19_05_51_31"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_dirty'

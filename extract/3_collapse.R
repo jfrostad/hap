@@ -191,8 +191,14 @@ cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>
 #Run fx for each census file
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
   rbindlist
-# housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLIFY=F,
-#                   out.temp='/share/geospatial/jfrostad') %>% rbindlist
+
+#run all fx to generate intermediate input data for exploration plotting
+housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLIFY=F,
+                  out.temp='/share/geospatial/jfrostad')
+cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
+                  out.temp='/share/geospatial/jfrostad')
+housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLIFY=F,
+                  out.temp='/share/geospatial/jfrostad')
 
 #Combine and redefine the row_id
 cooking <- list(cooking, cooking.census) %>% rbindlist
@@ -241,8 +247,9 @@ setnames(dt,
          c('country', 'year'))
 
 #TODO should simplify dataset by dropping useless vars
-dt <- dt[, list(nid, country, year, latitude, longitude, survey_series, urban, cooking_fuel, N, sum_of_sample_weights,
-                cluster_id, polygon, shapefile, location_code, weight, pseudocluster)]
+# dt <- dt[, list(nid, country, year, latitude, longitude, survey_series, urban, N, sum_of_sample_weights,
+#                 cooking_clean, cooking_med, cooking_dirty,
+#                 cluster_id, polygon, shapefile, location_code, weight, pseudocluster)]
 
 #save into MDG dir
 file.path(share.model.dir, 'cooking_clean.RDS') %>% saveRDS(dt, file=.)
