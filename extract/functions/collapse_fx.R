@@ -7,7 +7,7 @@
 
 # ----Cleaning----------------------------------------------------------------------------------------------------------
 #function to do some initial cleaning and prep for the data
-initialClean <- function(input.dt, var.fam, is.point, this.out.temp=NULL) {
+initialClean <- function(input.dt, var.fam, is.point) {
   
   message("\nBegin Initial Cleaning...")
   message('->Subset to relevant variables')
@@ -44,16 +44,6 @@ initialClean <- function(input.dt, var.fam, is.point, this.out.temp=NULL) {
     dt[, hhweight := 1]
     dt[, c('shapefile', 'location_code') := NA]
     
-  }
-  
-  #output an intermediate file prior to collapse for preliminary analysis
-  if (!is.null(this.out.temp)) { 
-    message('----->Save raw data to temp folder')
-    saveRDS(dt, 
-            file=file.path(this.out.temp,
-                           var.fam,
-                           paste0('uncollapsed_',
-                                  ifelse(is.point, 'points', 'poly'), '.RDS')))
   }
   
   #define a row id for other operations and key on it

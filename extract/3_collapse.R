@@ -132,8 +132,20 @@ collapseData <- function(this.family,
   message(paste('->Processing:', this.family))
   
   #### Subset & Shape Data ####
-  dt <- initialClean(raw, var.fam=this.family, is.point=point, this.out.temp=out.temp) %>% 
-    defIndicator(., var.fam=this.family, definitions=def.file, debug=F)
+  dt <- initialClean(raw, var.fam=this.family, is.point=point)
+    
+  #output an intermediate file prior to collapse/indicator definition for preliminary analysis
+  if (!is.null(out.temp)) { 
+    message('----->Save raw data to temp folder')
+    saveRDS(dt, 
+            file=file.path(this.out.temp,
+                           var.fam,
+                           paste0('uncollapsed_',
+                                  ifelse(is.point, 'points', 'poly'), '.RDS')))
+  }  
+  
+  #define the indicators based on the intermediate variables youve extracted  
+  dt <- defIndicator(dt, var.fam=this.family, definitions=def.file, debug=F)
 
   #### Address Missingness ####
   message("\nBegin Addressing Missingness...")
@@ -197,7 +209,7 @@ housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLI
                   out.temp='/share/geospatial/jfrostad')
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
                   out.temp='/share/geospatial/jfrostad')
-housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLIFY=F,
+housing <- mapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F,
                   out.temp='/share/geospatial/jfrostad')
 
 #Combine and redefine the row_id
