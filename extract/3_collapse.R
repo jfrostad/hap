@@ -50,8 +50,8 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 cores <- 10
-manual_date <- "2018_10_02" #set this value to use a manually specified extract date
-latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
+manual_date <- "2018_12_18" #set this value to use a manually specified extract date
+latest_date <- F #set to TRUE in order to disregard manual date and automatically pull the latest value
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -105,11 +105,9 @@ collapseData <- function(this.family,
                          out.temp=NULL) {
   
   message("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
-  #if you want to output temp files, create this dir
-  if (!is.null(out.temp)) file.path(out.temp, this.family) %>% dir.create(recursive=T)
 
   #ipums files are done in parallel due to size
-  if (!missing(census.file)) {
+  if (!is.null(census.file)) {
     message("CENSUS FILE=", census.file)
     census <- T
     # Load data
@@ -135,63 +133,71 @@ collapseData <- function(this.family,
   dt <- initialClean(raw, var.fam=this.family, is.point=point)
     
   #output an intermediate file prior to collapse/indicator definition for preliminary analysis
-  if (!is.null(out.temp)) { 
+  if (!is.null(out.temp)) {
     message('----->Save raw data to temp folder')
-    saveRDS(dt, 
-            file=file.path(this.out.temp,
-                           var.fam,
-                           paste0('uncollapsed_',
-                                  ifelse(is.point, 'points', 'poly'), '.RDS')))
-  }  
+    
+    
+    out.dir <- file.path(out.temp, this.family) 
+    if (!out.dir %>% dir.exists) dir.create(out.dir, recursive=T) #create dir if missing
+    
+    #build filename and then save a feather
+    paste0(out.dir, '/uncollapsed_',
+           ifelse(census, tools::file_path_sans_ext(basename(census.file)),
+                  ifelse(point, 'points', 'poly')),
+           '.feather') %>% write_feather(dt, path=.)
+    
+    paste0("saved intermediate files to:", out.temp) %>% return #end process here if saving int files
+  } else {  
   
-  #define the indicators based on the intermediate variables youve extracted  
-  dt <- defIndicator(dt, var.fam=this.family, definitions=def.file, debug=F)
-
-  #### Address Missingness ####
-  message("\nBegin Addressing Missingness...")
+    #define the indicators based on the intermediate variables youve extracted  
+    dt <- defIndicator(dt, var.fam=this.family, definitions=def.file, debug=F)
   
-  # ID clusters with more than 20% weighted missingness
-  #TODO set this up to loop over all vars
-  missing.vars <- idMissing(dt, this.var="cooking_risk", criteria=.2, wt.var='hh_size') 
-  dt <- dt[!(cluster_id %in% missing.vars)] #remove these clusters
-
-  #Remove cluster_ids with missing hhweight or invalid 
-  #TODO confirm with Ani why zero tolerance for this? id #534 only has one missing weight
-  missing.wts <- idMissing(dt, this.var="hhweight", criteria=0, wt.var=NA)
-  dt <- dt[!(cluster_id %in% missing.wts)] #remove these clusters
-  #TODO, investigate these rows, about 25% of data & they always have missing hh_size too
-  invalid.wts <- unique(dt[hhweight==0, cluster_id]) 
-  dt <- dt[!(cluster_id %in% invalid.wts)] #remove these clusters
-  #TODO, none of these after the last filter, but there are missing hhsizes to investigate...
-  invalid.sizes <- unique(dt[hh_size<=0, cluster_id]) 
-  dt <- dt[!(cluster_id %in% invalid.sizes)] #remove these clusters
-  #ID missing hh sizes, talk to ani about crosswalk specs
-  missing.sizes <- idMissing(dt, this.var="hh_size", criteria=0, wt.var=NA)
-  dt <- dt[!(cluster_id %in% missing.sizes)] #remove these clusters
-
-  # Crosswalk missing household size data
-  #TODO discuss this part with ani after learning more, for now just remove the missing HH sizes
+    #### Address Missingness ####
+    message("\nBegin Addressing Missingness...")
+    
+    # ID clusters with more than 20% weighted missingness
+    #TODO set this up to loop over all vars
+    missing.vars <- idMissing(dt, this.var="cooking_risk", criteria=.2, wt.var='hh_size') 
+    dt <- dt[!(cluster_id %in% missing.vars)] #remove these clusters
   
-  # message("Crosswalking HH Sizes...")
-  # if (!ipums) {
-  #   ptdat <- hh_cw_reg(data = ptdat)
-  # } else {
-  #   ptdat <- assign_ipums_hh()
-  # }
-
-  #### Aggregate Data ####
-  # Aggregate indicator to cluster level
-  message("\nBegin Collapsing Variables")
-  agg.dt <- aggIndicator(dt, var.fam=this.family, is.point=point) #list of variables to aggregate
-  agg.dt[, polygon := !(point)]
-  message("->Complete!")
+    #Remove cluster_ids with missing hhweight or invalid 
+    #TODO confirm with Ani why zero tolerance for this? id #534 only has one missing weight
+    missing.wts <- idMissing(dt, this.var="hhweight", criteria=0, wt.var=NA)
+    dt <- dt[!(cluster_id %in% missing.wts)] #remove these clusters
+    #TODO, investigate these rows, about 25% of data & they always have missing hh_size too
+    invalid.wts <- unique(dt[hhweight==0, cluster_id]) 
+    dt <- dt[!(cluster_id %in% invalid.wts)] #remove these clusters
+    #TODO, none of these after the last filter, but there are missing hhsizes to investigate...
+    invalid.sizes <- unique(dt[hh_size<=0, cluster_id]) 
+    dt <- dt[!(cluster_id %in% invalid.sizes)] #remove these clusters
+    #ID missing hh sizes, talk to ani about crosswalk specs
+    missing.sizes <- idMissing(dt, this.var="hh_size", criteria=0, wt.var=NA)
+    dt <- dt[!(cluster_id %in% missing.sizes)] #remove these clusters
   
-  # Skip the rest of the process if no rows of data are left
-  if (nrow(dt) == 0) { 
-    message('no data left to return!')
-    return(NULL)
-  } else return(agg.dt)
-
+    # Crosswalk missing household size data
+    #TODO discuss this part with ani after learning more, for now just remove the missing HH sizes
+    
+    # message("Crosswalking HH Sizes...")
+    # if (!ipums) {
+    #   ptdat <- hh_cw_reg(data = ptdat)
+    # } else {
+    #   ptdat <- assign_ipums_hh()
+    # }
+  
+    #### Aggregate Data ####
+    # Aggregate indicator to cluster level
+    message("\nBegin Collapsing Variables")
+    agg.dt <- aggIndicator(dt, var.fam=this.family, is.point=point) #list of variables to aggregate
+    agg.dt[, polygon := !(point)]
+    message("->Complete!")
+    
+    # Skip the rest of the process if no rows of data are left
+    if (nrow(dt) == 0) { 
+      message('no data left to return!')
+      return(NULL)
+    } else return(agg.dt)
+    
+  }
 }
   
 #populate vector of IPUMS filepaths
@@ -205,12 +211,14 @@ cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='c
   rbindlist
 
 #run all fx to generate intermediate input data for exploration plotting
-housing <- mapply(collapseData, point=F, census=F, this.family='housing', SIMPLIFY=F,
-                  out.temp='/share/geospatial/jfrostad')
+cooking <- mcmapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, mc.cores=1,
+                    out.temp='/share/geospatial/jfrostad')
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
-                  out.temp='/share/geospatial/jfrostad')
-housing <- mapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F,
-                  out.temp='/share/geospatial/jfrostad')
+                           out.temp='/share/geospatial/jfrostad')
+housing <- mcmapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F, mc.cores=1,
+                    out.temp='/share/geospatial/jfrostad')
+housing.census <- mcmapply(collapseData, census.file=ipums.files, this.family='housing', SIMPLIFY=F, mc.cores=cores,
+                           out.temp='/share/geospatial/jfrostad')
 
 #Combine and redefine the row_id
 cooking <- list(cooking, cooking.census) %>% rbindlist
@@ -226,10 +234,8 @@ paste0(out.dir, "/", "data_", this.family, '_', today, ".feather") %>%
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
 #prep for resampling
-cooking[, cooking_clean := N * cooking_clean]
-cooking[, cooking_med := N * cooking_med]
-cooking[, cooking_dirty := N * cooking_dirty]
-
+vars <- c('cooking_clean', 'cooking_med', 'cooking_dirty')
+cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
 
 #drop weird shapefiles for now
 #TODO investigate these issues

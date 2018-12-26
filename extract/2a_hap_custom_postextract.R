@@ -75,6 +75,11 @@ poly_collapse[, year_experiment := weighted.mean(int_year, weight=hhweight, na.r
 save(poly_collapse, file=paste0(folder_out, "/poly_", today, ".Rdata"))
 
 
+#TODO look into splitting these files into smaller pieces due to running into this feather bug at high sizes:
+#https://github.com/wesm/feather/issues/232
+#currently hitting this for the poly file with some of the IND survey sincluded, a more sophisticated parallelization
+#strategy should be able to fix the issue
+
 library(feather)
 message("Point Feather")
 write_feather(pt_collapse, path=paste0(folder_out, "/points_", today, ".feather"))
