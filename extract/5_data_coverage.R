@@ -12,7 +12,7 @@ rm(list=ls())
 # runtime configuration
 if (Sys.info()["sysname"] == "Linux") {
   j_root <- "/home/j/"
-  h_root <- file.path("/homes", Sys.info()["user"])
+  h_root <- file.path("/ihme/homes", Sys.info()["user"])
   arg <- commandArgs()[-(1:3)] # First args are for unix use only
   
   if (length(arg)==0) {
@@ -21,8 +21,9 @@ if (Sys.info()["sysname"] == "Linux") {
     #          1) #number of cores provided to multicore functions
   }
   
-  package_lib    <- sprintf('%s_code/_lib/singR_pkg',h_root)
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
   ## Load libraries and  MBG project functions.
+  .libPaths(c( .libPaths(), package_lib))
   .libPaths(package_lib)
   
   # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
@@ -36,25 +37,23 @@ if (Sys.info()["sysname"] == "Linux") {
   #          1) #number of cores provided to multicore functions
 }
 
-## Set core_repo location and indicator group
-user            <- Sys.info()['user']
-core_repo       <- sprintf('%s_code/lbd/lbd_core/',h_root)
-my_repo         <- sprintf('%s_code/lbd//housing/model',h_root)
-commondir       <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', sep = '/')
-package_list    <- c(t(read.csv(paste(commondir, 'package_list.csv', sep = '/'), header = FALSE)))
-
 #load packages
-package_lib    <- sprintf('%s_code/_lib/singR_pkg',h_root)
-## Load libraries and  MBG project functions.
-.libPaths(package_lib)
 pacman::p_load(data.table, RMySQL, dplyr, feather, ggmosaic, ggplot2, ggrepel, googledrive, gridExtra, maptools, 
                questionr, parallel, 
                raster, RColorBrewer, rgdal, rgeos, scales, survival, stringr, tm, viridis, wordcloud) 
 
+## Set core_repo location and indicator group
+user            <- Sys.info()['user']
+core_repo       <- file.path(h_root, '_code/lbd/lbd_core')
+my_repo         <- file.path(h_root, '_code/lbd/hap')
+commondir       <- file.path(my_repo, 'mbg_central/share_scripts/common_inputs')
+package_list    <- file.path(commondir, 'package_list.csv') %>% fread %>% t %>% c
+
 #capture date
-today <- "2018_10_02" #date of current post-extraction
+today <- "2018_12_18" #date of current post-extraction
 
 #options
+cores <- 10
 topic <- "hap"
 this.family <- 'cooking'
 indicators <- c('cooking_fuel', 'cooking_type', 'cooking_type_chimney', 'cooking_location', 
@@ -65,7 +64,7 @@ indicators <- c('cooking_fuel', 'cooking_type', 'cooking_type_chimney', 'cooking
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #raw data
-in.dir <- file.path(j_root, 'LIMITED_USE/LU_GEOSPATIAL/collapse/hap')
+in.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 temp.dir <- file.path(j_root, 'temp/jfrostad')
 share.dir <- file.path('/share/geospatial/jfrostad')
 ###Output###
@@ -77,62 +76,66 @@ out.dir  <- file.path(j_root, 'temp/jfrostad/housing/')
 tabulateIndicators <- function(dt, indicator, byvar) {
 
   message('tabulating ', indicator)
-  
+
   out <- dt[, sum(!is.na(get(indicator))), by=byvar]
   setnames(out, 'V1', indicator)
   
   if(byvar=='') out[, merge := 1]
   
+  return(out)
+  
 }
 
 # Load custom functions
-source(paste0(my_repo, '/_lib/fx.R'))
+source(file.path(my_repo, 'cooking/model/_lib/fx.R'))
 
 #mbg function lib
 pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign', 'gbm', 'ggplot2', 'glmnet', 
               'grid', 'gridExtra', 'gtools', 'magrittr', 'pacman', 'parallel', 'plyr', 'raster', 'rgdal', 'rgeos',
               'seegMBG', 'seegSDM', 'tictoc') #will be loaded by MBG setup
-lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
+lbd.shared.function.dir <- file.path(my_repo, "mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
 mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
 #***********************************************************************************************************************
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
-drive_download(as_id('1EyShhpe-jWS7pry7S3hIT-js4ktdogsDeMTPd903zfg'), overwrite=T)
+drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
 codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
-codebook <- codebook[assigned=='qnguyen1' | assigned == 'jfrostad']
+codebook <- codebook[assigned=='qnguyen1' | assigned == 'jfrostad' | assigned == 'albrja']
 
+##make a table showing the count of each indicator by survey series##
 table <- lapply(indicators, tabulateIndicators, dt=codebook, byvar='survey_name') %>%  
   Reduce(function(...) merge(..., all = TRUE, by = "survey_name"), .)
 
+#also add a total row
 all <- lapply(indicators, tabulateIndicators, dt=codebook, byvar='') %>%  
   Reduce(function(...) merge(..., all = TRUE, by = "merge"), .)
-
 all[, merge := NULL]
 all[, survey_name := '1_Total']
 
+#merge total row with the other survey series rows and return the table
 table <- list(table, all) %>% rbindlist(use.names=T)
-
 #***********************************************************************************************************************
 
 # ---GRAPH CATEGORIES---------------------------------------------------------------------------------------------------
 dt <- paste0(in.dir, "/", "data_", this.family, '_', today, ".feather") %>% read_feather %>% as.data.table
-dt[, name := get_gaul_codes(tolower(ihme_loc_id)), by = ihme_loc_id]
+dt[, name := tolower(ihme_loc_id) %>% get_adm0_codes, by = ihme_loc_id] #add gaul codes
 
+#add on location hierarchy info
 locs <- get_location_hierarchy(41)
 dt <- merge(dt, locs[, .(ihme_loc_id, region_name, super_region_name)], by='ihme_loc_id')
 
-gaul.codes <- unique(dt$ihme_loc_id) %>% tolower %>% get_gaul_codes
-year.list <- unique(dt$int_year)
-
 ## Load GBD Estimates for this indicator which will be used in raking
-gbd <- load_gbd_data2(gbd_type     = "covariate",
+# TODO figure out why the fix_diacretics helper fx is breaking things for me when set to T,
+# with this error:  Error in chartr(replace_me, replace_with, x) : 'old' is longer than 'new' 
+# for now i have a workaround of just setting that fx to F
+gbd <- load_gbd_data(gbd_type     = "covariate",
                       gbd_name     = 'pollution_indoor_total_prev',
-                      gaul_list    = gaul.codes,
+                      gaul_list    = unique(dt$name),
                       measure_id   = 5,
-                      age_group_id = 1,
                       metric_id    = 3,
-                      year_ids     = year.list)
+                      year_ids     = unique(dt$int_year),
+                      collapse_age_sex = T)
 
 plot.dt <- merge(dt, gbd, by.x=c('name', 'int_year'), by.y=c('name', 'year'))
 plot.dt <- plot.dt[order(mean)]
@@ -141,10 +144,10 @@ plot.dt[, country := paste0(order, "-", ihme_loc_id)]
 plot.dt[, year := round_any(int_year, 5)]
 
 #categorical: set up order of severity (best to worst)
-cat.order <- c('none', 'electricity', 'gas', 'kerosene', 'biomass', 'wood', 'crop', 'coal', 'dung', 'other', 'unknown')
-plot.dt[, category := factor(cat_cooking_fuel_mapped, levels=cat.order)]
-plot.dt[, N_cat := sum(N), by=.(ihme_loc_id, year, category)]
-plot.dt[, prop := N_cat/sum(N), by=.(ihme_loc_id, year)]
+# cat.order <- c('none', 'electricity', 'gas', 'kerosene', 'biomass', 'wood', 'crop', 'coal', 'dung', 'other', 'unknown')
+# plot.dt[, category := factor(cat_cooking_fuel_mapped, levels=cat.order)]
+# plot.dt[, N_cat := sum(N), by=.(ihme_loc_id, year, category)]
+# plot.dt[, prop := N_cat/sum(N), by=.(ihme_loc_id, year)]
 
 #ord good: set up order of severity (best to worst)
 ord.good.order <- c('clean', 'medium', 'dirty')
@@ -152,13 +155,6 @@ plot.dt[, ord_good := factor(ord_good_cooking_fuel_mapped, levels=ord.good.order
 plot.dt[, N_ord_good := sum(N), by=.(ihme_loc_id, year, ord_good)]
 plot.dt[, prop_ord_good := N_ord_good/sum(N), by=.(ihme_loc_id, year)]
 
-#ord bad: set up order of severity (best to worst)
-ord.bad.order <- c('clean', 'dirty', 'filthy')
-plot.dt[ord_bad_cooking_fuel_mapped=='dirty', ord_bad_cooking_fuel_mapped := 'filthy'] #TODO move to mapping
-plot.dt[ord_bad_cooking_fuel_mapped=='medium', ord_bad_cooking_fuel_mapped := 'dirty']
-plot.dt[, ord_bad := factor(ord_bad_cooking_fuel_mapped, levels=ord.bad.order)]
-plot.dt[, N_ord_bad := sum(N), by=.(ihme_loc_id, year, ord_bad)]
-plot.dt[, prop_ord_bad := N_ord_bad/sum(N), by=.(ihme_loc_id, year)]
 
 #set up color scale
 colors <- c(plasma(9, direction=-1), "#C0C0C0", "#C0C0C0") #use gray for other and unknown
@@ -263,7 +259,7 @@ dev.off()
 var.fam <- 'cooking'
 cooking <- file.path(share.dir, var.fam) %>% 
   list.files(full.names = T, pattern='uncollapsed') %>% 
-  lapply(., function(x) as.data.table(readRDS(x))) %>% 
+  lapply(., function(x) as.data.table(read_feather(x))) %>% 
   rbindlist
 
 #merge location info
@@ -302,7 +298,7 @@ fuelVsType <- function(region) {
 }
 
 pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_type.pdf'), onefile=T, width=11, height=8)
-lapply(unique(cooking[super_region_name != 'High-income', super_region_name]), fuelVsType) 
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), fuelVsType, mc.cores=cores) 
 dev.off()
 
 ##location
@@ -331,7 +327,7 @@ fuelVsLoc <- function(region) {
 }
 
 pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_location.pdf'), onefile=T, width=11, height=8)
-lapply(unique(cooking[super_region_name != 'High-income', super_region_name]), fuelVsLoc) 
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), fuelVsLoc, mc.cores=cores) 
 dev.off()
 
 ##chimney
@@ -360,13 +356,11 @@ fuelVsChim <- function(region) {
 }
 
 pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_chimney.pdf'), onefile=T, width=11, height=8)
-lapply(unique(cooking[super_region_name != 'High-income', super_region_name]), fuelVsChim) 
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), fuelVsChim, mc.cores=cores) 
 dev.off()
-
-
 #***********************************************************************************************************************
 
-# ---GRAPH CATS (HOUSING)------------------------------------------------------------------------------------------------
+# ---GRAPH CATS (HOUSING)-----------------------------------------------------------------------------------------------
 var.fam <- 'housing'
 housing <- file.path(share.dir, var.fam) %>% 
   list.files(full.names = T, pattern='uncollapsed') %>% 

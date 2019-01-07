@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 06/12/2018
 # Purpose: Collapse data for HAP
-# source("/homes/jfrostad/_code/lbd/housing/extract/3_collapse.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/extract/3_collapse.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -51,7 +51,8 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 #options
 cores <- 10
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
-latest_date <- F #set to TRUE in order to disregard manual date and automatically pull the latest value
+latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
+save.intermediate <- F
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -119,9 +120,19 @@ collapseData <- function(this.family,
   } else {
     census <- F
     # Load data
-      raw <- paste0(data.dir, ifelse(point, 'points_', 'poly_'), file_date, ".feather") %>% 
-        read_feather %>% 
-        as.data.table
+      if(point) {
+        
+        raw <- paste0(data.dir, 'points_', file_date, ".feather") %>% 
+          read_feather %>% 
+          as.data.table
+        
+      } else {
+        
+        #note that poly file is now split into 2 files due to size limitations
+        raw <- lapply(paste0(data.dir, c('poly1', 'poly2'), '_', file_date, ".feather"), 
+                      read_feather) %>% rbindlist
+          
+      }
   } 
   
   message("Loading data...[point=", point, "]/[census=", census, "]")
@@ -211,6 +222,7 @@ cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='c
   rbindlist
 
 #run all fx to generate intermediate input data for exploration plotting
+if (save.intermediate == T) {
 cooking <- mcmapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, mc.cores=1,
                     out.temp='/share/geospatial/jfrostad')
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
@@ -219,6 +231,8 @@ housing <- mcmapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F, 
                     out.temp='/share/geospatial/jfrostad')
 housing.census <- mcmapply(collapseData, census.file=ipums.files, this.family='housing', SIMPLIFY=F, mc.cores=cores,
                            out.temp='/share/geospatial/jfrostad')
+stop()
+}
 
 #Combine and redefine the row_id
 cooking <- list(cooking, cooking.census) %>% rbindlist

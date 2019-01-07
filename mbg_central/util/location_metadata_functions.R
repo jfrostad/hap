@@ -90,7 +90,7 @@ get_ihme_lc_id <- function(iso_lookup, loc_id_hierarchy) {
 #' Note: includes a 'GAUL_CODE' column (same values as ADM_CODE) for compatibility.
 #'
 #' @return data.frame with above columns
-get_location_code_mapping <- function(shapefile_version, remove_diacritics = T) {
+get_location_code_mapping <- function(shapefile_version, remove_diacritics = F) {
     shapefile_type = detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = shapefile_version))$shpfile_type
   
     if (shapefile_type == 'gaul') {
@@ -168,24 +168,24 @@ get_location_code_mapping_GAUL <- function(remove_diacritics) {
 #' @param x String / character vector to fix
 #' @return String/character vector with replaced diacritics
 #' @examples
-#' fix_diacritics(c("Côte", "Sør-Trøndela", "Löwenbräu"))
+#' fix_diacritics(c("C??te", "S??r-Tr??ndela", "L??wenbr??u"))
 
 fix_diacritics <- function(x) {
 
   x <- iconv(x, to = "UTF-8")
 
-  replacement_chars = list('Š'='S', 'š'='s', 'Ž'='Z', 'ž'='z', 'À'='A', 'Á'='A', 'Â'='A', 'Ã'='A', 'Ä'='A', 'Å'='A', 'Æ'='A', 'Ç'='C', 'È'='E', 'É'='E',
-                           'Ê'='E', 'Ë'='E', 'Ì'='I', 'Í'='I', 'Î'='I', 'Ï'='I', 'Ñ'='N', 'Ò'='O', 'Ó'='O', 'Ô'='O', 'Õ'='O', 'Ö'='O', 'Ø'='O', 'Ù'='U',
-                           'Ú'='U', 'Û'='U', 'Ü'='U', 'Ý'='Y', 'Þ'='B', 'à'='a', 'á'='a', 'â'='a', 'ã'='a', 'ä'='a', 'å'='a', 'æ'='a', 'ç'='c',
-                           'è'='e', 'é'='e', 'ê'='e', 'ë'='e', 'ì'='i', 'í'='i', 'î'='i', 'ï'='i', 'ð'='o', 'ñ'='n', 'ò'='o', 'ó'='o', 'ô'='o', 'õ'='o',
-                           'ö'='o', 'ø'='o', 'ù'='u', 'ú'='u', 'û'='u', 'ý'='y', 'ý'='y', 'þ'='b', 'ÿ'='y')
+  replacement_chars = list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='C', '??'='E', '??'='E',
+                           '??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U',
+                           '??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c',
+                           '??'='e', '??'='e', '??'='e', '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
+                           '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y')
   
   replace_me <- paste(names(replacement_chars), collapse='')
   replace_with <- paste(replacement_chars, collapse = '')    
   
   replaced <- chartr(replace_me, replace_with, x)
   
-  replaced <- gsub('ß', 'Ss', replaced)
+  replaced <- gsub('??', 'Ss', replaced)
   
   return(replaced)
 }
