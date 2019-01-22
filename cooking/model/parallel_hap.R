@@ -808,16 +808,16 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # set specific arguments
-measure         <- 'prevalence'
+measure         <- 'total'
 jname           <- paste('agg', reg, indicator, sep = '_')
 mycores         <- 1
 proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
 
 # set up qsub
-sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
+sys.sub <- paste0('qsub -e /share/geospatial/', user,'/temp/logs -o /share/geospatial/', user, '/temp/logs ', 
                   '-pe multi_slot ', mycores, proj, 
                   '-v sing_image=default -v SET_OMP_THREADS=1 -v SET_MKL_THREADS=1 -N ', jname, ' ')
-r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
+r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
 script <- file.path(repo, indicator_group, 'modeling/aggregate_hap.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 
               use_geos_nodes, run_date, measure)

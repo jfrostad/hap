@@ -23,7 +23,7 @@ if (Sys.info()["sysname"] == "Linux") {
   
   package_lib    <- file.path(h_root, '_code/_lib/pkg')
   ## Load libraries and  MBG project functions.
-  .libPaths(c( .libPaths(), package_lib))
+  #.libPaths(c( .libPaths(), package_lib))
   .libPaths(package_lib)
   
   # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)

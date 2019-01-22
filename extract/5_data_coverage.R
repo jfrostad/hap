@@ -39,8 +39,8 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load packages
 pacman::p_load(data.table, RMySQL, dplyr, feather, ggmosaic, ggplot2, ggrepel, googledrive, gridExtra, maptools, 
-               questionr, parallel, 
-               raster, RColorBrewer, rgdal, rgeos, scales, survival, stringr, tm, viridis, wordcloud) 
+               questionr, parallel, raster, RColorBrewer, readxl, rgdal, rgeos, 
+               scales, survival, stringr, tm, viridis, wordcloud) 
 
 ## Set core_repo location and indicator group
 user            <- Sys.info()['user']
@@ -64,6 +64,8 @@ indicators <- c('cooking_fuel', 'cooking_type', 'cooking_type_chimney', 'cooking
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #raw data
+doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
+def.file <- file.path(doc.dir, 'definitions.xlsx')
 in.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 temp.dir <- file.path(j_root, 'temp/jfrostad')
 share.dir <- file.path('/share/geospatial/jfrostad')
@@ -88,6 +90,9 @@ tabulateIndicators <- function(dt, indicator, byvar) {
 
 # Load custom functions
 source(file.path(my_repo, 'cooking/model/_lib/fx.R'))
+hap.function.dir <- file.path(h_root, '_code/lbd/hap/extract/functions')
+#this pulls hap collapse helper functions
+file.path(hap.function.dir, '/collapse_fx.R') %>% source
 
 #mbg function lib
 pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign', 'gbm', 'ggplot2', 'glmnet', 
@@ -256,21 +261,44 @@ dev.off()
 
 # ---GRAPH CATS (MOSAIC)------------------------------------------------------------------------------------------------
 #compile raw data
-var.fam <- 'cooking'
-cooking <- file.path(share.dir, var.fam) %>% 
-  list.files(full.names = T, pattern='uncollapsed') %>% 
-  lapply(., function(x) as.data.table(read_feather(x))) %>% 
+compileAndDefine <- function(x, defs) {
+  
+  dt <- read_feather(x) %>% 
+    as.data.table %>% 
+    defIndicator(., var.fam='cooking', definitions=defs, debug=F, clean_up=F)
+  
+}
+
+cooking <- file.path(share.dir, 'cooking') %>% 
+  list.files(full.names = T, pattern='uncollapsed_p') %>% 
+  mclapply(., compileAndDefine, defs=def.file, mc.cores=15) %>% 
   rbindlist
+
+#cleanup
+cooking <- cooking[!is.na(cooking_fuel_mapped)] #drop if missing fuel type
+remove.vars <- names(cooking)[names(cooking) %like% "row_id|ord_|cat_"]
+cooking <- cooking[, (remove.vars) := NULL]
 
 #merge location info
 cooking <- merge(cooking, locs[, .(ihme_loc_id, region_name, super_region_name)], by='ihme_loc_id')
 
+#set up order of fuel types
 cat.order <- c('none', 'electricity', 'gas', 'kerosene', 'biomass', 'wood', 'crop', 'coal', 'dung', 'other', 'unknown')
 cooking[, cooking_fuel := factor(cooking_fuel_mapped, levels=cat.order)]
 
-#set up color scale
+#set up color scale for fuel types
 colors <- c(plasma(9, direction=-1), "#C0C0C0", "#C0C0C0") #use gray for other and unknown
 names(colors) <- cat.order
+
+#set up color scale for risk
+#TODO investigate assumptions
+cooking[cooking_risk<6, risk := 'clean']
+cooking[cooking_risk==6, risk := 'med']
+cooking[cooking_risk>6, risk := 'dirty']
+risk.order <- c('clean', 'med', 'dirty')
+cooking[, risk := factor(risk, levels=risk.order)]
+risk.colors <- plasma(3, direction=-1)
+names(risk.colors) <- risk.order
 
 #cooking_type
 pdf(file=file.path(out.dir, 'global_cooking_fuel_v_cooking_type.pdf'), onefile=T, width=11, height=8)
@@ -282,6 +310,7 @@ ggplot(data = cooking[cooking_fuel != '']) +
   theme_minimal()
 dev.off()
 
+##create plots colored by cooking fuel type
 #super regions
 fuelVsType <- function(region) {
   
@@ -357,6 +386,70 @@ fuelVsChim <- function(region) {
 
 pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_chimney.pdf'), onefile=T, width=11, height=8)
 mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), fuelVsChim, mc.cores=cores) 
+dev.off()
+
+#build a function to specify the mosaic plots
+mosaicPlot <- function(region, var1, var2, facet_var=NA, fill_var, fill_vals, wt, title) {
+  
+  plot <- ggplot(data = cooking[!is.na(risk) & super_region_name == region]) +
+    geom_mosaic(aes_string(weight = wt,
+                           x = paste0('product(', var1, ',', var2,')'), 
+                           fill=fill_var), na.rm=T) +
+    scale_fill_manual(values = fill_vals) +
+    ggtitle(paste0(title, region)) +
+    theme_minimal()
+  
+  #facet if requested
+  if (!missing(facet_var)) plot <- plot + facet_grid(.~risk)
+  
+  return(plot)
+  
+}
+
+##create plots colored by cooking risk after definition
+#super regions
+pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_type.pdf'), onefile=T, width=11, height=8)
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), mosaicPlot, 
+         var1='cooking_fuel', var2='cooking_type_mapped', fill_var='cooking_fuel', fill_vals=colors, wt='hh_size',
+         title="Cooking fuel vs cooking type: ",
+         mc.cores=cores) 
+dev.off()
+
+pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_location.pdf'), onefile=T, width=11, height=8)
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), mosaicPlot, 
+         var1='cooking_fuel', var2='cooking_location_mapped', fill_var='cooking_fuel', fill_vals=colors, wt='hh_size',
+         title="Cooking fuel vs cooking location: ",
+         mc.cores=cores) 
+dev.off()
+
+pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_chimney.pdf'), onefile=T, width=11, height=8)
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), mosaicPlot, 
+         var1='cooking_fuel', var2='cooking_type_chimney_mapped', fill_var='cooking_fuel', fill_vals=colors, wt='hh_size',
+         title="Cooking fuel vs cooking chimney: ",
+         mc.cores=cores) 
+dev.off()
+
+##create plots colored by cooking risk after definition
+#super regions
+pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_type_by_risk.pdf'), onefile=T, width=11, height=8)
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), mosaicPlot, 
+         var1='cooking_fuel', var2='risk', fill_var='risk', fill_vals=risk.colors, wt='hh_size',
+         title="Cooking fuel vs cooking type: ",
+         mc.cores=cores) 
+dev.off()
+
+pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_location_by_risk.pdf'), onefile=T, width=11, height=8)
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), mosaicPlot, 
+         var1='cooking_fuel', var2='risk', fill_var='risk', fill_vals=risk.colors, wt='hh_size',
+         title="Cooking fuel vs cooking location: ",
+         mc.cores=cores) 
+dev.off()
+
+pdf(file=file.path(out.dir, 'regional_cooking_fuel_v_cooking_chimney_by_risk.pdf'), onefile=T, width=11, height=8)
+mclapply(unique(cooking[super_region_name != 'High-income', super_region_name]), mosaicPlot, 
+         var1='cooking_fuel', var2='risk', fill_var='risk', fill_vals=risk.colors, wt='hh_size',
+         title="Cooking fuel vs cooking chimney: ",
+         mc.cores=cores) 
 dev.off()
 #***********************************************************************************************************************
 

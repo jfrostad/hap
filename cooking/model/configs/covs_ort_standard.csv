@@ -16,3 +16,8 @@ aridity,mean,TRUE,FALSE
 tcb,median,FALSE,FALSE
 worldpop,total,TRUE,FALSE
 haqi,mean,TRUE,TRUE
+ldi_pc,mean,FALSE,TRUE
+sanitation_prop,mean,FALSE,TRUE
+lstavg,median ,TRUE,FALSE
+escroplandarea,mean,TRUE,FALSE
+evi,median,TRUE,FALSE

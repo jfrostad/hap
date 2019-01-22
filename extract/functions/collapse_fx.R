@@ -57,7 +57,7 @@ initialClean <- function(input.dt, var.fam, is.point) {
 
 # ----Definitions-------------------------------------------------------------------------------------------------------
 #function to convert extracted variables based on current definitions
-defIndicator <- function(dt, var.fam, definitions, debug=F) {
+defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
   
   message("\nBegin Indicator Definition...")
   
@@ -113,16 +113,17 @@ defIndicator <- function(dt, var.fam, definitions, debug=F) {
     
     ord.vars <- names(out)[names(out) %like% 'ord_c']
     out[, cooking_risk := rowSums(.SD), .SDcols=ord.vars] #sum the indicators in order to generate aggregated risk
+    browser()
     ind.vars <- c('cooking_clean', 'cooking_med', 'cooking_dirty')
     out[!is.na(cooking_risk), (ind.vars) := 0] #initialize, then fill based on risk
     #TODO investigate assumptions
-    out[cooking_risk<6, cooking_clean := 1]
-    out[cooking_risk==6, cooking_med := 1]
-    out[cooking_risk>6, cooking_dirty := 1]
-    
+    out[cooking_risk<2, cooking_clean := 1]
+    out[cooking_risk==2, cooking_med := 1]
+    out[cooking_risk>2, cooking_dirty := 1]
+ 
     #cleanup intermediate vars
     remove.vars <- names(out)[names(out) %like% "row_id|mapped"]
-    out <- out[, (remove.vars) := NULL]
+    if(clean_up==T) out <- out[, (remove.vars) := NULL]
     
   }
   
