@@ -84,4 +84,8 @@ library(feather)
 message("Point Feather")
 write_feather(pt_collapse, path=paste0(folder_out, "/points_", today, ".feather"))
 message("Poly Feather")
-write_feather(poly_collapse, path=paste0(folder_out, "/poly_", today, ".feather"))
+n <- nrow(poly_collapse)
+poly1 <- poly_collapse[1:ceiling(n/2),]
+poly2 <- poly_collapse[(ceiling(n/2) + 1):n,]
+write_feather(poly1, path=paste0(folder_out, "/poly1_", today, ".feather"))
+write_feather(poly2, path=paste0(folder_out, "/poly2_", today, ".feather"))
