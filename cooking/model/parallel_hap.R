@@ -818,7 +818,7 @@ sys.sub <- paste0('qsub -e /share/geospatial/', user,'/temp/logs -o /share/geosp
                   '-pe multi_slot ', mycores, proj, 
                   '-v sing_image=default -v SET_OMP_THREADS=1 -v SET_MKL_THREADS=1 -N ', jname, ' ')
 r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(repo, indicator_group, 'modeling/aggregate_hap.R')
+script <- file.path(repo, indicator_group, 'model/aggregate_hap.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 
               use_geos_nodes, run_date, measure)
 
