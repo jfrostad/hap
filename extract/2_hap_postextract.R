@@ -23,7 +23,7 @@ extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
 cluster <- T #running on cluster true/false
 geos <- T #running on geos nodes true/false
-cores <- 50
+cores <- 25
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/snfs2/HOME/gmanny/backups/Documents/Repos/geospatial-data-prep/common/post_extraction_3.R')
@@ -95,7 +95,10 @@ if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8
 codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
-new.files <- codebook[assigned %in% extractor_ids, output_name] %>% unique %>% paste(., collapse="|")
+#subset the codebook to ONLY the files that our extractors have worked on
+codebook <- codebook[assigned %in% extractor_ids]
+#get the names of all the new files
+new.files <- codebook[, output_name] %>% unique %>% paste(., collapse="|")
 extractions <- grep(new.files, extractions, invert=F, value=T)
 #extractions <- grep('PER', extractions, invert=F, value=T) #only working on peru
 
@@ -128,7 +131,41 @@ rm(top)
 gc()
 
 ##Save raw data file, if desired
+#TODO need to split this file because its getting the null embedded error too
 write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feather"))
+
+#####################################################################
+######################## VERIFY EXTRACTIONS##########################
+#####################################################################
+#Double check your compiled extractions against the codebook to make sure 
+#that all variables are being extracted as expected.
+#Return CSV with errors for each NID
+
+#first return a list of all the NIDs that are present in the codebook but not in the extracted topics
+broken_extractions <- unique(codebook$nid)[!(unique(codebook$nid) %in% unique(topics$nid))]
+write.csv(broken_extractions, paste0(folder_out, "/broken_extractions.csv"), na="", row.names=F)
+
+#make a vector of the expected variables
+var.list <- c('cooking_fuel', 'cooking_location', 'cooking_type', 'cooking_type_chimney',
+              'heating_fuel', 'heating_type', 'heating_type_chimney', 'lighting_fuel', 
+              'electricity',
+              'housing_roof', 'housing_wall', 'housing_floor',
+              'housing_roof_num', 'housing_wall_num', 'housing_floor_num')
+
+#summarize the codebook and extracted topics inversely
+#for the topics, identify any columns in our list that are entirely missing
+topics.miss <- topics[, lapply(.SD, function(x) is.na(x) %>% all), .SDcols=var.list, by='nid']
+#for the codebooks, identify any columns in our list that are present
+#note that we subset by those NIDs that didnt fail to extract, because obviously those are missing
+codebook.prez <- codebook[!(nid %in% broken_extractions), lapply(.SD, function(x) !is.na(x)), .SDcols=var.list, by='nid']
+
+#bind together these two tables and then summarize using the product of each NID
+#this will have the effect of returning true for any NIDs that were present in the codebook but missing in the topics
+verification <- rbindlist(list(topics.miss,codebook.prez))[, lapply(.SD, prod, na.rm = TRUE), .SDcols=var.list, by='nid']
+verification[, failures := rowSums(.SD), .SDcols=var.list]
+#also merge on the notes column from the codebook, to help ID cases where there was missingess in the raw data
+verification <- merge(verification, codebook[, .(nid, notes)], by='nid', all.x=T)
+write.csv(verification[failures>0], paste0(folder_out, "/problem_extractions.csv"), na="", row.names=F)
 
 #####################################################################
 ######################## PULL IN GEO CODEBOOKS ######################

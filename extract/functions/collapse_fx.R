@@ -111,15 +111,34 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
   #generate final indicators based on the intermediate vars
   if (var.fam == 'cooking') {
     
+    #generate cooking risk
+    message('defining -> cooking_risk')
     ord.vars <- names(out)[names(out) %like% 'ord_c']
     out[, cooking_risk := rowSums(.SD), .SDcols=ord.vars] #sum the indicators in order to generate aggregated risk
-    browser()
     ind.vars <- c('cooking_clean', 'cooking_med', 'cooking_dirty')
     out[!is.na(cooking_risk), (ind.vars) := 0] #initialize, then fill based on risk
     #TODO investigate assumptions
     out[cooking_risk<2, cooking_clean := 1]
     out[cooking_risk==2, cooking_med := 1]
     out[cooking_risk>2, cooking_dirty := 1]
+    
+    #generate categorical cooking fuel
+    #pull the fuel types we are interested in from the definitions file
+    fuel.types <- def.dt[variable=='cooking_fuel_mapped' & !is.na(ord), value] %>% unique
+    #loop over each fuel type and generate the indicator variable
+    for (type in fuel.types) {
+      
+      varname <- paste0('cooking_fuel_', type)
+      message('defining -> ', varname)
+      out[!is.na(cooking_risk), (varname) := 0] #initialize, then fill based on cooking_fuel_mapped
+      out[cooking_fuel_mapped==type, (varname) := 1]
+      
+    }
+    
+    #generate binary cooking fuel
+    message('defining -> cooking_fuel_solid')
+    out[!is.na(cooking_fuel_mapped), cooking_fuel_solid := 1] #initialize, then fill based on cooking_fuel_mapped
+    out[cooking_fuel_mapped %in% c('none', 'electricity', 'gas', 'kerosene'), cooking_fuel_solid := 0]
  
     #cleanup intermediate vars
     remove.vars <- names(out)[names(out) %like% "row_id|mapped"]
@@ -186,10 +205,12 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   
   #set the variables to work on based on the indicator family
   if (var.fam == 'cooking') {
-    these.vars <- c('cooking_clean',
-                    'cooking_med',
-                    'cooking_dirty')
+    these.vars <- names(input.dt)[names(input.dt) %like% 'cooking']
+    #TODO should this var just be dropped by this stage?
+    these.vars <- these.vars[!(these.vars %like% 'risk')] #dont collapse the continuous risk var
   } 
+  
+  message('collapsing...', paste(these.vars, sep='/'))
   
   #point data needs to be collapsed using urbanicity
   key.cols <- c('cluster_id', 'nid', 'lat', 'long', 'survey_series', 'int_year', 'shapefile', 'location_code', 

@@ -167,8 +167,8 @@ collapseData <- function(this.family,
     message("\nBegin Addressing Missingness...")
     
     # ID clusters with more than 20% weighted missingness
-    #TODO set this up to loop over all vars
-    missing.vars <- idMissing(dt, this.var="cooking_risk", criteria=.2, wt.var='hh_size') 
+    #TODO set this up to loop over all vars -> right now just using cooking_fuel_solid as the gold standard
+    missing.vars <- idMissing(dt, this.var="cooking_fuel_solid", criteria=.2, wt.var='hh_size') 
     dt <- dt[!(cluster_id %in% missing.vars)] #remove these clusters
   
     #Remove cluster_ids with missing hhweight or invalid 
@@ -248,7 +248,9 @@ paste0(out.dir, "/", "data_", this.family, '_', today, ".feather") %>%
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
 #prep for resampling
-vars <- c('cooking_clean', 'cooking_med', 'cooking_dirty')
+vars <- names(cooking)[names(cooking) %like% 'cooking']
+#TODO should this var just be dropped by this stage?
+vars <- vars[!(vars %like% 'risk')] #dont collapse the continuous risk var
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
 
 #drop weird shapefiles for now
@@ -257,6 +259,7 @@ cooking <- cooking[!(shapefile %like% "2021")]
 cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
 cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
 cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
+cooking <-cooking[!(shapefile %like% "geo2015_2014_1")]
 
 #only work on PER for now
 #cooking <- cooking[iso3 == "PER"]
@@ -264,10 +267,9 @@ cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
 #run core resampling code
 dt <- resample_polygons(data = cooking,
                         cores = 10,
-                        indic = c('cooking_clean', 'cooking_med', 'cooking_dirty'),
+                        indic = vars,
                         density = 0.001,
-                        gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_gaul_codes) %>% unlist %>% unique)
-                        #gaul_list = lapply(c('stage1','stage2'), get_gaul_codes) %>% unlist %>% unique)
+                        gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique)
 
 #save resampled data
 paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%

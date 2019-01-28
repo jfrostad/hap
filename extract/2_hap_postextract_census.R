@@ -61,7 +61,10 @@ codebook <- gsheet2tbl('https://docs.google.com/spreadsheets/d/1Nd3m0ezwWxzi6TmE
 codebook <- as.data.table(codebook)
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
-new.files <- codebook[assigned %in% extractor_ids, output_name] %>% unique %>% paste(., collapse="|")
+#subset the codebook to ONLY the files that our extractors have worked on
+codebook <- codebook[assigned %in% extractor_ids]
+#get the names of all the new files
+new.files <- codebook[, output_name] %>% unique %>% paste(., collapse="|")
 extractions <- grep(new.files, extractions, invert=F, value=T)
 #extractions <- grep('PER', extractions, invert=F, value=T) #only working on peru
 
@@ -75,6 +78,9 @@ extractions <- grep(new.files, extractions, invert=F, value=T)
 message("Read in IPUMS Geo Codebook")
 geo <- read.csv(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks/IPUMS_CENSUS.csv"), stringsAsFactors = F, encoding="windows-1252")
 geo <- geo[, c("nid", "iso3", 'shapefile', 'location_code', 'lat', 'long', 'admin_level', 'point', 'geospatial_id', 'start_year', 'end_year')]
+
+#TODO add the same functionality in the regular post extract of saving a list of broken/problem extractions
+#needs to be setup within the loop to return this information serially
 
 #define function to merge IPUMS files with geographies
 ipums_merge <- function(file, geo, folder_out, noms){

@@ -100,10 +100,14 @@ compileAndDefine <- function(x, defs) {
   
 }
 
-cooking <- file.path(share.dir, 'cooking') %>% 
+#read in the raw data
+cooking.raw <- file.path(share.dir, 'cooking') %>% 
   list.files(full.names = T, pattern='uncollapsed_p') %>% 
   mclapply(., compileAndDefine, defs=def.file, mc.cores=15) %>% 
   rbindlist
+
+#also read in the collapsed and resampled data (modelling input)
+
 
 #calculate N
 key.cols <- c('cluster_id', 'nid', 'lat', 'long', 'survey_series', 'int_year', 'shapefile', 'location_code')
