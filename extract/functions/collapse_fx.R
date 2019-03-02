@@ -111,7 +111,7 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
   #generate final indicators based on the intermediate vars
   if (var.fam == 'cooking') {
     
-    #generate cooking risk
+    #generate ordinal cooking risk levels as a function of summed cooking risk scores
     message('defining -> cooking_risk')
     ord.vars <- names(out)[names(out) %like% 'ord_c']
     out[, cooking_risk := rowSums(.SD), .SDcols=ord.vars] #sum the indicators in order to generate aggregated risk

@@ -41,14 +41,14 @@ package_lib    <- file.path(h, '_code/_lib/pkg')
 .libPaths(package_lib)
 
 ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-
-stages <- read.csv(paste0(j, "/temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
-
 #Load packages
 pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
+
+#TODO update to a new stage csv??
+stages <- file.path(j, "/temp/gmanny/geospatial_stages_priority.csv") %>% fread
 #####################################################################
 ######################## DEFINE FUNCTIONS ###########################
 #####################################################################
@@ -69,38 +69,36 @@ read_add_name_col <- function(file){
 #####################################################################
 ######################## BIND UBCOV EXTRACTS ########################
 #####################################################################
-#Generate list of extraction filepaths
-extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F)
+#Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
+if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+codebook <- read_xlsx('hap.xlsx', sheet='codebook') %>% as.data.table
 
-##remove surveys that are too large
-extractions <- grep("IPUMS_CENSUS", extractions, invert=T, value = T) 
-#IPUMS is handled separately
+#subset codebook based on outliers, or files that are too large to handle here
+#census is handled separately
+codebook <- codebook[!(survey_name %like% 'IPUMS')]
 
-extractions <- grep("234353|233917|23219", extractions, invert=T, value=T)
 #234353 is a massive India dataset that slows everything down and gets us killed on the cluster. It is handled separately.
 #233917 is another IND survey that isn't quite as large but it also has to be loaded and collapsed separately.
 #23219 is the same, causing our feather reads to crash.
+#157050 is IND DHS, size issues
 #TODO split the extracts in order to fix the feather reading issue
+codebook <- codebook[!(nid %in% c("234353", "233917", "23219"))]
+codebook <- codebook[nid != 157050]
 
-extractions <- grep("157050", extractions, invert=T, value=T) #TODO which survey and why removed?
-
-#TODO find a way to handle separately
-
-##remove surveys with known issues
-extractions <- grep("687", extractions, invert=T, value=T)
 #angola mics based on negative comment about its quality in response to EBF paper (see dia_lri_modelers slack chat) 
+#TODO better to handle using outlier column with notes in the data vetting sheet
+codebook <- codebook[nid != 687]
 
-#Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
-codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
 #subset the codebook to ONLY the files that our extractors have worked on
 codebook <- codebook[assigned %in% extractor_ids]
 #get the names of all the new files
 new.files <- codebook[, output_name] %>% unique %>% paste(., collapse="|")
+
+#Generate list of extraction filepaths and crosscheck against the new files
+extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F)
 extractions <- grep(new.files, extractions, invert=F, value=T)
-#extractions <- grep('PER', extractions, invert=F, value=T) #only working on peru
 
 #append all ubcov extracts together
 if(cluster == TRUE) {
@@ -141,8 +139,10 @@ write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feat
 #that all variables are being extracted as expected.
 #Return CSV with errors for each NID
 
-#first return a list of all the NIDs that are present in the codebook but not in the extracted topics
-broken_extractions <- unique(codebook$nid)[!(unique(codebook$nid) %in% unique(topics$nid))]
+#also return a list of all the NIDs that are present in the codebook but not in the extracted topics
+#subset to make sure they are not stage3 or <2000
+codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, alpha.3]), nid] %>% unique
+broken_extractions <- codebook.nids[!(codebook.nids %in% unique(topics$nid))]
 write.csv(broken_extractions, paste0(folder_out, "/broken_extractions.csv"), na="", row.names=F)
 
 #make a vector of the expected variables

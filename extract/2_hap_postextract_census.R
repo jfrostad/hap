@@ -6,7 +6,7 @@ extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
 geos <- TRUE #running on geos nodes true/false
-cores <- 35
+cores <- 20
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract_census.R')

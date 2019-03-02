@@ -137,11 +137,17 @@ for(i in 1:nrow(loopvars)){
   
   message(paste(loopvars[i,2],as.character(loopvars[i,1]),loopvars[i,3]))
   
-  # get region memory
+  # get region memory/cores
   r <- as.character(loopvars[i,1])
-  if (r == 'dia_central_asia' | r == 'dia_se_asia' | r == 'dia_malay' | r == 'dia_sssa' | r == 'dia_mcaca') region_memory = 25
-  if (r == 'dia_mid_east' | r == 'dia_cssa' | r == 'dia_essa' | r == 'dia_south_asia' | r == 'dia_afr_horn' | r == 'dia_name' | r == 'dia_wssa') region_memory = 35
-  if (r == 'dia_s_america' | r == 'dia_chn_mng') region_memory = 45
+  if (r == 'dia_central_asia' | r == 'dia_se_asia' | r == 'dia_malay' | r == 'dia_sssa' | r == 'dia_mcaca') region_memory = 35
+  if (r == 'dia_mid_east' | r == 'dia_cssa' | r == 'dia_essa' | r == 'dia_south_asia' | r == 'dia_afr_horn' | r == 'dia_name' | r == 'dia_wssa') region_memory = 45
+  if (r == 'dia_s_america' | r == 'dia_chn_mng') region_memory = 55
+  region_cores <- 8
+  if(individual_countries) region_cores <- 4
+  if(r == 'dia_se_asia' | r == 'dia_central_asia' | r == 'dia_sssa' | r == 'IND') region_cores <- 6
+  if(r == 'dia_malay' | r == 'dia_name') region_cores <- 10
+  if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') region_cores <- 12
+  if(r == 'dia_s_america') region_cores <- 16
   
   # make a qsub string
   qsub <- make_qsub_share(age           = loopvars[i,2],
@@ -151,7 +157,7 @@ for(i in 1:nrow(loopvars)){
                           indic         = indicator,
                           saveimage     = TRUE,
                           memory        = region_memory,
-                          cores         = ifelse(use_geos_nodes, 10, as.numeric(slots)),
+                          cores         = ifelse(use_geos_nodes, region_cores, round(region_cores*2.5)),
                           proj          = proj_arg,
                           geo_nodes     = as.logical(use_geos_nodes),
                           corerepo      = core_repo,

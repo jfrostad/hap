@@ -255,7 +255,7 @@ cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=
 
 #drop weird shapefiles for now
 #TODO investigate these issues
-cooking <- cooking[!(shapefile %like% "2021")] 
+cooking <- cooking[!(shapefile %like% "2021")]
 cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
 cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
 cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
@@ -271,6 +271,10 @@ dt <- resample_polygons(data = cooking,
                         density = 0.001,
                         gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique)
 
+#redefine row ID after resampling
+cooking[, row_id := .I]
+setkey(cooking, row_id)
+
 #save resampled data
 paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
   write_feather(dt, path=.)
@@ -279,6 +283,10 @@ paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
 setnames(dt,
          c('iso3', 'int_year'),
          c('country', 'year'))
+
+#TODO these varnames are necessary for the ad0 aggregation code, are they necessary everywhere else?
+dt[, source := survey_series]
+dt[, point := !polygon]
 
 #TODO should simplify dataset by dropping useless vars
 # dt <- dt[, list(nid, country, year, latitude, longitude, survey_series, urban, N, sum_of_sample_weights,
@@ -291,3 +299,6 @@ file.path(share.model.dir, 'cooking_clean.csv') %>% write.csv(dt, file=., row.na
 #save both ways so that you can try modelling from either end
 file.path(share.model.dir, 'cooking_dirty.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_dirty.csv') %>% write.csv(dt, file=., row.names=F)
+#also save a solid fuel only model
+file.path(share.model.dir, 'cooking_fuel_solid.RDS') %>% saveRDS(dt, file=.)
+file.path(share.model.dir, 'cooking_fuel_solid.csv') %>% write.csv(dt, file=., row.names=F)

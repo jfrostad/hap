@@ -206,7 +206,6 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     mbg = summarize_admin(outputdir, measure, 1, admin_data, draws, raked = F, credible_interval)
     
     # reshape mbg long
-    browser()
     mbg = mbg[, c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'mean_rate', 'lower_rate', 'upper_rate', submodels), with = F]
     mbg = melt(mbg, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'lower_rate', 'upper_rate'), variable.factor = F)
     mbg[variable == 'mean_rate', variable:= 'Unraked']

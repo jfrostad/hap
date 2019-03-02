@@ -11,7 +11,7 @@
 rm(list=ls())
 
 #running interactively?
-debug <- T
+debug <- F
 debug.args <- c('simulate',
                 'command',
                 'args',
@@ -24,7 +24,7 @@ debug.args <- c('simulate',
                 'dia_sssa',
                 'proj_geo_nodes_dia',
                 TRUE,
-                '2019_01_16_14_09_00',
+                '2019_02_05_14_21_43',
                 'total')
 
 ## Set repo location, indicator group, and some arguments

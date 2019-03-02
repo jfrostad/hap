@@ -23,7 +23,7 @@ stacking_cores,5
 test,FALSE
 test_pct,5
 transform,inverse-logit
-stacked_fixed_effects,gam + gbm + enet + lasso + ridge + xgboost
+stacked_fixed_effects,gam + enet + gbm + xgboost
 other_weight,
 use_child_country_fes,FALSE
 gbm_tc,3

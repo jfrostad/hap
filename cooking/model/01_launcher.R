@@ -24,8 +24,8 @@ source(paste0(repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = repo)
 
 # set cluster arguments
-use_geos_nodes  <- TRUE
-proj_arg        <- 'proj_geo_nodes_dia'
+use_geos_nodes  <- FALSE
+proj_arg        <- ifelse(use_geos_nodes, 'proj_geos_nodes_dia', 'proj_geospatial_dia')
 proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
 
 # set covariate arguments
@@ -55,11 +55,11 @@ individual_countries <- FALSE
 regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
              'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
              'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
-regions <- c('dia_s_america', 'dia_cssa', 'dia_essa', 'dia_wssa', 'dia_sssa', 'dia_se_asia', 'dia_south_asia')
-regions <- c('dia_mcaca', 'dia_afr_horn', 'dia_cssa')
+regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa')
+#regions <- c('dia_wssa')  
   
 # list indicators
-indics <- 'cooking_clean'
+indics <- 'cooking_fuel_solid'
 
 ## Run launch scripts -------------------------------------------------------------------------
 
