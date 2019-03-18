@@ -49,7 +49,7 @@ pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign',
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-cores <- 10
+cores <- 20
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save.intermediate <- F
@@ -158,6 +158,7 @@ collapseData <- function(this.family,
            '.feather') %>% write_feather(dt, path=.)
     
     paste0("saved intermediate files to:", out.temp) %>% return #end process here if saving int files
+    
   } else {  
   
     #define the indicators based on the intermediate variables youve extracted  
@@ -165,28 +166,59 @@ collapseData <- function(this.family,
   
     #### Address Missingness ####
     message("\nBegin Addressing Missingness...")
-    
+
     # ID clusters with more than 20% weighted missingness
     #TODO set this up to loop over all vars -> right now just using cooking_fuel_solid as the gold standard
-    missing.vars <- idMissing(dt, this.var="cooking_fuel_solid", criteria=.2, wt.var='hh_size') 
-    dt <- dt[!(cluster_id %in% missing.vars)] #remove these clusters
-  
-    #Remove cluster_ids with missing hhweight or invalid 
-    #TODO confirm with Ani why zero tolerance for this? id #534 only has one missing weight
-    missing.wts <- idMissing(dt, this.var="hhweight", criteria=0, wt.var=NA)
-    dt <- dt[!(cluster_id %in% missing.wts)] #remove these clusters
-    #TODO, investigate these rows, about 25% of data & they always have missing hh_size too
-    invalid.wts <- unique(dt[hhweight==0, cluster_id]) 
-    dt <- dt[!(cluster_id %in% invalid.wts)] #remove these clusters
-    #TODO, none of these after the last filter, but there are missing hhsizes to investigate...
-    invalid.sizes <- unique(dt[hh_size<=0, cluster_id]) 
-    dt <- dt[!(cluster_id %in% invalid.sizes)] #remove these clusters
-    #ID missing hh sizes, talk to ani about crosswalk specs
-    missing.sizes <- idMissing(dt, this.var="hh_size", criteria=0, wt.var=NA)
-    dt <- dt[!(cluster_id %in% missing.sizes)] #remove these clusters
-  
-    # Crosswalk missing household size data
-    #TODO discuss this part with ani after learning more, for now just remove the missing HH sizes
+    missing.vars <- idMissing(dt, this.var="cooking_fuel_solid", criteria=.2, wt.var='hh_size')
+    
+    #ID cluster_ids with missing hhweight
+    #decided to use 10% unweighted criteria instead of 0 tolerance
+    missing.wts <- idMissing(dt, this.var="hhweight", criteria=.1, wt.var=NA)
+    
+    #ID points with hhweight|hh_size<=0 (invalid)
+    #drop clusters with more than 20% invalid, then drop invalid rows 
+    invalid.wts <- idMissing(dt, this.var="hhweight", criteria=.1, wt.var=NA, check.threshold = T, threshold=0)
+    invalid.sizes <- idMissing(dt, this.var="hh_size", criteria=.1, wt.var=NA, check.threshold = T, threshold=0)
+    
+    #ID missing hh sizes, then crosswalk values
+    missing.sizes <- idMissing(dt, this.var="hh_size", criteria=.05, wt.var=NA)
+    
+    #also print the # of hh sizes that are missing (rowwise):
+    message('There are #', nrow(dt[is.na(hh_size)]), '(',
+            round(nrow(dt[is.na(hh_size)])/nrow(dt)*100), '%) rows missing hh_size') 
+    
+    #output diagnostics regarding invalid clusters
+    #TODO move this to the idMissing function
+    remove.clusters <- c(missing.vars, 
+                         missing.wts,
+                         invalid.wts,
+                         invalid.sizes) %>% unique
+    dt.drop <- dt[cluster_id %in% remove.clusters, .(nid, ihme_loc_id, int_year, cluster_id)] %>%
+      setkey(., nid, ihme_loc_id, int_year, cluster_id) %>% 
+      unique(., by=key(.))
+    dt.drop[, missing_variables := sum(cluster_id %in% missing.vars), by=nid]
+    dt.drop[, missing_hhweights := sum(cluster_id %in% missing.wts), by=nid]
+    dt.drop[, invalid_hhweights := sum(cluster_id %in% invalid.wts), by=nid]
+    dt.drop[, invalid_hhsizes := sum(cluster_id %in% invalid.sizes), by=nid]
+    dt.drop[, missing_hhsizes := sum(cluster_id %in% missing.sizes), by=nid]
+    unique(dt.drop[, cluster_id := NULL], by='nid') %>% 
+      write.csv(., file=paste0(doc.dir, '/', this.family, '/dropped_clusters_',
+                               ifelse(census, tools::file_path_sans_ext(basename(census.file)),
+                                      ifelse(point, 'points', 'poly')), '.csv'))
+    
+    #remove these clusters and proceed
+    message('dropping ', length(remove.clusters), 
+            ' clusters based on variable missingness/invalidity above cluster-level criteria thresholds')
+    dt <- dt[!(cluster_id %in% remove.clusters)]
+    
+    #remove invalid rows that were insufficient in number to trigger criteria thresholds
+    message('dropping additional ', dt[(hhweight<=0)] %>% nrow, 
+            ' rows based on hhweight missingness/invalidity below cluster-level criteria thresholds')
+    dt <- dt[!(hhweight<=0)] #drop invalid rows as well
+    
+    # Crosswalk missing/invalid household size data
+    #TODO discuss this part with ani after learning more, for now just impute as 1
+    dt[(is.na(hh_size) | hh_size<=0), hh_size := 1]
     
     # message("Crosswalking HH Sizes...")
     # if (!ipums) {
@@ -194,13 +226,29 @@ collapseData <- function(this.family,
     # } else {
     #   ptdat <- assign_ipums_hh()
     # }
+    
+    #read in location data to use in cw
+    # locs = get_location_metadata(location_set_id = 9, gbd_round_id = 5)
+    # dt <- merge(dt, locs[, .(ihme_loc_id, region_id, super_region_id)], by='ihme_loc_id')
+    # cw(dt, this.var='cooking_fuel_solid', debug=T)
+    
+    #subset to years that are >= 2000 as we dont model before this time period
+    message('\nCreate column with median year of each cluster. Subset to >2000')
+    dt[, year_median := median(int_year, na.rm=T) %>% floor, by=cluster_id]
+    dt[, year_median := weighted.mean(year_median, w=hhweight*hh_size) %>% floor, by=cluster_id]
+    dt <- dt[year_median>=2000]
   
     #### Aggregate Data ####
     # Aggregate indicator to cluster level
     message("\nBegin Collapsing Variables")
-    agg.dt <- aggIndicator(dt, var.fam=this.family, is.point=point) #list of variables to aggregate
+    agg.dt <- aggIndicator(dt, var.fam=this.family, is.point=point, debug=F) #list of variables to aggregate
     agg.dt[, polygon := !(point)]
     message("->Complete!")
+    
+    # Standardize the year variable for each survey using the weighted mean of the NID
+    # Weight by sum of sample weights
+    message("\nStandardizing Year Variable")
+    agg.dt[, year := weighted.mean(year_median, w=sum_of_sample_weights), by=nid]
     
     # Skip the rest of the process if no rows of data are left
     if (nrow(dt) == 0) { 
@@ -215,7 +263,7 @@ collapseData <- function(this.family,
 ipums.files = list.files(census.dir, pattern='*.feather', full.names = T)
 
 #Run fx for each point/poly
-cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+cooking <- mapply(collapseData, point=F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
 
 #Run fx for each census file
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
@@ -256,24 +304,25 @@ cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=
 #drop weird shapefiles for now
 #TODO investigate these issues
 cooking <- cooking[!(shapefile %like% "2021")]
-cooking <-cooking[!(shapefile %like% "gadm_3_4_vnm_adm3")]
 cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
-cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
+#cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
 cooking <-cooking[!(shapefile %like% "geo2015_2014_1")]
+cooking <-cooking[!(shapefile %like% "#N/A")]
+
 
 #only work on PER for now
 #cooking <- cooking[iso3 == "PER"]
 
 #run core resampling code
 dt <- resample_polygons(data = cooking,
-                        cores = 10,
+                        cores = 20,
                         indic = vars,
                         density = 0.001,
                         gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique)
 
 #redefine row ID after resampling
-cooking[, row_id := .I]
-setkey(cooking, row_id)
+dt[, row_id := .I]
+setkey(dt, row_id)
 
 #save resampled data
 paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
@@ -281,8 +330,8 @@ paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
 
 #prep for MDG
 setnames(dt,
-         c('iso3', 'int_year'),
-         c('country', 'year'))
+         c('iso3'),
+         c('country'))
 
 #TODO these varnames are necessary for the ad0 aggregation code, are they necessary everywhere else?
 dt[, source := survey_series]

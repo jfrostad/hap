@@ -28,7 +28,7 @@ set obs 1
 local central_root "`j'/WORK/01_covariates/common/ubcov_central"
 // local central_root "/homes/jfrostad/_code/ubcov_central"
 local topics hap //ENTER YOUR TOPIC HERE
-local username qnguyen1
+local username jfrostad
 
 // Load functions
 cd "`central_root'"
@@ -79,7 +79,7 @@ local thisvar = "cooking_fuel_mapped"
 
      batch_extract, topics(`topics') ubcov_ids(`ubcov_ids') /// 
                  central_root(`central_root') ///
-                 cluster_project(proj_geo_nodes) ///
+                 cluster_project(proj_geospatial) ///
                  output_path("`outpath'") ///
                  store_vals_path("/share/temp/sgeoutput/`c(username)'") ///
                  logs_path("/share/temp/sgeoutput/`c(username)'") ///

@@ -50,13 +50,15 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 cores <- 10
+new.gbd.results <- F #set T if GBD results have been updated and need to redownload
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #raw data
 data.dir <- file.path('/share/geospatial/mbg/input_data/')
-raw.data.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
+raw.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch')
+geomatched.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
 census.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
@@ -264,54 +266,64 @@ locs.meta = get_location_metadata(location_set_id = 9, gbd_round_id = 5)
 locs <- get_location_hierarchy(41)
 
 #pull hap exposure from gbd2017 - command provided by kate causey
-hap.exp <- get_draws(gbd_id_type = "rei_id",
-                     gbd_id=87,
-                     source="exposure",
-                     year_id=c(2000:2017),
-                     location_id=locs[,location_id],
-                     age_group_id=2,
-                     sex_id=2,
-                     gbd_round_id=5)
-hap.exp <- hap.exp[parameter=='cat1'] #cat2 is just the inverse
+if(new.gbd.results=T){
+  hap.exp <- get_draws(gbd_id_type = "rei_id",
+                       gbd_id=87,
+                       source="exposure",
+                       year_id=c(2000:2017),
+                       location_id=locs[,location_id],
+                       age_group_id=2,
+                       sex_id=2,
+                       gbd_round_id=5)
+  hap.exp <- hap.exp[parameter=='cat1'] #cat2 is just the inverse
+  
+  #produce the mean and CI
+  draw.cols <- getLikeMe(hap.exp, 'draw')
+  hap.exp <- hap.exp[, gbd_lower := apply(.SD, 1, quantile, probs=.025), .SDcols=draw.cols]
+  hap.exp <- hap.exp[, gbd_mean := rowMeans(.SD), .SDcols=draw.cols]
+  hap.exp <- hap.exp[, gbd_upper := apply(.SD, 1, quantile, probs=.975), .SDcols=draw.cols]
+  hap.exp[, (draw.cols) := NULL] #no longer need
+  
+  #add location hierarchy to prep for merge to geospatial data
+  hap.exp <- merge(hap.exp, 
+                   locs[, .(location_id, ihme_loc_id, region_name, region_id, super_region_name)], 
+                   by='location_id')
+  hap.exp[, reg_iso3 := paste0(region_id, ': ', ihme_loc_id)]
+  
+  write.csv(., file = file.path(graph.dir, 'gbd_hap_results.csv'))
 
-#produce the mean and CI
-draw.cols <- getLikeMe(hap.exp, 'draw')
-hap.exp <- hap.exp[, gbd_lower := apply(.SD, 1, quantile, probs=.025), .SDcols=draw.cols]
-hap.exp <- hap.exp[, gbd_mean := rowMeans(.SD), .SDcols=draw.cols]
-hap.exp <- hap.exp[, gbd_upper := apply(.SD, 1, quantile, probs=.975), .SDcols=draw.cols]
-hap.exp[, (draw.cols) := NULL] #no longer need
-
-#add location hierarchy to prep for merge to geospatial data
-hap.exp <- merge(hap.exp, locs[, .(location_id, ihme_loc_id, region_name, region_id, super_region_name)], by='location_id')
-hap.exp[, reg_iso3 := paste0(region_id, ': ', ihme_loc_id)]
+} else hap.exp <- file.path(graph.dir, 'gbd_hap_results.csv') %>% fread
 
 #read in the raw data (before collapse and indicator definition)
 #compile raw data
-compileAndDefine <- function(x, defs) {
-  
-  dt <- read_feather(x) %>% 
-    as.data.table %>% 
-    defIndicator(., var.fam='cooking', definitions=defs, debug=F, clean_up=F)
-  
-}
-
-#read in the raw data
-cooking.raw <- file.path(share.dir, 'cooking') %>% 
-  list.files(full.names = T, pattern='uncollapsed_p') %>% 
-  mclapply(., compileAndDefine, defs=def.file, mc.cores=2) %>% 
-  rbindlist
-
-#cleanup
-cooking.raw <- cooking.raw[!is.na(cooking_fuel_mapped)] #drop if missing fuel type
-remove.vars <- names(cooking.raw)[names(cooking.raw) %like% "row_id|ord_|cat_"]
-cooking.raw <- cooking.raw[, (remove.vars) := NULL]
-
-#add on location hierarchy info
-cooking.raw <- merge(cooking.raw, locs[, .(ihme_loc_id, region_name, super_region_name)], by='ihme_loc_id')
-
-#set up order of fuel types
+# compileAndDefine <- function(x, defs) {
+#   
+#   message(x)
+#   
+#   dt <- fread(x) %>% 
+#     .[, row_id := .I] %>% 
+#     setkey(., row_id) #%>%
+#     #defIndicator(., var.fam='cooking', definitions=defs, debug=F, clean_up=F)
+#   
+# }
+# 
+# #read in the raw data
+# cooking.raw <- file.path(raw.dir) %>% 
+#   list.files(full.names = T, pattern='.csv') %>% 
+#   mclapply(., compileAndDefine, defs=def.file, mc.cores=10) %>% 
+#   rbindlist
+# 
+# #cleanup
+# cooking.raw <- cooking.raw[!is.na(cooking_fuel_mapped)] #drop if missing fuel type
+# remove.vars <- names(cooking.raw)[names(cooking.raw) %like% "row_id|ord_|cat_"]
+# cooking.raw <- cooking.raw[, (remove.vars) := NULL]
+# 
+# #add on location hierarchy info
+# cooking.raw <- merge(cooking.raw, locs[, .(ihme_loc_id, region_name, super_region_name)], by='ihme_loc_id')
+# 
+# #set up order of fuel types
 cat.order <- c('none', 'electricity', 'gas', 'kerosene', 'wood', 'crop', 'coal', 'dung', 'other', 'unknown')
-cooking.raw[, cooking_fuel := factor(cooking_fuel_mapped, levels=cat.order)]
+# cooking.raw[, cooking_fuel := factor(cooking_fuel_mapped, levels=cat.order)]
 
 #set up color scale for fuel types
 colors <- c(plasma(8, direction=-1), "#C0C0C0", "#C0C0C0") #use gray for other and unknown
@@ -359,7 +371,7 @@ fuel.dt[, fuel_type := factor(fuel_type, levels=cat.order)]
 
 ##SOLID FUEL COMPARISONS#
 #subset to just solid fuel
-nonsolid.vars <- names(cooking)[names(cooking) %like% 'cooking'][-14]
+nonsolid.vars <- names(cooking)[names(cooking) %like% 'cooking'][-13]
 solid.dt <- cooking[, -c(nonsolid.vars), with=F]
 
 #merge on the gbd values for comparison

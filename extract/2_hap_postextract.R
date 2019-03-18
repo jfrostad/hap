@@ -22,11 +22,8 @@ topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
 cluster <- T #running on cluster true/false
-geos <- T #running on geos nodes true/false
-cores <- 25
-#FOR THE CLUSTER:
-#qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
-#source('/snfs2/HOME/gmanny/backups/Documents/Repos/geospatial-data-prep/common/post_extraction_3.R')
+geos <- F #running on geos nodes true/false
+cores <- 15
 
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")

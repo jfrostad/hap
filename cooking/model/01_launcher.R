@@ -24,12 +24,12 @@ source(paste0(repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = repo)
 
 # set cluster arguments
-use_geos_nodes  <- FALSE
+use_geos_nodes  <- F
 proj_arg        <- ifelse(use_geos_nodes, 'proj_geos_nodes_dia', 'proj_geospatial_dia')
 proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
 
 # set covariate arguments
-plot_covariates <- FALSE
+plot_covariates <- TRUE
 covariate_plotting_only <- FALSE
 
 # indicate whether to use old run date
@@ -46,7 +46,7 @@ if (use_old_run_date == FALSE) {
 # set config and covariate files
 config_par   <- 'ort_best'
 covar_par      <- 'region_specific'
-covar_par      <- 'ort_standard'
+#covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
 # set whether running for individual countries
 individual_countries <- FALSE
@@ -55,7 +55,7 @@ individual_countries <- FALSE
 regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
              'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
              'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
-regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa')
+#regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa')
 #regions <- c('dia_wssa')  
   
 # list indicators
@@ -80,7 +80,7 @@ for (i in indics) {
     mycores         <- 1
     
     # set region specific covariates, if desired
-    if (covar_par == 'region_specific') cov_par <- paste0('hap_', Regions)
+    if (covar_par == 'region_specific') cov_par <- paste0('cooking_', Regions)
     else cov_par <- covar_par
     
     # some quick checks for the arguments

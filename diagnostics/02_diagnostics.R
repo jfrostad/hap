@@ -2,6 +2,7 @@
 ## MBG diagnostics functions and plots for ORT
 ## Written by Kirsten Wiens
 ## Created 2018/09/17
+#source("/homes/jfrostad/_code/lbd/hap/diagnostics/02_diagnostics.R", echo=T)
 ##############################################################################
 
 
@@ -23,7 +24,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_ort_standard',
                 'cooking/model/configs/',
-                '2019_02_05_14_21_43',
+                '2019_03_04_15_42_42',
                 FALSE,
                 FALSE,
                 FALSE,

@@ -58,7 +58,7 @@ temp_strat,prop
 skip.stacking,0
 skip.inla,0
 fit_with_tmb,FALSE
-gbd_fixed_effects_age,"c(2,3,4,5)"
+gbd_fixed_effects_age,
 summstats,"c('mean','cirange')"
 z_list,0
 zcol,z_column_default_blank
@@ -66,7 +66,7 @@ scale_gaussian_variance_N,TRUE
 xg_model_tune,FALSE
 modeling_shapefile_version,2018_12_04
 raking_shapefile_version,2018_12_04
-subnational_raking,
+subnational_raking,TRUE
 gam_knots,6
 ctry_re_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
 nugget_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
