@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 06/12/2018
 # Purpose: Collapse data for HAP
-# source("/homes/jfrostad/_code/lbd/hap/extract/3_collapse.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/extract/6_data_vetting.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -266,7 +266,7 @@ locs.meta = get_location_metadata(location_set_id = 9, gbd_round_id = 5)
 locs <- get_location_hierarchy(41)
 
 #pull hap exposure from gbd2017 - command provided by kate causey
-if(new.gbd.results=T){
+if(new.gbd.results==T){
   hap.exp <- get_draws(gbd_id_type = "rei_id",
                        gbd_id=87,
                        source="exposure",
@@ -290,7 +290,7 @@ if(new.gbd.results=T){
                    by='location_id')
   hap.exp[, reg_iso3 := paste0(region_id, ': ', ihme_loc_id)]
   
-  write.csv(., file = file.path(graph.dir, 'gbd_hap_results.csv'))
+  write.csv(hap.exp, file = file.path(graph.dir, 'gbd_hap_results.csv'))
 
 } else hap.exp <- file.path(graph.dir, 'gbd_hap_results.csv') %>% fread
 

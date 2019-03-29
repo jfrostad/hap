@@ -3,7 +3,7 @@
 ######                Scott Swartz | 8/29/2017                    ######
 ########################################################################
 
-#source("/homes/jfrostad/_code/lbd/housing/extract/4_plot_coverage.R", echo=T)
+#source("/homes/jfrostad/_code/lbd/hap/extract/4_plot_coverage.R", echo=T)
 
 # ---CONFIG----------------------------------------------------------------------------------------------------------------------
 # clear memory
@@ -38,12 +38,12 @@ setwd(repo)
 #source('mbg_central/shapefile_functions.R')
 
 indicator <- 'hap' #water or sani
-var <- 'bin_cooking_fuel_mapped' #imp, unimp, surface, od, piped
+var <- 'cooking_fuel_solid' #imp, unimp, surface, od, piped
 
 title <- "Cooking Fuel"
 
-date <- "2018_09_17"
-data.dir  <- file.path(j_root,'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
+date <- "2019_03_26"
+data.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 coverage_data <-  paste0(data.dir, "data_cooking_", date, ".feather") %>% read_feather %>% as.data.table
 
 #import dataset (written during collapse code)
@@ -56,7 +56,7 @@ setnames(coverage_data,
          c('country', 'latitude', 'longitude', 'year', 'source'))
 
 #create indicator
-coverage_data[, cooking_fuel := N * bin_cooking_fuel_mapped]
+coverage_data[, cooking_fuel := N * get(var)]
 
 
 #run loop
@@ -70,10 +70,12 @@ coverage_data <- coverage_data[shapefile == "lg_g2015_2007_1", shapefile := "lf_
 #drop weird shapefiles for now
 #TODO investigate these issues
 coverage_data <- coverage_data[!(shapefile %like% "2021")] 
-coverage_data <-coverage_data[!(shapefile %like% "gadm_3_4_vnm_adm3")]
+#coverage_data <-coverage_data[!(shapefile %like% "gadm_3_4_vnm_adm3")]
+coverage_data <-coverage_data[!(shapefile %like% "Chapineiro_COL_CS")]
+coverage_data <-coverage_data[!(shapefile %like% "PRY_central_wo_asuncion")]
 coverage_data <- coverage_data[!(country %like% "MDV")] 
 
-for (reg in regions){
+for (reg in regions[-1]){
   coverage_maps <- graph_data_coverage_values(df = coverage_data,
                                               var = var,
                                               title = title,

@@ -52,7 +52,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 cores <- 20
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
-save.intermediate <- F
+save.intermediate <- T
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -67,6 +67,7 @@ def.file <- file.path(doc.dir, 'definitions.xlsx')
 out.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
 share.model.dir  <- file.path('/share/geospatial/mbg/input_data/')
+temp.dir <- file.path('/share/geospatial/jfrostad')
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -88,12 +89,30 @@ file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
   mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
+  
+#TODO move to misc fx
+#find values %like% helper
+getLikeMe <- function(obj, val, invert=F) {
+  
+  message('finding values that ', ifelse(invert, 'are NOT', 'are') ,' like: ', val, '\n|', 
+          '\no~~> from: ', deparse(match.call()$obj))
+  
+  #add option to invert
+  if (invert) { 
+    
+    out <- names(obj)[!(names(obj) %like% val)]
+    
+  } else out <- names(obj)[names(obj) %like% val]
+  
+  return(out)
+  
+}
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
 #automatically pull latest date if manual date not provided
 # get input version from most recently modified data file
-if (latest_date==T) { 
+if (latest_date) { 
   file_date <- gsub('.feather|points_|poly_', 
                     '', 
                     sort(list.files(data.dir, pattern = '*points'), decreasing=T)[1]) #pull latest poitns filename
@@ -189,23 +208,12 @@ collapseData <- function(this.family,
     
     #output diagnostics regarding invalid clusters
     #TODO move this to the idMissing function
+    #TODO fix this for IPUMS, file is outputting incorectly
     remove.clusters <- c(missing.vars, 
                          missing.wts,
                          invalid.wts,
                          invalid.sizes) %>% unique
-    dt.drop <- dt[cluster_id %in% remove.clusters, .(nid, ihme_loc_id, int_year, cluster_id)] %>%
-      setkey(., nid, ihme_loc_id, int_year, cluster_id) %>% 
-      unique(., by=key(.))
-    dt.drop[, missing_variables := sum(cluster_id %in% missing.vars), by=nid]
-    dt.drop[, missing_hhweights := sum(cluster_id %in% missing.wts), by=nid]
-    dt.drop[, invalid_hhweights := sum(cluster_id %in% invalid.wts), by=nid]
-    dt.drop[, invalid_hhsizes := sum(cluster_id %in% invalid.sizes), by=nid]
-    dt.drop[, missing_hhsizes := sum(cluster_id %in% missing.sizes), by=nid]
-    unique(dt.drop[, cluster_id := NULL], by='nid') %>% 
-      write.csv(., file=paste0(doc.dir, '/', this.family, '/dropped_clusters_',
-                               ifelse(census, tools::file_path_sans_ext(basename(census.file)),
-                                      ifelse(point, 'points', 'poly')), '.csv'))
-    
+
     #remove these clusters and proceed
     message('dropping ', length(remove.clusters), 
             ' clusters based on variable missingness/invalidity above cluster-level criteria thresholds')
@@ -262,25 +270,25 @@ collapseData <- function(this.family,
 #populate vector of IPUMS filepaths
 ipums.files = list.files(census.dir, pattern='*.feather', full.names = T)
 
+#run all fx to generate intermediate input data for exploration plotting
+if (save.intermediate == T) {
+  cooking <- mcmapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, mc.cores=1,
+                      out.temp='/share/geospatial/jfrostad')
+  cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
+                             out.temp='/share/geospatial/jfrostad')
+  housing <- mcmapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F, mc.cores=1,
+                      out.temp='/share/geospatial/jfrostad')
+  housing.census <- mcmapply(collapseData, census.file=ipums.files, this.family='housing', SIMPLIFY=F, mc.cores=cores,
+                             out.temp='/share/geospatial/jfrostad')
+  stop()
+}
+
 #Run fx for each point/poly
-cooking <- mapply(collapseData, point=F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
 
 #Run fx for each census file
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
   rbindlist
-
-#run all fx to generate intermediate input data for exploration plotting
-if (save.intermediate == T) {
-cooking <- mcmapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, mc.cores=1,
-                    out.temp='/share/geospatial/jfrostad')
-cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
-                           out.temp='/share/geospatial/jfrostad')
-housing <- mcmapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F, mc.cores=1,
-                    out.temp='/share/geospatial/jfrostad')
-housing.census <- mcmapply(collapseData, census.file=ipums.files, this.family='housing', SIMPLIFY=F, mc.cores=cores,
-                           out.temp='/share/geospatial/jfrostad')
-stop()
-}
 
 #Combine and redefine the row_id
 cooking <- list(cooking, cooking.census) %>% rbindlist
@@ -292,6 +300,9 @@ setkey(cooking, row_id)
 this.family='cooking'
 paste0(out.dir, "/", "data_", this.family, '_', today, ".feather") %>%
   write_feather(cooking, path=.)
+
+#combine diagnostics and cleanup intermediate files
+collapseCleanup(this.family)
 #***********************************************************************************************************************
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
@@ -308,6 +319,7 @@ cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
 #cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
 cooking <-cooking[!(shapefile %like% "geo2015_2014_1")]
 cooking <-cooking[!(shapefile %like% "#N/A")]
+cooking <-cooking[!(shapefile=='stats_mng_adm3_mics_2013')]
 
 
 #only work on PER for now

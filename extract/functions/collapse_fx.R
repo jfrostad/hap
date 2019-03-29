@@ -199,10 +199,29 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, check.threshol
           "% of rows \n based on criteria of >", criteria*100, "% ",
           ifelse(!check.threshold, 'missingness', 'invalidity'),
           " of ", this.var)
-
-  dt[pct_miss>criteria, cluster_id] %>% 
-    unique %>% 
-    return
+  
+  clusters <- dt[pct_miss>criteria, cluster_id] %>% 
+    unique
+  
+  if (length(clusters>1)) {  
+    #save a diagnostic file with the clusters and the type of missingness
+    dt <- dt[cluster_id %in% clusters, .(nid, ihme_loc_id, int_year, cluster_id)] %>%
+      setkey(., nid, ihme_loc_id, int_year, cluster_id) %>% 
+      unique(., by=key(.))
+  
+    dt[, count := sum(cluster_id %in% clusters), by=nid]
+    dt[, var := this.var]
+    dt[, type := ifelse(!check.threshold, 'missingness', 'invalidity')]
+  
+    #save using NID/vartype to uniquely ID the file, we will give a meaningful name to the combined diagnostic later
+    unique(dt[, cluster_id := NULL], by='nid') %>% 
+      write.csv(., file=paste0(doc.dir, '/temp/dropped_clusters_', 
+                               dt[, nid] %>% unique %>% sample(1), #only need 1 nid
+                               '_', this.var, '_', 
+                               ifelse(!check.threshold, 'missingness', 'invalidity'), '.csv'))
+    return(clusters)
+  
+  } else return(NULL)
   
 }
 
@@ -296,7 +315,31 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
     return
 
 }
+#***********************************************************************************************************************
 
+# ----Cleanup-----------------------------------------------------------------------------------------------------------
+collapseCleanup <- function(var.fam) {
+  
+  message('creating final diagnostics and cleaning up temp files for\n', var.fam)
+  
+  #combine the output diagnostics
+  dt <- file.path(doc.dir, 'temp') %>% 
+    list.files(., pattern='dropped_clusters', full.names = T) %>%
+    lapply(., fread) %>% 
+    rbindlist %>% setkey(., nid, ihme_loc_id, int_year)
+  
+  #generate total missingness diagnostic
+  dt[, total := sum(count), by=key(dt)]
+
+  #output file (sort by max total)
+  write.csv(dt[order(-total)], file=paste0(doc.dir, '/', var.fam, '/dropped_clusters.csv'), row.names = F)
+  
+  #cleanup
+  file.path(doc.dir, 'temp') %>% 
+    list.files(., pattern='dropped_clusters', full.names = T) %>%
+    unlink
+  
+}
 #***********************************************************************************************************************
 
 # ----SCRAP-------------------------------------------------------------------------------------------------------------
