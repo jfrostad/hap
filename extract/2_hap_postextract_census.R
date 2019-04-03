@@ -143,5 +143,29 @@ ipums_merge <- function(file, geo, folder_out, noms){
 message("starting mclapply")
 bad_nids <- mclapply(extractions, ipums_merge, geo=geo, folder_out=folder_out, noms=noms, mc.cores=cores) %>% unlist
 write.csv(bad_nids, paste0(folder_out, "/fix_these_nids.csv"), row.names = F, na='')
-  #write.csv(to_do, to_do_outpath, row.names=F)
+#write.csv(to_do, to_do_outpath, row.names=F)
 
+
+#####################################################################
+#######Find broken extractions###################
+#####################################################################
+
+files <- list.files('L:/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch', pattern = 'IPUMS_CENSUS')
+files <- substr(files, 1, nchar(files)-4)
+files <- strsplit(files,'_')
+files[6]
+for(f in 1:length(files)){
+  temp <- unlist(files[f])
+  temp <- temp[6]
+  files[f] <- temp
+}
+files <- unlist(files)
+#find nids in codebook not in this list ^
+codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, alpha.3]), nid] %>% unique
+bad_ipums <- codebook.nids[!(codebook.nids %in% files)]
+
+#check against bad nids csv
+broekn_ipums <- bad_nids[!(bad_nids %in% bad_ipums)]
+
+##Ipums failed extractions
+write.csv(broken_ipums, paste0(folder_out, '/failed_extractions_ipums.csv'))
