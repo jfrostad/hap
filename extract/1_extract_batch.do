@@ -67,7 +67,7 @@ init, topics(`topics')
 */
 //Enter path where you'd like your extracts saved below between the quotes
 //DO NOT EXTRACT DATA FROM LIMITED USE TO THE J DRIVE. YOU CAN GET IN BIG TROUBLE. If you need to extract from LIMITED_USE contact IT and your PO to organize a workaround. 
-local outpath = "`L'/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch"
+local outpath = "`L'/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/"
 local thisvar = "cooking_fuel_mapped"
 
    get, vars

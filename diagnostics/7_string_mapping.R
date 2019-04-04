@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 09/11/2018 (never forget)
 # Purpose: Exploring data coverage across indicators for hap
-# source("/homes/jfrostad/_code/lbd/hap/extract/5_data_coverage.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/diagnostics/7_string_mapping.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -39,7 +39,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load packages
 pacman::p_load(data.table, RMySQL, dplyr, feather, ggmosaic, ggplot2, ggrepel, googledrive, gridExtra, maptools, 
-               questionr, parallel, raster, RColorBrewer, readxl, rgdal, rgeos, 
+               questionr, parallel, raster, RColorBrewer, readr, readxl, rgdal, rgeos, 
                scales, survival, stringr, tm, viridis, ggwordcloud) 
 
 ## Set core_repo location and indicator group
@@ -55,7 +55,7 @@ today <- "2019_03_26" #date of current post-extraction
 #options
 cores <- 10
 new.gbd.results <- F #set T if GBD results have been updated and need to redownload
-new.extracts <- F
+new.extracts <- T
 topic <- "hap"
 this.family <- 'cooking'
 indicators <- c('cooking_fuel', 'cooking_type', 'cooking_type_chimney', 'cooking_location', 
@@ -138,7 +138,7 @@ file.path(gbd.shared.function.dir, 'get_outputs.R') %>% source
 readCollapseStrings <- function(file, varlist) {
   
   message(file)
-  raw <- fread(file)
+  raw <- fread(file, encoding = 'UTF-8')
   
   #helper fx to loop over varlist
   varLoop <- function(var, input.dt) {
@@ -146,6 +146,8 @@ readCollapseStrings <- function(file, varlist) {
     dt <- copy(input.dt)
     
     var.mapped <- paste0(var, '_mapped')
+    
+    browser()
     
     if (any(names(dt)==var.mapped)) { #make sure that var exists in raw data first
       
@@ -187,8 +189,8 @@ if (new.extracts==T) {
     mclapply(., readCollapseStrings, varlist=cooking.vars,
              mc.cores=10) %>% 
     rbindlist
-  
-  write.csv(strings, file=file.path(doc.dir, 'cooking_string_match_tabulations.csv'), row.names = F)
+
+  write_excel_csv(strings, path=file.path(doc.dir, 'cooking_string_match_tabulations.csv'))
   
 } else strings <- file.path(doc.dir, 'cooking_string_match_tabulations.csv') %>% fread
 
@@ -199,7 +201,7 @@ strings[var=='cooking_fuel' & var_mapped == '', var_mapped := 'missing'] #TODO f
 #examine these tabulations to see if any strings are unmapped
 strings[var=='cooking_fuel' & var_mapped=='missing', table(var_og)]
 strings[var=='cooking_fuel' & var_mapped=='missing', ][order(-count)] %>% 
-  write.csv(., file=file.path(doc.dir, 'cooking_fuel_missing_strings.csv'))
+  write_excel_csv(., path=file.path(doc.dir, 'cooking_fuel_missing_strings.csv'))
 #***********************************************************************************************************************
 
 # ---WORD CLOUDS FUELTYPE-----------------------------------------------------------------------------------------------

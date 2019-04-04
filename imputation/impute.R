@@ -85,7 +85,7 @@ file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 
 lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
-mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
+#mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
 
 #TODO move to misc fx
 #find values %like% helper
@@ -144,13 +144,13 @@ if (new.extract) {
   #cleanup
   list(pt, raw) %>% rm
   
+  #examine missingness
+  gg_miss_fct(x = raw, fct = survey_series) + labs(title = "NA by Variable | Survey Series") +
+    theme(axis.text.x = element_text(angle = 15))
+  
+  ggsave(filename=file.path(graphs.dir, 'hap_missingness_by_survey.png'), width=12, height=8, units='in')
+  
 } else raw <- file.path('/share/geospatial/jfrostad/hap_data_raw.fst') %>% read.fst(path=., as.data.table=T)
-
-#examine missingness
-gg_miss_fct(x = raw, fct = survey_series) + labs(title = "NA by Variable | Survey Series") +
-  theme(axis.text.x = element_text(angle = 15))
-
-ggsave(filename=file.path(graphs.dir, 'hap_missingness_by_survey.png'), width=12, height=8, units='in')
 
 #add on location info
 #read in the GBD estimates/location info
@@ -302,8 +302,8 @@ ggplot(raw[hh_size>15 & hh_size<105 & !is.na(fuel_factor)], aes(as.factor(hh_siz
 #***********************************************************************************************************************
 
 # ---MODEL--------------------------------------------------------------------------------------------------------------
+##RIDGE##
 #first try a ridge regression on hh_size
-
 #setup response/predictor matrix
 predictors <- pt[, -c('hh_size', 'admin_1', 'geospatial_id'), with=F] %>% sparse.model.matrix(~., .)
 lambda.vals <- 10^seq(3,-3,length=100)
@@ -331,9 +331,12 @@ pt[, ridge_pred := preds]
 summary(pt[, ridge_pred-hh_size])
 hist(pt[, ridge_pred-hh_size])
 
+##GAM##
 #try gam
-gam.mod <- bam(hh_size ~ s(int_year, by=reg, bs='cr', k=5) + s(lat, long, by=ihme_loc_id, bs='cr', k=5) + electricity + urb, 
+gam.mod <- bam(hh_size ~ s(int_year, by=reg, bs='tp', k=5) + s(lat, long, by=ihme_loc_id, bs='tp', k=5) + electricity + urb, 
                data = pt, family=poisson(), discrete=TRUE, nthreads=20)
+
+gam.mod2 <- 
 
 #generate predictions
 preds <- predict(gam.mod2, newdata=pt, type='response')
@@ -421,13 +424,11 @@ print(plot(m, allTerms = T), pages = 1)
 qq(m, rep = 20, showReps = T, CI = "none", a.qqpoi = list("shape" = 19), a.replin = list("alpha" = 0.2))
 
 #2d residual plot of lat long
-ck1 <- check2D(mod, x1 = "lat", x2 = "long")
-ck1 + l_gridCheck2D(gridFun = mean) + scale_fill_brewer(type='dvg')
+ck1 <- check2D(m, x1 = "lat", x2 = "long")
+ck1 + l_gridCheck2D(gridFun = mean) #+ scale_fill_brewer(type='div')
 
 #plot first smooth with rug
-o <- plot( sm(m, 1) )
+o <- plot( sm(m, 2) )
 o + l_fitLine(colour = "red") + l_rug(mapping = aes(x=x, y=y), alpha = 0.8) +
   l_ciLine(mul = 5, colour = "blue", linetype = 2) + 
   l_points(shape = 19, size = 1, alpha = 0.1) + theme_classic()
-
-
