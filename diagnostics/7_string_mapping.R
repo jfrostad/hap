@@ -68,7 +68,7 @@ indicators <- c('cooking_fuel', 'cooking_type', 'cooking_type_chimney', 'cooking
 #raw data
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation/str_review')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
-raw.dir <- file.path("/ihme/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch")
+raw.dir <- file.path("/ihme/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/")
 in.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 temp.dir <- file.path(j_root, 'temp/jfrostad')
 share.dir <- file.path('/share/geospatial/jfrostad')
@@ -146,9 +146,7 @@ readCollapseStrings <- function(file, varlist) {
     dt <- copy(input.dt)
     
     var.mapped <- paste0(var, '_mapped')
-    
-    browser()
-    
+
     if (any(names(dt)==var.mapped)) { #make sure that var exists in raw data first
       
       setnames(dt, c(var, var.mapped), c('var_og', 'var_mapped'))

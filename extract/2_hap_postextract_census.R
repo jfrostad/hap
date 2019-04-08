@@ -15,11 +15,11 @@ cores <- 20
 h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/")
-folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
+folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic) #where your extractions are stored
 folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
 
 # ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-stages <- read.csv(paste0(j, "/temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
+stages <- file.path(j, "/temp/gmanny/geospatial_stages_priority.csv") %>% fread
 if (geos){
   package_lib <- '/temp/geospatial/geos_packages'
   .libPaths(package_lib)
@@ -165,7 +165,7 @@ codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, 
 bad_ipums <- codebook.nids[!(codebook.nids %in% files)]
 
 #check against bad nids csv
-broekn_ipums <- bad_nids[!(bad_nids %in% bad_ipums)]
+broken_ipums <- bad_nids[!(bad_nids %in% bad_ipums)]
 
 ##Ipums failed extractions
 write.csv(broken_ipums, paste0(folder_out, '/failed_extractions_ipums.csv'))
