@@ -127,12 +127,12 @@ mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functio
 #gbd#
 gbd.shared.function.archive <- file.path(j_root,  "temp/central_comp/libraries/2017_archive/r")
 gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r")
-file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
-file.path(gbd.shared.function.archive, 'get_draws.R') %>% source
-file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
-file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
-file.path(gbd.shared.function.dir, 'get_population.R') %>% source
-file.path(gbd.shared.function.dir, 'get_outputs.R') %>% source
+# file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
+# file.path(gbd.shared.function.archive, 'get_draws.R') %>% source
+# file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
+# file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
+# file.path(gbd.shared.function.dir, 'get_population.R') %>% source
+# file.path(gbd.shared.function.dir, 'get_outputs.R') %>% source
 
 #create function to read in raw data and collapse the number of unique str match combos
 readCollapseStrings <- function(file, varlist) {
