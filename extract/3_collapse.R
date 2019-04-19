@@ -38,7 +38,7 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, readxl) 
+pacman::p_load(data.table, dplyr, feather, fst, readxl) 
 #TODO verify which of these are actually necessary, took from a random image in Ani's wash dir
 #/share/geospatial/mbg/wash/s_imp/model_image_history
 pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign', 'gbm', 'ggplot2', 'glmnet', 
@@ -52,7 +52,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 cores <- 20
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
-save.intermediate <- T
+save.intermediate <- F
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -81,7 +81,7 @@ hap.function.dir <- file.path(h_root, '_code/lbd/hap/extract/functions')
 #this pulls hap collapse helper functions
 file.path(hap.function.dir, '/collapse_fx.R') %>% source
 #shared functions#
-gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r")
+gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/v69/r")
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
 file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
@@ -113,7 +113,7 @@ getLikeMe <- function(obj, val, invert=F) {
 #automatically pull latest date if manual date not provided
 # get input version from most recently modified data file
 if (latest_date) { 
-  file_date <- gsub('.feather|points_|poly_', 
+  file_date <- gsub('.fst|points_|poly_', 
                     '', 
                     sort(list.files(data.dir, pattern = '*points'), decreasing=T)[1]) #pull latest poitns filename
 } else file_date <- manual_date
@@ -141,15 +141,15 @@ collapseData <- function(this.family,
     # Load data
       if(point) {
         
-        raw <- paste0(data.dir, 'points_', file_date, ".feather") %>% 
-          read_feather %>% 
-          as.data.table
+        raw <- paste0(data.dir, 'points_', file_date, ".fst") %>% 
+          read.fst(., as.data.table=T)
+          
         
       } else {
         
         #note that poly file is now split into 2 files due to size limitations
-        raw <- lapply(paste0(data.dir, c('poly1', 'poly2'), '_', file_date, ".feather"), 
-                      read_feather) %>% rbindlist
+        raw <- paste0(data.dir, 'poly_', file_date, ".fst") %>% 
+          read.fst(., as.data.table=T)
           
       }
   } 
@@ -298,8 +298,8 @@ setkey(cooking, row_id)
 #save poly and point collapses
 #TODO loop over all fams in fx
 this.family='cooking'
-paste0(out.dir, "/", "data_", this.family, '_', today, ".feather") %>%
-  write_feather(cooking, path=.)
+paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>%
+  write.fst(cooking, path=.)
 
 #combine diagnostics and cleanup intermediate files
 collapseCleanup(this.family)

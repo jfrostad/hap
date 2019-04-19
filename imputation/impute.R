@@ -78,7 +78,7 @@ hap.function.dir <- file.path(h_root, '_code/lbd/hap/extract/functions')
 #this pulls hap collapse helper functions
 file.path(hap.function.dir, '/collapse_fx.R') %>% source
 #shared functions#
-gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r")
+gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/v69/r")
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
 file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source

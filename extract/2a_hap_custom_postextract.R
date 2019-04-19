@@ -81,11 +81,14 @@ save(poly_collapse, file=paste0(folder_out, "/poly_", today, ".Rdata"))
 #strategy should be able to fix the issue
 
 library(feather)
+library(fst)
 message("Point Feather")
 write_feather(pt_collapse, path=paste0(folder_out, "/points_", today, ".feather"))
+write.fst(pt_collapse, path=paste0(folder_out, "/points_", today, ".fst"))
 message("Poly Feather")
 n <- nrow(poly_collapse)
 poly1 <- poly_collapse[1:ceiling(n/2),]
 poly2 <- poly_collapse[(ceiling(n/2) + 1):n,]
 write_feather(poly1, path=paste0(folder_out, "/poly1_", today, ".feather"))
 write_feather(poly2, path=paste0(folder_out, "/poly2_", today, ".feather"))
+write.fst(poly_collapse, path=paste0(folder_out, "/poly_", today, ".fst"))

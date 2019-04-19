@@ -29,7 +29,7 @@ cores <- 15
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
 h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/") 
-folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic, 'batch') #where your extractions are stored
+folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic) #where your extractions are stored
 folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
 setwd(folder_in)
 
@@ -39,7 +39,7 @@ package_lib    <- file.path(h, '_code/_lib/pkg')
 
 ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
 #Load packages
-pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, parallel, doParallel, googledrive, readxl)
+pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, fst, parallel, doParallel, googledrive, readxl)
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -138,13 +138,14 @@ write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feat
 
 #also return a list of all the NIDs that are present in the codebook but not in the extracted topics
 #subset to make sure they are not stage3 or <2000
+message('writing csv of broken extractions')
 codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, alpha.3]), nid] %>% unique
 broken_extractions <- codebook.nids[!(codebook.nids %in% unique(topics$nid))]
 write.csv(broken_extractions, paste0(folder_out, "/broken_extractions.csv"), na="", row.names=F)
 
 #make a vector of the expected variables
 var.list <- c('cooking_fuel', 'cooking_location', 'cooking_type', 'cooking_type_chimney',
-              'heating_fuel', 'heating_type', 'heating_type_chimney', 'lighting_fuel', 
+              'heating_fuel', 'heating_type', 'lighting_fuel', 
               'electricity',
               'housing_roof', 'housing_wall', 'housing_floor',
               'housing_roof_num', 'housing_wall_num', 'housing_floor_num')
@@ -290,8 +291,8 @@ if (topic == "hap"){
 #all[!is.na(longitude) & is.na(long), long := longitude]
 
 #Save
-message("Saving as .Rdata")
-save(all, file=paste0(folder_out, "/", today, ".Rdata"))
+# message("Saving as .Rdata")
+# save(all, file=paste0(folder_out, "/", today, ".Rdata"))
 #message("Saving as .csv")
 #write.csv(all, file=paste0(folder_out, "/", today, ".csv"))
 

@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 06/12/2018
 # Purpose: Collapse data for HAP
-# source("/homes/jfrostad/_code/lbd/hap/extract/6_data_vetting.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/diagnostics/6_data_vetting.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -83,10 +83,8 @@ file.path(hap.function.dir, '/collapse_fx.R') %>% source
 
 ##shared functions##
 #gbd#
-gbd.shared.function.archive <- file.path(j_root,  "temp/central_comp/libraries/2017_archive/r")
-gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/current/r")
+gbd.shared.function.dir <- file.path(j_root,  "temp/central_comp/libraries/v69/r")
 file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
-file.path(gbd.shared.function.archive, 'get_draws.R') %>% source
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
 file.path(gbd.shared.function.dir, 'get_population.R') %>% source
@@ -267,6 +265,8 @@ locs <- get_location_hierarchy(41)
 
 #pull hap exposure from gbd2017 - command provided by kate causey
 if(new.gbd.results==T){
+  gbd.shared.function.archive <- file.path(j_root,  "temp/central_comp/libraries/2017_archive/r")
+  file.path(gbd.shared.function.archive, 'get_draws.R') %>% source
   hap.exp <- get_draws(gbd_id_type = "rei_id",
                        gbd_id=87,
                        source="exposure",

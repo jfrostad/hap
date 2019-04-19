@@ -31,6 +31,7 @@ if (geos){
 #Load packages
 packages <- c('haven', 'stringr', 'data.table', 'dplyr', 'magrittr', 'parallel', 'doParallel')
 packages <- lapply(packages, library, character.only=T)
+library(fst, lib.loc = file.path(h, '_code/_lib/pkg'))
 library(gsheet, lib.loc = file.path(h, '_code/_lib/pkg'))
 
 #timestamp
@@ -133,6 +134,7 @@ ipums_merge <- function(file, geo, folder_out, noms){
 
     out <- paste0(folder_out, "/", outname, ".feather")
     write_feather(m, out)
+    write.fst(m, out)
     return(NULL)
   }
 }
@@ -150,7 +152,7 @@ write.csv(bad_nids, paste0(folder_out, "/fix_these_nids.csv"), row.names = F, na
 #######Find broken extractions###################
 #####################################################################
 
-files <- list.files('L:/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/batch', pattern = 'IPUMS_CENSUS')
+files <- list.files('L:/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap', pattern = 'IPUMS_CENSUS')
 files <- substr(files, 1, nchar(files)-4)
 files <- strsplit(files,'_')
 files[6]
