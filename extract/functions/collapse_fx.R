@@ -318,7 +318,7 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
 #***********************************************************************************************************************
 
 # ----Cleanup-----------------------------------------------------------------------------------------------------------
-collapseCleanup <- function(var.fam) {
+collapseCleanup <- function(var.fam, codebook, test.vars, cleanup=F) {
   
   message('creating final diagnostics and cleaning up temp files for\n', var.fam)
   
@@ -326,18 +326,37 @@ collapseCleanup <- function(var.fam) {
   dt <- file.path(doc.dir, 'temp') %>% 
     list.files(., pattern='dropped_clusters', full.names = T) %>%
     lapply(., fread) %>% 
-    rbindlist %>% setkey(., nid, ihme_loc_id, int_year)
+    rbindlist
+  
+  #remove rows that are not codebooked for the test.vars using helper function
+  codebook <- codebook[nid %in% unique(dt$nid)] #subset codebook to relevant rows we have collapsed
+  checkCodebook <- function(this.var, full.dt, codebook) {
+    
+    dt <- copy(full.dt[var==this.var]) #subset to comparison var
+    
+    #must account for differences in var specification in final model dt
+    if (this.var=='cooking_fuel_solid') {
+      cb.var <- 'cooking_fuel' #TODO janky..
+    } else cb.var <- this.var
+    
+    #extract blank nids (NIDs in which the var has never been codebooked)
+    blank.nids <- codebook[is.na(get(cb.var)), unique(nid)] 
+    dt[!(nid %in% blank.nids)] %>% return
+    
+  } 
+  
+  dt <- lapply(test.vars, checkCodebook, full.dt=dt, codebook=codebook) %>% 
+    rbindlist %>% 
+    setkey(., nid, ihme_loc_id, int_year)
   
   #generate total missingness diagnostic
   dt[, total := sum(count), by=key(dt)]
-
+  
   #output file (sort by max total)
   write.csv(dt[order(-total)], file=paste0(doc.dir, '/', var.fam, '/dropped_clusters.csv'), row.names = F)
   
   #cleanup
-  file.path(doc.dir, 'temp') %>% 
-    list.files(., pattern='dropped_clusters', full.names = T) %>%
-    unlink
+  if (cleanup) file.path(doc.dir, 'temp') %>% list.files(., pattern='dropped_clusters', full.names = T) %>% unlink
   
 }
 #***********************************************************************************************************************

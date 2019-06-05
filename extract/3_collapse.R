@@ -62,6 +62,7 @@ data.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/
 census.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
+raw.dir <- file.path("/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap") #where your extractions are stored
 
 ###Output###
 out.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
@@ -110,6 +111,9 @@ getLikeMe <- function(obj, val, invert=F) {
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
+#read in codebook
+codebook <- file.path(raw.dir, 'hap.xlsx') %>% read_xlsx(., sheet='codebook') %>% as.data.table
+
 #automatically pull latest date if manual date not provided
 # get input version from most recently modified data file
 if (latest_date) { 
@@ -158,6 +162,8 @@ collapseData <- function(this.family,
 
   #loop over various families of indicators
   message(paste('->Processing:', this.family))
+  
+  
   
   #### Subset & Shape Data ####
   dt <- initialClean(raw, var.fam=this.family, is.point=point)
@@ -284,7 +290,10 @@ if (save.intermediate == T) {
 }
 
 #Run fx for each point/poly
-cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% 
+  rbindlist
+
+stop()
 
 #Run fx for each census file
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
@@ -302,7 +311,7 @@ paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>%
   write.fst(cooking, path=.)
 
 #combine diagnostics and cleanup intermediate files
-collapseCleanup(this.family)
+collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel', 'hh_size'))
 #***********************************************************************************************************************
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
@@ -314,12 +323,12 @@ cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=
 
 #drop weird shapefiles for now
 #TODO investigate these issues
-cooking <- cooking[!(shapefile %like% "2021")]
+#cooking <- cooking[!(shapefile %like% "2021")]
 cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
 #cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
-cooking <-cooking[!(shapefile %like% "geo2015_2014_1")]
-cooking <-cooking[!(shapefile %like% "#N/A")]
-cooking <-cooking[!(shapefile=='stats_mng_adm3_mics_2013')]
+#cooking <-cooking[!(shapefile %like% "geo2015_2014_1")]
+#cooking <-cooking[!(shapefile %like% "#N/A")]
+#cooking <-cooking[!(shapefile=='stats_mng_adm3_mics_2013')] #TODO double check this one w brandon
 
 
 #only work on PER for now
