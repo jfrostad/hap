@@ -60,7 +60,7 @@ setwd(paste0(root,'WORK/01_covariates/02_inputs/education/update_2017/data/geosp
 admin2.sp <- readOGR(dsn=target_country,layer=paste0(target_country,"_adm2"))
 # admin2.sp <- admin2.sp[admin2.sp@data$country_id!="YEM",]
 # admin2.sp <- admin2.sp[admin2.sp@data$country_id!="CPV",]
-admin2 <- rasterize(admin2.sp, template, "gaul_code")
+admin2 <- rasterize_check_coverage(admin2.sp, template, "gaul_code")
 
 # get samples of national, population-weighted mortality rates in each fraction.
 # admin codes, matched up with names

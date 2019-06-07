@@ -489,11 +489,14 @@ load_gbd_covariates = function(covs, measures, year_ids, age_ids,
   }
 
   world_shape <- crop(world_shape, template)
-  afras <- rasterize(world_shape, template, 'GAUL_CODE', fun = 'last')
-
+  # we must skip using the link_table as it is not relevant to this shapefile
+  afras <- rasterize_check_coverage(world_shape, template, 'GAUL_CODE', fun = 'last', link_table = NULL)
+  afras <- crop_set_mask(afras, template)
+  
   # Check to make sure all of the relevant gauls are in the file
   if (!all(world_shape$GAUL_CODE %in% unique(afras))) {
-    afras <- raster::rasterize(world_shape[!world_shape$GAUL_CODE %in% unique(afras),], afras, 'GAUL_CODE', fun = 'first', update = T)
+    afras <- rasterize_check_coverage(world_shape[!world_shape$GAUL_CODE %in% unique(afras),], afras, 'GAUL_CODE', fun = 'first', update = T)
+    afras <- crop_set_mask(afras, template)
   }
 
 
@@ -877,6 +880,7 @@ check_for_cov_issues   <- function(cc                      = cs_covs,
   
   # make a few useful objects to track names and dropped covs
   covs <- as.character(cc$cs_df$name)
+  covs <- covs[!grepl('gaul_code', covs)]
   dropcovs <- c()
   
   # run through extracted data and find any non-varying covariates

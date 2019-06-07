@@ -72,13 +72,13 @@
 #'   for LBD is currently 1998.
 #' @param year_max The latest year of data to include in plots. The standard
 #'   for LBD is currently 2017.
-#' @param region Name of region that has been specified in ref_reg_list in 
-#'   prep_functions. Region must be associated with "standard" (non-custom) 
+#' @param region Name of region that has been specified in ref_reg_list in
+#'   prep_functions. Region must be associated with "standard" (non-custom)
 #'   modeling regions that can be directly interpreted by get_adm0_codes().
 #'   Dictates which area of the world will be shown on the plots.
-#' @param region_title Custom region title that will be used to title plots and 
-#'   create file names for saving. Defaults to NULL which uses the name of the 
-#'   specified custom region.    
+#' @param region_title Custom region title that will be used to title plots and
+#'   create file names for saving. Defaults to NULL which uses the name of the
+#'   specified custom region.
 #'
 #' ** Arguments controlling code execution and saving **
 #' @param cores The number of CPUs available to the function. On prod nodes,
@@ -210,7 +210,7 @@ graph_data_coverage_values <- function(df,
                                        base_font_size = 18,
                                        map_point_size = 0.8,
                                        poly_line_width = 0.2,
-                                       
+
                                        remove_rank = TRUE
                                        ) {
 
@@ -410,28 +410,26 @@ graph_data_coverage_values <- function(df,
                  "message Nat Henry or Michael Collison.")
           )
 
-  # 2. Load master shapefile -------------------------------------------------
+  # 2. Load master and disputed shapefiles ------------------------------------>
 
   # This takes a while, so let's do it once only
   if (!("master_shape_all" %in% ls())) {
-
-    if (fast_shapefiles == T) {
-      message("\nFast-loading master shapefile... ")
-      assign("master_shape_all",
-             readRDS('/share/geospatial/rds_shapefiles/gdcv_custom/master_shape_all.rds'),
-             envir = globalenv())
-    } else {
-    message("\nOpening master shapefile... (good time to go make a cup of coffee)")
-    assign("master_shape_all",
-            readOGR(dsn = paste0(j_root,"WORK/11_geospatial/10_mbg/data_coverage_plots/template_shp"),
-                    layer = "data_coverage_gaul_template"),
-            envir = globalenv())
-    }
+    message("\nFast-loading master shapefile... ")
+    assign(
+      "master_shape_all",
+      readRDS('/share/geospatial/rds_shapefiles/gdcv_background_shp.rds'),
+      envir = globalenv()
+    )
   } else {
     message("'master_shape_all' is already in the environment.")
   }
-  # Rename ADM0_CODE field in master shapefile
-  names(master_shape_all)[names(master_shape_all) == "ADM0_CODE"] <- "GAUL_CODE"
+  # Load the disputed shapefile
+  disputed_shp <- readRDS('/share/geospatial/rds_shapefiles/gdcv_disputed_shp.rds')
+  # Rename ADM0_CODE fields to GAUL_CODE
+  # (Note: These are really GADM codes, and the names should be changed in the
+  #   future)
+  setnames(master_shape_all@data, 'ADM0_CODE', 'GAUL_CODE')
+  setnames(disputed_shp@data, 'ADM0_CODE', 'GAUL_CODE')
 
 
   # IV. Make scatters and plots ##############################################
@@ -484,11 +482,14 @@ graph_data_coverage_values <- function(df,
   message("Constructing background map...")
   background_map_list <- make_background_map(region, endemic_gauls, simplify_polys,
                                              tolerance, fast_shapefiles,
-                                             master_shape_all, stage3, stage_3_gray)
+                                             master_shape_all, disputed_shp, 
+                                             stage3, stage_3_gray)
   background_outline <- background_map_list[[1]]
   background_map <- background_map_list[[2]]
   background_map_not_endemic <- background_map_list[[3]]
   background_extent <- background_map_list[[4]]
+  disputed_map <- background_map_list[[5]]
+  disputed_bg <- background_map_list[[6]]
   rm(background_map_list)
   message("  Finished constructing background map.")
 
@@ -509,13 +510,13 @@ graph_data_coverage_values <- function(df,
 
   for(period in map_these_periods) {
     message(paste0("Making period map for ",period,"..."))
-    g_map <- make_a_period_map(period, df, region, poly_shapes_all,
-                               background_map, background_outline,
-                               background_map_not_endemic, background_extent,
-                               df_graph_poly, df_graph_point, not_real_shapefiles,
-                               color_list, legend_title, log_dir, base_font_size,
-                               map_point_size, cap, cap_type, legend_min, legend_max,
-                               poly_line_width, annual_period_maps)
+    g_map <- make_a_period_map(
+      period, df, region, poly_shapes_all, background_map, background_outline, 
+      background_map_not_endemic, background_extent, disputed_map, disputed_bg, 
+      df_graph_poly, df_graph_point, not_real_shapefiles, color_list, 
+      legend_title, log_dir, base_font_size, map_point_size, cap, cap_type, 
+      legend_min, legend_max, poly_line_width, annual_period_maps
+    )
     period_map_storage[[as.character(period)]] <- g_map
   }
 
@@ -715,18 +716,18 @@ dcp_validate_input_args <- function(input_list){
   if (year_min > year_max){
     stop("Check that year_min is less than or equal to year_max.")
   }
-  
-  
+
+
   # # Check that the region is valid
   # # This check must be kept up to date with the get_country_list() function!
-  
-  #checks the input region against the reference list to see if valid 
+
+  #checks the input region against the reference list to see if valid
   #outputs WARNING with undefined region and ERROR directing to ref list
     if (length(get_gaul_codes(input_list[["region"]])) == 0) {
-    stop(paste0("The mapping region must be defined in the 
+    stop(paste0("The mapping region must be defined in the
                 get_admin0_code() reference list."))
     }
-  
+
   # Check that the color scheme names are valid
   valid_color_schemes <- c('classic','darker_middle','red_blue','carto_red_blue',
                            rownames(brewer.pal.info[brewer.pal.info$category == "seq",])
@@ -1078,7 +1079,7 @@ dcp_find_new_data <- function(df_summary, indicator, since_date) {
 #'
 #' @param df The dataframe output by the dcp_merge_with_gbd_locations() function
 #' @param region Name of the region to be modeled
-#' @param region_title Title used for plots: default is region to be modeled 
+#' @param region_title Title used for plots: default is region to be modeled
 #'
 #' @return returns a list with the following 3 objects -
 #'  * 'reg_title': A character string of the region
@@ -1114,7 +1115,7 @@ get_country_list <- function(df, region, region_title) {
                      "Southern Sub-Saharan Africa")
     country_list <- unique(df[region_name %in% region_list]$country)
     # This is tough because of NAME including middle east - need to manually remove and add some
-    remove_countries <- c("AFG","ARE","IRN","IRQ","JOR","OMN","PSE","SAU", 
+    remove_countries <- c("AFG","ARE","IRN","IRQ","JOR","OMN","PSE","SAU",
                           "SYR","TUR","KWT","LBN","QAT","BHR","CPV","YEM")
     country_list <- country_list[!(country_list %in% remove_countries)]
   }
@@ -1129,7 +1130,7 @@ get_country_list <- function(df, region, region_title) {
   }
 
   else if (region == 'se_asia') {
-    reg_title <- "Southeast Asia"
+    reg_title <- "East and Southeast Asia"
     region_list <- c("East Asia",
                      "Southeast Asia")
     country_list <- unique(df[region_name %in% region_list]$country)
@@ -1228,7 +1229,7 @@ get_country_list <- function(df, region, region_title) {
     region_list <- unique(stage2[,reg_name])
     country_list <- toupper( unique(stage2[,iso3]) )
   }
-  
+
   else if (region == 'stage3'){
     reg_title <- 'High-Income Countries'
     # Load stage metadata and subset to stage 3
@@ -1238,37 +1239,37 @@ get_country_list <- function(df, region, region_title) {
     region_list <- unique(stage3[,reg_name])
     country_list <- toupper( unique(stage3[,iso3]) )
   }
-  
+
   #statement to deal with custom cases
   else {
-    #can manually specify region title for plot 
+    #can manually specify region title for plot
     if (is.null(region_title)){
       reg_title <- toupper(region)
     } else {
-      reg_title <- region_title 
+      reg_title <- region_title
     }
-    
+
     gaul_list <- get_gaul_codes(region)
-    
+
     #create dictionary
     stage_master_list <- read.csv('/snfs1/WORK/11_geospatial/10_mbg/stage_master_list.csv')
-   
-    #create gaul to iso3 name dictionary 
+
+    #create gaul to iso3 name dictionary
     iso3_names <- as.list(stage_master_list$iso3)
     iso3_names <- lapply(iso3_names, as.character)
     names(iso3_names) <- lapply(stage_master_list$GAUL_CODE, as.character)
     iso3_dict <- list2env(iso3_names, hash = TRUE)
-    
+
     country_list = c()
-    #add to country list 
+    #add to country list
     for (gc in gaul_list){
       iso3_nm <- get(as.character(gc), envir=iso3_dict)
       country_list = unique(c(country_list,iso3_nm))
-    }#looks up country name in dictionary 
-    
+    }#looks up country name in dictionary
+
     region_list <- unique(df[country %in% country_list]$region_name)
     region_list <- sort(region_list)
-    
+
   }
 
   return(list("reg_title" = reg_title,
@@ -1594,6 +1595,56 @@ dcp_check_for_missing_shapefiles <- function(df_graph_poly, fast_shapefiles) {
 }
 
 
+## dcp_refresh_background_shps ------------------------------------------------>
+#' 
+#' @title Data Coverage Plots: refresh the DCP background and disputed shapefile
+#' 
+#' @description Load the newest version of the background shapefile (called
+#'   "master_shape_all" in the code) and the disputed borders shapefile to a 
+#'   central directory, "/share/geospatial/rds_shapefiles/gdcv_custom/"
+#' 
+#' @param core_repo LBD core path, used to load MBG functions and libraries
+#' 
+#' @return NULL
+#' 
+dcp_refresh_background_shps <- function(
+    core_repo = '/share/code/geospatial/lbd_core/'
+  ){
+  # Requires sourcing 'mbg_central/setup.R' from LBD core
+  source(paste0(core_repo,'/mbg_central/setup.R'))
+  load_R_packages(package_list=c('sf','sp','data.table','dplyr'))
+  # Define output folder
+  save_dir <- "/share/geospatial/rds_shapefiles/"
+
+  # Load most recent shapefiles
+  ad0_shp <- sf::read_sf(
+    get_admin_shapefile(admin_level=0, type='admin', version='current')
+  ) %>% as(., 'Spatial')
+  ad0_shp@data <- as.data.table(ad0_shp@data)  
+  disp_shp <- sf::read_sf(
+    get_admin_shapefile(type='disputed_mask', version='current')
+  ) %>% as(., 'Spatial')
+  disp_shp@data <- as.data.table(disp_shp@data)
+  disp_shp@data[, row_id := .I ]
+
+  # Load metadata for the disputed mask and merge onto the dataset
+  # NOTE: In the future, this is something that could be added directly to the
+  #  disputed shapefile in J:/WORK/11_geospatial
+  disp_meta <- fread(paste0(save_dir,'disputed_meta.csv'))
+  disp_meta_merged <- merge(
+    x = disp_shp@data,
+    y = disp_meta,
+    by = 'ADM0_NAME',
+    all.x = TRUE
+  )
+  disp_meta_merged <- disp_meta_merged[order(row_id)]
+  disp_shp@data$claimants <- disp_meta_merged$claimants
+
+  # Save both shapefiles to the 'quick shapefile' directory
+  saveRDS(ad0_shp, file=paste0(save_dir,'gdcv_background_shp.rds'))
+  saveRDS(disp_shp, file=paste0(save_dir,'gdcv_disputed_shp.rds'))
+  message("New background and disputed shapefiles saved successfully.")
+}
 
 
 ## ###########################################################################
@@ -2030,6 +2081,8 @@ make_data_scatterplots <- function(df_graph,
 #' @param tolerance numeric value that influences the degree of simplification of polygons
 #'   (see Douglas-Peuker algorithm)
 #' @param master_shape_all a combined SPDF with all polygons necessary to make maps
+#' @param disputed_shp an SPDF of all polygons in disputed regions, which will
+#'   be plotted separately
 #' @param stage3 data.table of stage 3 countries to be removed
 #' @param stage_3_gray boolean. If true, removes stage 3 countries from scatterplot
 #'
@@ -2046,86 +2099,64 @@ make_background_map <- function(region,
                                 tolerance,
                                 fast_shapefiles,
                                 master_shape_all,
+                                disputed_shp,
                                 stage3,
                                 stage_3_gray) {
+  # Define a list of data coverage plot regions and their corresponding regions
+  #  in the `get_adm0_codes()` function
+  dcp_region_list = list(
+    'africa' = 'africa_dcp',
+    'africa_no_yem' = 'africa_dcp-yem',
+    'south_asia' = 'south_asia+LKA+MDV',
+    'south_asia_ind_collaborators' = 'south_asia+LKA+MDV+PAK',
+    'se_asia' = 'se_asia_dcp-LKA-MDV+PNG+TWN',
+    'latin_america' = 'latin_america_dcp+GUF+CUB',
+    'central_america_no_mex' = 'central_america-MEX',
+    'south_america' = 'south_america+GUF',
+    'south_america_mex' = 'south_america+GUF+MEX',
+    'middle_east' = 'middle_east_dcp',
+    'stage1' = 'all',
+    'stage2' = 'all',
+    'stage3' = 'all'
+  )
+  # Load the adm0 lookup table to use throughout this function (to avoid having
+  #  to read the same table repeatedly)
+  lookup_table <- load_adm0_lookup_table()
+  # Get the region that will be used for the background map
+  if(region %in% names(dcp_region_list)){
+    gaul_list <- suppressMessages(get_adm0_codes(
+      dcp_region_list[[region]],
+      lookup_table = lookup_table
+    ))
+  } else {
+    gaul_list <- suppressMessages(get_adm0_codes(
+      region,
+      lookup_table = lookup_table
+    ))
+  }
+  # Subset the background map to just these admin0 codes
+  background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
 
-  # Create a background map for the plot (just the country polygons)
-  if (region == "africa") {
-    gaul_list <- get_gaul_codes('africa_dcp')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == "africa_no_yem") {
-    gaul_list <- get_gaul_codes('africa_dcp-yem')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'south_asia') {
-    gaul_list <- get_gaul_codes('south_asia_dcp+LKA+MDV')# add Sri Lanka & Maldives
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'south_asia_ind_collaborators') {
-    gaul_list <- get_gaul_codes('south_asia+LKA+MDV+PAK')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  if (region == 'south_asia_ind_collaborators') {
     message("  This region requires some extra shapefile processing...")
-    background_map[background_map@data$STATUS == "Sovereignty unsettled",
-                   "GAUL_CODE"] <- 115
-    # Keep the GAUL_CODEs for later
-    bg_map_gaul_order <- as.data.frame(unique(background_map@data$GAUL_CODE))
-    names(bg_map_gaul_order) <- 'GAUL_CODE'
-    # Dissolve
-    background_map <- gUnaryUnion(background_map, id = background_map@data$GAUL_CODE)
-    # Merge the GAUL_CODEs back on and convert to spatial polygons data frame
-    row.names(background_map) <- as.character(1:length(background_map))
-    background_map <- SpatialPolygonsDataFrame(background_map, bg_map_gaul_order)
-  }
-  else if (region == 'se_asia') {
-    gaul_list <- get_gaul_codes('se_asia_dcp-LKA-MDV+PNG+TWN')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'latin_america') {
-    gaul_list <- get_gaul_codes('latin_america_dcp+GUF+CUB')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'central_america') {
-     gaul_list <- get_gaul_codes('central_america')
-     background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'central_america_no_mex') {
-     gaul_list <- get_gaul_codes('central_america-MEX')
-     background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'south_america') {
-    gaul_list <- get_gaul_codes('south_america+GUF')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'south_america_mex') {
-    gaul_list <- get_gaul_codes('south_america+GUF+MEX')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'middle_east') {
-    gaul_list <- get_gaul_codes('middle_east_dcp+UZB+TKM+TJK+KGZ+TUR+ISR')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == 'eastern_europe') {
-    gaul_list <- get_gaul_codes('eastern_europe')
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-  }
-  else if (region == "stage1") {
-    background_map <- copy(master_shape_all)
-  }
-  else if (region == "stage2") {
-    background_map <- copy(master_shape_all)
-  }
-  else if (region == "stage3") {
-    background_map <- copy(master_shape_all)
-  }
-  else {
-    gaul_list <- get_gaul_codes(region)
-    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+    disputed_shp <- disputed_shp[FALSE,]
   }
 
+  # Subset the disputed shapefile to keep only countries within the DCP region
+  check_in_gaul_list <- function(this_reg){
+    this_reg_gauls <- suppressMessages(get_adm0_codes(
+      this_reg, lookup_table=lookup_table
+    ))
+    overlapping_gauls <- intersect(this_reg_gauls,gaul_list)
+    return( (length(overlapping_gauls) > 0) )
+  }
+  disputed_shp_sub <- disputed_shp[ 
+    sapply(disputed_shp$claimants, FUN=check_in_gaul_list),
+  ]
+
+  ## Simplify, if specified, and then convert background SHP to a ggplot object
   if(simplify_polys == T) background_map <- simplify_spdf(background_map, tol = tolerance)
-
-  background_map@data$id <- rownames(background_map@data)
+  background_map@data$id <- 1:dim(background_map@data)[1]
   background_map_df <- suppressMessages(fortify(background_map))
   background_map_df <- merge(background_map_df, background_map@data[, c("id", "GAUL_CODE")], by = "id")
   background_map_df <- as.data.table(background_map_df)
@@ -2143,6 +2174,26 @@ make_background_map <- function(region,
                                         group = group),
                                     fill = "white"))
 
+  ## Convert disputed shapefile into a ggplot object
+  disputed_shp_df <- as.data.table( suppressMessages(fortify(disputed_shp_sub)) )
+  if(nrow(disputed_shp_df)==0) disputed_shp_df <- data.table(
+    lat=numeric(0), long=integer(0), group=character(0)
+  )
+  disputed_bg_gg <- suppressMessages(
+    geom_path(
+      data = disputed_shp_df,
+      aes(x=long, y=lat, group=group),
+      color='white', size = .7
+    )
+  )
+  disputed_shp_gg <- suppressMessages(
+    geom_path(
+      data = disputed_shp_df,
+      aes(x=long, y=lat, group=group),
+      color='black', linetype = 'dotted', size = .5
+    )
+  )
+
   if (!is.null(endemic_gauls)) {
     background_map_df_not_endemic <- background_map_df[!(GAUL_CODE %in% endemic_gauls), ]
     background_map_gg_not_endemic <- geom_polygon(data = background_map_df_not_endemic,
@@ -2151,7 +2202,7 @@ make_background_map <- function(region,
                                                      group = group),
                                                  fill = "lightgray")
   } else if (stage_3_gray) {
-    background_map_df_not_endemic <- background_map_df[(GAUL_CODE %in% stage3$GAUL_CODE), ]
+    background_map_df_not_endemic <- background_map_df[(GAUL_CODE %in% stage3$gadm_geoid), ]
     background_map_gg_not_endemic <- geom_polygon(data = background_map_df_not_endemic,
                                                   aes(x = long,
                                                       y = lat,
@@ -2161,7 +2212,10 @@ make_background_map <- function(region,
     background_map_gg_not_endemic <- NULL
   }
 
-  return(list(background_outline_gg, background_map_gg, background_map_gg_not_endemic, extent(background_map)))
+  return(list(
+    background_outline_gg, background_map_gg, background_map_gg_not_endemic, 
+    extent(background_map), disputed_shp_gg, disputed_bg_gg
+  ))
 }
 
 
@@ -2222,6 +2276,8 @@ get_color_list <- function(color_scheme) {
 #'   with countries marked non-endemic or stage 3 grayed out. output of `make_background_map()`
 #' @param background_extent extent of polygon defining region.
 #'   output of `make_background_map()`
+#' @param disputed_map ggplot object for disputed territories
+#' @param disputed_bg ggplot BACKGROUND (white) object for disputed territories
 #' @param df_graph_poly data.table output of `dcp_make_df_graph()`, subsetted to countries
 #'   in region
 #' @param df_graph_point data.table output of `dcp_make_df_graph()`, subsetted to countries
@@ -2256,6 +2312,8 @@ make_a_period_map <- function(period,
                               background_outline,
                               background_map_not_endemic,
                               background_extent,
+                              disputed_map,
+                              disputed_bg,
                               df_graph_poly,
                               df_graph_point,
                               not_real_shapefiles,
@@ -2286,7 +2344,9 @@ make_a_period_map <- function(period,
   df_period_polys <- df_period_polys[!(shapefile %in% not_real_shapefiles)]
 
   ## Initialize map
-  g_map <- ggplot() + background_map + background_map_not_endemic
+  g_map <- ggplot() + 
+    background_map + 
+    background_map_not_endemic
 
   # Merge polygons for this period to master spdf and add each one to map
   merge_poly_data <- function(this_survey, poly_shapes_all) {
@@ -2504,6 +2564,8 @@ make_a_period_map <- function(period,
   ## Add points and finishing touches
   g_map <- g_map +
     background_outline +
+    disputed_bg +
+    disputed_map +
     geom_point(data = df_period_points,
                aes(x = longitude,
                    y = latitude,
@@ -2585,7 +2647,7 @@ dcp_make_4up_map <- function(g_datamap,
 
   # Initialize plot with master title
   grid.newpage()
-  pushViewport(grid::viewport(layout = grid.layout(12, 9)))
+  pushViewport(grid::viewport(layout = grid.layout(nrow=12, ncol=9)))
   vplayout <- function(x, y) grid::viewport(layout.pos.row = x, layout.pos.col = y, clip = "off")
   # Plot all data coverage maps
   #print(tbl, as.table=TRUE)
@@ -2595,15 +2657,24 @@ dcp_make_4up_map <- function(g_datamap,
   print(map_list[[3]] + theme(legend.position="none"), vp = vplayout(7:12, 5:6))
   print(map_list[[4]] + theme(legend.position="none"), vp = vplayout(7:12, 7:8))
   grid.draw(p.legend)
-  grid.draw(g_data_legend)
   grid.draw(title_grob)
   grid.draw(note_grob)
+  # If there are no data points, then the g_data_legend can fail
+  #  Try plotting it without recording first to make sure it works
+  plot_g_data_legend <- tryCatch({
+      grid.draw(g_data_legend, recording=FALSE)
+      return(TRUE)
+    }, error = function(e){
+      return(FALSE)
+    }
+  )
+  if(plot_g_data_legend) grid.draw(g_data_legend, recording=TRUE)
 
 }
 
 
 ## ###########################################################################
-## SECTION 2 - SHINY PREP FUNCTIONS
+## SECTION 6 - SHINY PREP FUNCTIONS
 ## ###########################################################################
 
 
@@ -2673,4 +2744,5 @@ prep_data_coverage_shiny <- function(df,
   write.csv(df, paste0('/snfs1/WORK/11_geospatial/10_mbg/data_coverage_shiny/', indicator, '_points.csv'))
 
 }
+
 

@@ -76,7 +76,8 @@ is_singularity <- function(image_dir = "") {
 #'
 is_lbd_singularity <- function() {
   is_singularity(image_dir = "/share/singularity-images/lbd") ||
-  is_singularity(image_dir = "/share/singularity-images/lbd/test_deploy")
+  is_singularity(image_dir = "/share/singularity-images/lbd/test_deploy") ||
+  is_singularity(image_dir = "/share/singularity-images/lbd/testing_INLA_builds")
 }
 
 ## is_rstudio() --------------------------------------------------------------->
@@ -158,14 +159,21 @@ is_rstudio <- function(check_singularity = FALSE) {
 #' ---------|------------------------------------------------------------------
 #'     A    | R in LBD image           | /usr/local/R-<version>/library
 #'     B    | RStudio in LBD image     | /usr/local/R-<version>/library
-#'     C    | RStudio in non-LBD image | /home/j/temp/geospatial/singularity_packages/<version>
+#'     C    | RStudio in non-LBD image | /share/geospatial/non_lbd_rstudio_pkgs/<version>
 #'
+
+#' Note that R packages meant for use in RStudio not supported by the LBD team
+#' were originally stored at '/home/j/temp/geospatial/singularity_packages'
+#' but in October of 2018, were moved to
+#' '/share/geospatial/non_lbd_rstudio_pkgs' after an update was made to the
+#' cluster where /home/j was not necessarily accessible from all nodes.
+
 #' This function tries to identify each of these scenarios and then load
 #' packages from the correct place. Scenario A and B are when running R from
-#' within a Singularity container spun ' up from an image that *has been* built
+#' within a Singularity container spun up from an image that *has been* built
 #' by the LBD team. We want to check for this specifically so we know 1) that
 #' the required packages are also built into the image and we know where they
-#' are located and 2) that special ' packages (like TMB) are there.
+#' are located and 2) that special packages (like TMB) are there.
 #'
 #' Scenario C would be for those users that continue to use RStudio from
 #' images that LBD does not construct or support
@@ -204,7 +212,7 @@ load_R_packages <- function(package_list) {
   if(is_rstudio(check_singularity = TRUE) & !is_lbd_singularity()) {
     dir_name <- paste(R.version$major, R.version$minor, sep = ".")
     # e.g., '/home/.../singularity_packages/3.5.1/'
-    package_lib <- paste('/home/j/temp/geospatial/singularity_packages', dir_name, sep = "/")
+    package_lib <- paste('/share/geospatial/non_lbd_rstudio_pkgs', dir_name, sep = "/")
     # Create directory if it doesn't exist (e.g., because R was upgraded)
     if (!dir.exists(package_lib)) {
         stop(paste0("You're using a version of R for which no LBD packages have been installed. Please ask the lbd_core team to install packages for ", dir_name))
@@ -303,12 +311,19 @@ source_functions <- function(functions) {
 #' \code{\link{mbg_setup}}
 #'
 load_mbg_functions <- function(repo) {
+  
+  ## Coerce relative to absolute path
+  repo <- normalizePath(repo)
+  
   message(paste0("\nChecking directory '", repo, "' for R scripts with 'functions' in the filename"))
   if(!dir.exists(repo)) stop(paste0("Directory '", repo, "' does not exist...\nExiting!"))
   functs <- list.files(path       = repo,
                        recursive  = TRUE,
-                       pattern    = 'functions',
+                       pattern    = c('functions.+(R|r)'),
                        full.names = TRUE)
+  ## Drop testing functions from being sourced
+  functs <- functs[!grepl('testing', functs)]
+  functs <- functs[!grepl('LBDCore', functs)]
   if(length(functs) == 0) {
     stop(paste0("Found no R scripts in '", repo, "' with 'functions' in the filename...\nExiting!"))
   } else source_functions(functs)
@@ -370,13 +385,14 @@ is_lbd_core_repo <- function(path) {
 #' \code{\link{mbg_setup}}
 #'
 fix_raster_tmpdir <- function() {
-    library(raster)
     # Give the user a message about what is happening
     message("Loading and configuring the raster package...")
     # set temporary file dir. INFR does not regularly delete files from here
-    raster::rasterOptions(tmpdir = "/share/scratch/tmp/geospatial-tempfiles")
-    # delete files older than 1 week. INFR may take over this duty at some point
-    if (!interactive()) raster::removeTmpFiles(h = 24 * 7)
+    raster_tmp_dir <- paste("/share/scratch/tmp/geospatial-tempfiles", Sys.getenv("USER"), sep="/")
+    if(!dir.exists(raster_tmp_dir)) dir.create(raster_tmp_dir)
+    raster::rasterOptions(tmpdir = raster_tmp_dir)
+    # delete files older than 25 days (maximum days in geospatial.q)
+    if (!interactive()) raster::removeTmpFiles(h = 24 * 25)
 }
 
 ## load_setthreads() ---------------------------------------------------------->

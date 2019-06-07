@@ -180,7 +180,7 @@
                              layer=paste0("g2015_2014_", admin_level))
 
         message("Rasterizing...")
-          admin_rast<-rasterize(admin_shp,simple_raster,paste0("ADM",admin_level,"_CODE"))
+          admin_rast<-rasterize_check_coverage(admin_shp,simple_raster,paste0("ADM",admin_level,"_CODE"))
         message("Converted to raster based on simple_raster template. Cropping and masking:")
           admin_rast  <- crop(admin_rast, extent(simple_raster))
           admin_rast  <- setExtent(admin_rast, simple_raster)

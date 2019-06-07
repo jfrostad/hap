@@ -97,7 +97,7 @@ resample_polygons <- function(data,
   # find records with shapefiles
   data$shapefile[!is.na(data$latitude)&!is.na(data$longitude)]=NA
   noloc=rep(FALSE,nrow(data))
-  noloc[data$shapefile==""&!is.na(data$shapefile)]=TRUE
+  noloc[data$shapefile=="" | is.na(data$shapefile)] = TRUE
 
   # remove any spatially unidentifiable data
   message(paste('Dropping',sum(noloc),'of',nrow(data),'rows of data due to no spatial identifiers (lat, long, shapefile info missing)\n'))

@@ -20,6 +20,7 @@
 #     repo            = Location where you've cloned "mbg" repository.
 #     indicator_group = Category of indicator, i.e. "education"
 #     indicator       = Specific outcome to be modeled within indicator category, i.e. "edu_0"
+################ THIS FUNCTION HAS BEEN DEPRECATED IN FAVOR OF SET_UP_CONFIG ###################
   load_config <- function(repo, indicator_group, indicator, config_name=NULL, covs_name = NULL, post_est_only=FALSE, run_date = '') {
 
     # Pull from config .csv file
@@ -68,6 +69,16 @@
     return(config)
   }
 
+  
+##### Overloading load_config to point to set_up_config in misc_functions
+load_config <- function(...) {
+  warning("load_config() and check_config() will be deprecated in favor of set_up_config()")
+  set_up_config(...)
+  
+}
+
+  
+  
 ## Create directory structure
 #   Arguments:
 #     indicator_group = Category of indicator, i.e. "education"
@@ -521,7 +532,7 @@ build_space_mesh <- function(d, simple, max_edge, mesh_offset,
     ## make a s2 domain mesh using data locs and boundary locs
     all.loc <- rbind(s3, boundary.loc)
     mesh_s <- inla.mesh.create(loc=all.loc,
-                               cutoff = s2params[1] / true.radius.of.earth, ## minimum triangle edge allowed 
+                               cutoff = s2params[1] / true.radius.of.earth, ## minimum triangle edge allowed
                                extend = list(offset = s2params[2] / true.radius.of.earth), ## how far to extend mesh
                                refine=list(max.edge = s2params[3] / true.radius.of.earth)) ## max triangle edge allowed
 
@@ -530,11 +541,11 @@ build_space_mesh <- function(d, simple, max_edge, mesh_offset,
     ## http://www.r-inla.org/examples/case-studies/simpson2011
     if(plot_mesh){
       ## plot 3d mesh
-    }    
+    }
   }
 
   return(mesh_s)
-  
+
 }
 
 ## Create temporal mesh (defaulting to the four period U5M approach for now, come back and make more flexible later)
@@ -547,16 +558,174 @@ build_time_mesh <- function(periods=1:4) {
   return(mesh_t)
 }
 
+
+## Alternative method of rasterizing:
+##### We go from shapefile to SpatialPointsDataFrame, which will give us
+#### an SPDF of boundaries. Then we merge this on top of the result that
+#### comes out of rasterize(), and that will fix the admin border issues
+
+#'
+#' @title Shapefile to SpatialPointsDataFrame
+#'
+#' @description Converts a shapefile into a SpatialPointsDataFrame for a given field
+#'
+#' @param sp.df SpatialPolygonDataFrame. Input admin shapefile
+#' @param field String. The field describing the shapes, for e.g. ADM0_CODE
+#'
+#' @return A SpatialPointsDataFrame with coords and value of field
+#'
+#' @importFrom sp SpatialPointsDataFrame
+#' @export
+#'
+#'
+shape_to_spointsdf <- function(sp.df, field) {
+  
+  ## Loop over 'field' units
+  each_country <- lapply(c(1:length(sp.df@polygons)), function(i) {
+    ## Loop over polygons for field 'i'
+    rbindlist(lapply(c(1:length(sp.df@polygons[[i]]@Polygons)), function(j) {
+      data.table(sp.df@polygons[[i]]@Polygons[[j]]@coords, V3 = sp.df@data[[field]][i])
+    }))  
+  })
+  
+  
+  results <- data.frame(rbindlist(each_country))
+  results <- sp::SpatialPointsDataFrame(coords=results[,1:2], data=data.frame(field=results[,3]))
+  
+  
+  ## Fix field name to the string supplied
+  names(results) <- paste0(field)
+
+  return(results)
+}
+
+
+#' @title Rasterize with border checks
+#'
+#' @description Rasterizing using a shapefile and a template raster, such that
+#' we account for any pixels that are on the border of \code{field} units, which
+#' could have been lost due to raster::rasterize only evaluating on centroids
+#'
+#' @param shapes SpatialPolygonDataFrame.. Input shapefile
+#'
+#' @param template_raster SpatialPolygonDataFrame.. The reference raster (usually WorldPop)
+#'
+#' @param field String The field with appropriate administrative unit information (usually ADM0_CODE)
+#'
+#' @param link_table String or data.table. If data.table it is used as-is. If String: either an absolute
+#'   file path to an RDS file OR a short name for the administrative shape file e.g., "2019_02_27" or "current".
+#'
+#' @return A raster with border and insides properly filled
+#'
+#' @details rasterize_check_coverage has three distinct use cases based off of the value of link_table
+#'
+#' 1. \code{link_table} is NULL. In this case rasterize_check_coverage will behave identically to raster::rasterize
+#'
+#' 2. \code{link_table} is a String referring to relase of admin shapefiles ("current" or e.g., "2019_02_27"). In this case
+#'    \code{field} should be "ADM0_CODE", "ADM1_CODE" or "ADM2_CODE". This will load the lbd_standard_link.rds file,
+#'    from the related admin shapefile directory, aggregate area_fraction as necessary to match the level of \code{field},
+#'    and then apply those values to pixels in the space defined by \code{shapes}.
+#'
+#' 3. \link{link_table} is a data.table OR a String absolute path to a RDS file containing a data.table. This will use the
+#'    provided \code{link_table} to assign values to the result raster similarly to use case #2.
+#'
+#' Note that for both use cases 2 and 3 all pixel_id coordinates must be in the same raster space. This is currently the
+#' area defined by cropping the world raster to the pixels occupied by stage 1 and stage 2 countries.
+#'
+#' @export
+#'
+rasterize_check_coverage <- function(shapes, template_raster, field, ..., link_table = modeling_shapefile_version) {
+  # backwards-compatible behavior - just call rasterize()
+  if (is.null(link_table)) return(raster::rasterize(shapes, template_raster, field = field, ...))
+
+  # Validate arguments
+  is_admin_link_table <- FALSE
+  if (is.data.table(link_table)) {
+    is_admin_link_table <- TRUE
+    # nothing to do - already a link table loaded in memory
+  } else if (R.utils::isAbsolutePath(link_table)) {
+    link_table <- readRDS(link_table)
+  } else if (is_admin_shapefile_string(link_table)) {
+    is_admin_link_table <- TRUE
+    # load link table with pre-computed ownership percentages for each pixel cell
+    link_table_file <- paste0(get_admin_shape_dir(link_table), "lbd_standard_link.rds")
+    link_table <- readRDS(link_table_file)
+  } else {
+    stop("link_table argument was neither a data.table, an admin shapefile string, or an absolute path to a RDS file.")
+  }
+
+  if (! field %in% names(link_table)) {
+    msg <- paste("WARNING: rasterize_check_coverage called with field", field,
+                 "which is not present in link_table. Defaulting to raster::rasterize()")
+    message(msg)
+    return(raster::rasterize(shapes, template_raster, field = field, ...))
+  }
+
+  # aggregate link table generically for admin 0/1/2
+  # Note: we need `with=FALSE` because `field` is passed as a parameter (not a hard-coded string)
+  table <- link_table[,c("pixel_id", field, "area_fraction"), with=FALSE]
+  if (is_admin_link_table && field != "ADM2_CODE") {
+    # sum rows; area_fraction now represents the total area coverage by ADM0/1_CODE instead of ADM2_CODE
+    table <- table[, .(area_fraction = sum(area_fraction)), by = c("pixel_id", field)]
+  }
+  # subset table so that we have 1 entry per pixel_id - the value of `field` with the maximum
+  # area_fraction value for that pixel_id
+  # https://stackoverflow.com/a/24558696
+  pixel_owner <- table[table[, .I[which.max(area_fraction)], by=pixel_id]$V1]
+  pixel_owner <- pixel_owner[order(pixel_id)]
+  
+  # generate world raster with pixel values for `field`
+  world_pixel_owner <- suppressWarnings(empty_world_raster())
+  # subset to only those pixels owned by a shape we're interested in
+  owned_pixels <- pixel_owner[pixel_owner[[field]] %in% shapes[[field]]]
+  world_pixel_owner[owned_pixels$pixel_id] <- owned_pixels[[field]]
+
+  result <- raster::crop(world_pixel_owner, template_raster, snap="near")
+  if (raster::ncell(result) != raster::ncell(template_raster)) {
+    message <- paste("Error in creating result raster. Should have created a raster of shape",
+                     paste(dim(result), collapse=","),
+                     "but instead created a raster of shape",
+                     paste(dim(template_raster), collapse=","))
+    stop(message)
+  }
+  return(result)
+}
+
+#' @title Create raster representing world
+#'
+#' @description Creates a raster file consistent with LBD's world raster.
+#'
+#' @param whole_world Logical if TRUE return raster for entire world. If FALSE,
+#'   return raster for stage1+stage2
+#'
+empty_world_raster <- function(whole_world = FALSE) {
+  if (whole_world) {
+    result <- raster::raster(nrow=4320, ncol=8640,
+                             crs=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"),
+                             xmn=-180, xmx=180, ymn=-90, ymx=90,
+                             vals=NA)
+  } else {  # stage 1+2
+    result <- raster::raster(nrow=2123, ncol=6610,
+                             crs=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"),
+                             xmn=-118.375, xmx=157.0417, ymn=-34.875, ymx=53.58333,
+                             vals=NA)
+  }
+  return(result)
+}
+
+
 ## Load list of raster inputs (pop and simple)
-build_simple_raster_pop <- function(subset_shape, u5m=FALSE, field=NULL, raking=F) {
+build_simple_raster_pop <- function(subset_shape, u5m=FALSE, field=NULL, raking=F, link_table=modeling_shapefile_version) {
 
   if (is.null(field)) {
     if ('GAUL_CODE' %in% names(subset_shape@data)) field <- 'GAUL_CODE'
     if ('ADM0_CODE' %in% names(subset_shape@data)) field <- 'ADM0_CODE'
   }
-  
+
   if(raking){
     field <- 'loc_id'
+    # no 'loc_id' field in the link table, so we can't use it
+    link_table <- NULL
   }
 
   if(u5m==FALSE){
@@ -570,14 +739,19 @@ build_simple_raster_pop <- function(subset_shape, u5m=FALSE, field=NULL, raking=
 
   cropped_pop <- crop(master_pop, extent(subset_shape), snap="out")
   ## Fix rasterize
-  initial_raster <- rasterize(subset_shape, cropped_pop, field = field)
+  initial_raster <- rasterize_check_coverage(subset_shape, cropped_pop, field = field, link_table = link_table)
   if(length(subset(subset_shape, !(get(field) %in% unique(initial_raster))))!=0) {
-    rasterized_shape <- merge(rasterize(subset(subset_shape, !(get(field) %in% unique(initial_raster))), cropped_pop, field = field), initial_raster)
+    rasterized_shape <- 
+      raster::merge(
+        rasterize_check_coverage(subset(subset_shape, !(get(field) %in% unique(initial_raster))),
+                                 cropped_pop,
+                                 field = field,
+                                 link_table = link_table),
+        initial_raster)
   }
   if(length(subset(subset_shape, !(get(field) %in% unique(initial_raster))))==0) {
     rasterized_shape <- initial_raster
   }
-  #rasterized_shape <- rasterize(subset_shape, cropped_pop, field='GAUL_CODE')
   masked_pop <- raster::mask(x=cropped_pop, mask=rasterized_shape)
 
   raster_list <- list()
@@ -589,18 +763,18 @@ build_simple_raster_pop <- function(subset_shape, u5m=FALSE, field=NULL, raking=
 }
 
 ## #############################################################################
-## GET ADMIN CODES AND RELATED FUNCTIONS 
+## GET ADMIN CODES AND RELATED FUNCTIONS
 ## #############################################################################
 
 
 ## load_adm0_lookup_table() ----------------------------------------------------
-#' 
+#'
 #' @title Load the GAUL lookup table
 #'
 #' @description Loads the most recent version of the lookup table that links
-#'   ADM0 codes with other identifiers such as GBD location IDs, MBG modeling 
+#'   ADM0 codes with other identifiers such as GBD location IDs, MBG modeling
 #'   regions, and ISO codes, among others.
-#' 
+#'
 #' @return Returns a data.frame of the ADM0 lookup table. If package data.table
 #'   is loaded, also converts the lookup table to a data.table
 #'
@@ -651,11 +825,11 @@ pull_custom_modeling_regions <- function(custom_regions){
     'central_america' = 'caca',
     'south_america'   = 'ansa+trsa',
     # se_asia was historically inclusive of East Asia + SE Asia
-    'se_asia'         = 'eaas+seas+ocea+png', 
-    
+    'se_asia'         = 'eaas+seas+ocea+png',
+
     #data coverage regions
     'africa_dcp' = 'noaf+essa+wssa+cssa+sssa+yem',
-    'middle_east_dcp' = 'mide+stan-yem-pak+tur+isr+leb',
+    'middle_east_dcp' = 'mide+stan-yem-pak',
     'latin_america_dcp' = 'latin_america+cub',
     'south_asia_dcp' = 'south_asia-mdv-syc',
     'se_asia_dcp' = 'eaas+seas+png+idn+phl+tls+mys+twn',
@@ -719,14 +893,14 @@ pull_custom_modeling_regions <- function(custom_regions){
     # Need to move these back to vax_seas when 0long issue fixed
     # Not using this for now
     'vax_seas_0long' = 'asm+fji+kir+wsm+ton',
-    
+
     'vax_caeu' = 'arm+aze+geo+kgz+mda+tjk+tkm+ukr+uzb',
-    
+
     'vax_crbn' = 'cub+dma+dom+grd+hti+jam+lca+vct+vir',
     'vax_ctam' = 'blz+col+cri+slv+gtm+hnd+mex+nic+pan+ven',
     'vax_ansa' = 'ansa-col-ven',
     'vax_trsa' = 'trsa',
-    
+
     'vax_name' = 'noaf+mide+afg+omn',
     'vax_cssa' = 'cssa',
     'vax_essa' = 'essa+syc',
@@ -735,7 +909,7 @@ pull_custom_modeling_regions <- function(custom_regions){
 
     # For modelers who are still using the defunct NAME region
     'name_historic' = 'noaf-esh',
-    
+
     # Custom regions for Diarrhea/ORT/WASH/LRI/HAP
     'dia_afr_horn' = 'dji+eri+eth+sdn+som+ssd+yem',
     'dia_cssa' = 'ago+caf+cod+cog+gab+gnq+stp',
@@ -748,11 +922,11 @@ pull_custom_modeling_regions <- function(custom_regions){
     'dia_chn_mng' = 'chn+mng',
     'dia_se_asia' = 'khm+lao+mmr+mys+tha+vnm',
     'dia_malay' = 'idn+phl+png+tls',
-    'dia_south_asia' = 'bgd+btn+ind+lka+mdv+npl+pak',
+    'dia_south_asia' = 'bgd+btn+ind+lka+npl+pak',
     'dia_mid_east' = 'afg+irn+irq+jor+pse+syr',
     'dia_essa' = 'bdi+com+ken+lso+mdg+moz+mwi+rwa+swz+syc+tza+uga+zmb+zwe',
     'dia_oceania' = 'asm+fji+fsm+kir+mhl+slb+ton+vut+wsm'
-    
+
   )
   # Warn if there are any custom regions not in the reference list
   missing_regions <- custom_regions[ !(custom_regions %in% names(ref_reg_list)) ]
@@ -769,21 +943,21 @@ pull_custom_modeling_regions <- function(custom_regions){
 
 
 ## get_adm0_codes() ------------------------------------------------------------
-#' 
+#'
 #' @title Get Admin0 (Country) Codes
-#' 
-#' @description Pull Admin0 Codes for the specified countries or regions, 
+#'
+#' @description Pull Admin0 Codes for the specified countries or regions,
 #'   optionally excluding certain Admin0 codes.
-#'   
+#'
 #' @param adm0s Vector of ISO-3 codes, four-letter modeling region names, region
-#'   group names as defined in get_region_groups, or 'all' (returns all Admin0 
+#'   group names as defined in get_region_groups, or 'all' (returns all Admin0
 #'   codes)
 #' @param strict (default `FALSE`) Causes the function to fail if an ISO code or
 #'   region name is not included in the full list.
 #' @param lookup_table (default `NULL`) Sets a data.frame or data.table to be
 #'   used as the lookup_table. If `NULL`, the lookup table will be loaded using
 #'   the `load_adm0_lookup_table()` function.
-#' @param core_repo (default NULL) THIS ARGUMENT IS DEPRECATED AND WILL BE 
+#' @param core_repo (default NULL) THIS ARGUMENT IS DEPRECATED AND WILL BE
 #'   REMOVED IN THE FUTURE. Please remove it from your function calls.
 #' @param adm0_type (default 'detect') Which class of admin0 codes
 #'   should be pulled? Must be one of 'gaul', 'gadm', or 'detect'. If
@@ -797,7 +971,7 @@ pull_custom_modeling_regions <- function(custom_regions){
 #' @param subnational_raking Logical. set to true if you want to use raking version of shapefile
 #' @return Vector of numeric ADM0 codes. Warns if not all regions align with a
 #'   ADM0 code.
-#' 
+#'
 get_adm0_codes <- function(adm0s,
                            strict = FALSE,
                            lookup_table = NULL,
@@ -822,7 +996,7 @@ get_adm0_codes <- function(adm0s,
       " -- please remove this argument."
     ))
   }
-  
+
   # Determine adm0_type
   if(adm0_type == 'detect'){
     if(is.null(shapefile_version)){
@@ -965,16 +1139,16 @@ get_adm0_codes <- function(adm0s,
 
 
 ## get_gaul_codes() ------------------------------------------------------------
-#' 
+#'
 #' @title Get GAUL Codes (TO BE DEPRECATED)
-#' 
-#' @description Pull Admin0 codes for the specified countries or regions, 
-#'   optionally excluding certain Admin0 codes. The only difference from the 
+#'
+#' @description Pull Admin0 codes for the specified countries or regions,
+#'   optionally excluding certain Admin0 codes. The only difference from the
 #'   standard get_adm0_codes() function is that the default adm0_type is 'gaul'
 #'   rather than 'gadm'.
-#' 
+#'
 #' NOTE: THIS FUNCTION IS BEING DEPRECATED - ALWAYS USE get_adm0_codes() INSTEAD.
-#' 
+#'
 get_gaul_codes <- function(
                            adm0s,
                            strict = FALSE,
@@ -995,16 +1169,16 @@ get_gaul_codes <- function(
 
 
 ## get_adm_codes_subnat() ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#' 
+#'
 #' @title Get subnational administrative codes (adm1 and adm2)
-#' 
+#'
 #' @description Pulls subnational administrative codes worldwide for a given
 #'   administrative level (1 or 2) and a given set of country-level geographies,
 #'   represented by a vector of standard Admin0 codes pulled using
 #'   get_adm0_codes(). This function generalizes get_gaul_codes_subnat(), which
 #'   will be deprecated.
-#' 
-#' @param adm0_list A numeric vector of Admin0 codes pulled using 
+#'
+#' @param adm0_list A numeric vector of Admin0 codes pulled using
 #'   get_adm0_codes().
 #' @param admin_level A subnational administrative level: 1 and 2 are currently
 #'   supported.
@@ -1031,22 +1205,22 @@ get_adm_codes_subnat <- function(adm0_list, admin_level, shapefile_version = 'cu
 
 
 ## get_gaul_codes_subnat() ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#' 
+#'
 #' @title Get subnational GAUL codes
-#' 
+#'
 #' @description Pulls subnational administrative codes worldwide for a given
 #'   administrative level (1 or 2) and a given set of country-level geographies,
 #'   represented by a vector of standard Admin0 codes pulled using
-#'   get_adm0_codes(). This function is a simple wrapper for 
+#'   get_adm0_codes(). This function is a simple wrapper for
 #'   get_adm_codes_subnat() and has been kept for backwards-compatibility.
-#' 
+#'
 #' NOTE: THIS FUNCTION IS BEING DEPRECATED. ALWAYS USE get_adm_codes_subnat()
 #'   INSTEAD.
-#' 
+#'
 get_gaul_codes_subnat <- function(gaul_list, admin_level, shapefile_version) {
   subnat_list <- get_adm_codes_subnat(
     adm0_list   = gaul_list,
-    admin_level = admin_level, 
+    admin_level = admin_level,
     shapefile_version = shapefile_version
   )
   return(subnat_list)
@@ -1534,4 +1708,58 @@ crop_set_mask<-function(raster_object,template_raster){
   raster_object<-raster::setExtent(raster_object, template_raster)
   raster_object<-raster::mask(raster_object,template_raster)
   return(raster_object)
+}
+
+
+#' @title Uploading config info to SQLite database
+#' @description This function will upload the MBG config info into a SQLite database. There are no primary keys set, so any number of duplicate entries can be recorded.
+#'
+#' @param config The config \code{data.table} prepped apriori.
+#' @param user User name
+#' @param core_repo Path to core repository
+#' @param indicator_group Indicator group
+#' @param indicator Indicator
+#' @param run_date Run date datestamp
+#' @param verbose Print config before exiting?
+#'
+#' @importFrom DBI dbConnect dbWriteTable dbDisconnect
+#' @importFrom RSQLite SQLite
+#'
+#' @export
+#'
+upload_config_to_db <- function(config, user, core_repo, indicator_group, indicator, run_date, verbose = FALSE) {
+
+  ## Prep config file (transpose and add fields)
+  config_t <- transpose(config)[2,]
+  colnames(config_t) <- config$V1
+
+  ## Add missing columns
+  missing_metadata <- data.table(user = user,
+                                 core_repo = core_repo,
+                                 indicator_group = indicator_group,
+                                 indicator = indicator,
+                                 run_date = run_date)
+  config_binded <- cbind(missing_metadata, config_t)
+
+  ## Add datestamp of adding the config
+  config_binded[, datestamp:= paste0(Sys.time())]
+
+  ## Open connection to database
+  dbpath <- "/share/geospatial/run_logs/config_db/run_db_20190216.sqlite"
+  configdb <- DBI::dbConnect(RSQLite::SQLite(), dbpath)
+
+  ## Upload config
+  DBI::dbWriteTable(configdb, "config_upload", config_binded, append = TRUE)
+
+  ## Disconnect db
+  DBI::dbDisconnect(configdb)
+
+  ## Print config?
+  if(verbose) print(config_binded)
+
+
+  print("Config data uploaded")
+
+  return(NULL)
+
 }

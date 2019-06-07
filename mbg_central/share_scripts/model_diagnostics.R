@@ -155,7 +155,7 @@ set_serial_threads()
 
 mclapply(Regions, function(r) {
   message(paste0("Making stacker maps for region: ", r))
-  plot_stackers(reg = r, highisbad = F, individual_countries = T)
+  plot_stackers(reg = r, highisbad = F, individual_countries = T, shapefile_version = modeling_shapefile_version)
 }, mc.cores = n_cores)
 
 # Return to multithreading (if any):

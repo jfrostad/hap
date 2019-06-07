@@ -83,7 +83,7 @@ invlogit <- function(x) {
 #
 # }
 
-save_mbg_input <- function(indicator = indicator, indicator_group = indicator_group, df = df , simple_raster = simple_raster, mesh_s = mesh_s,
+save_mbg_input <- function(indicator = indicator, indicator_group = indicator_group, df = df , simple_raster = simple_raster, simple_raster2 = NULL, mesh_s = mesh_s,
                            mesh_t = mesh_t, cov_list = all_cov_layers, run_date = NULL, pathaddin="",
                            child_model_names = NULL, all_fixed_effects = NULL, period_map = NULL,centre_scale = T) {
 
@@ -115,6 +115,7 @@ save_mbg_input <- function(indicator = indicator, indicator_group = indicator_gr
 
   ## Save all inputs
   to_save <- c("df", "simple_raster", "mesh_s", "mesh_t", 'cov_list', 'child_model_names', 'all_fixed_effects','period_map')
+  if(!is.null(simple_raster2)) to_save <- c(to_save, "simple_raster2")
   save(list = to_save, file = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
   message(paste0('All inputs saved to /share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin,'.RData'))
 
@@ -148,8 +149,9 @@ build_mbg_formula_with_priors <- function(fixed_effects,
                                           temporal_model_theta1_prior = "list(prior = 'normal', param = c(0, 1/(2.58^2)))",
                                           no_gp = FALSE,
                                           stacker_names = child_model_names,
-                                          coefs.sum1 = FALSE
-                                          ){
+                                          coefs.sum1 = FALSE,
+                                          subnat_RE = FALSE,
+                                          subnat_re_prior = "list(prior = 'loggamma', param = c(1, 5e-5))") {
 
   if(nchar(stacker_names[1]) == 0 & coefs.sum1 == TRUE){
     message("WARNING! You've chosen sum-to-1 but don't appear to be using any stackers. Unless you have a very good reason to do this, it probably doesn't make sense. As such, we're setting coefs.sum1 <- FALSE")
@@ -180,7 +182,8 @@ build_mbg_formula_with_priors <- function(fixed_effects,
 
   f_nugget <- as.formula(paste0('~f(IID.ID, model = "iid", hyper = list(theta=', nugget_prior, '))'))
   f_res <- as.formula(paste0('~f(CTRY.ID, model = "iid", hyper = list(theta=', ctry_re_prior, '))'))
-
+  f_subnat <- as.formula(paste0('~f(SUBNAT.ID, model = "iid", constr=TRUE, hyper = list(theta=', subnat_re_prior, "))"))
+  
   test_rho_priors(temporal_model_theta1_prior) ## Report how priors for theta1 (Rho) are being used in Rho space.
   f_space <- as.formula(paste0('~f(space,
                                    model = spde,
@@ -218,7 +221,8 @@ build_mbg_formula_with_priors <- function(fixed_effects,
   if(!no_gp) f_mbg <- f_mbg + f_space
   if(add_nugget==TRUE) f_mbg <- f_mbg + f_nugget
   if(add_ctry_res == TRUE) f_mbg <- f_mbg + f_res
-
+  if (subnat_RE == TRUE) f_mbg <- f_mbg + f_subnat
+  
   message(f_mbg)
   return(f_mbg)
 }
@@ -340,7 +344,16 @@ local.inla.spde2.matern.new = function(mesh, alpha=2, prior.pc.rho,
 #'
 #' @param use_ctry_res Logical. If TRUE, include country random
 #'   effects
-#'
+#'   
+#' @param use_subnat_res Logical. If TRUE, include subnational 
+#'   (admin-1) random effects
+#'   
+#' @param use_subnat_res Logical. If TRUE, include subnational (admin-1) random
+#'   effects
+#'   
+#' @param remove_non_subnats Logical. If TRUE, NA out all points of the subnational
+#'   random effect which are not associated with the country
+#'   
 #' @param use_nugget Logical. If TRUE, include a nugget effect
 #' 
 #' @param stacker_names string vector of child model names
@@ -367,6 +380,8 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
                                  sig0=0.5,rho0=0.3,
                                  coefs.sum1 = FALSE,
                                  use_ctry_res = FALSE,
+                                 use_subnat_res = FALSE,
+                                 remove_non_subnats = FALSE,
                                  use_nugget = FALSE,
                                  stacker_names = child_model_names,
                                  yl   = year_list,
@@ -435,11 +450,16 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
       A.covar <- as.matrix(df[, f.e.v, with = FALSE])
     }
 
+    if (is.null(mesh_t)){
+      space = inla.spde.make.index("space",
+                                   n.spde = spde$n.spde)
+    } else {
     space = inla.spde.make.index("space",
                                  n.spde = spde$n.spde,
                                  n.group = mesh_t$m)
+    }
 
-
+    
     #find cov indices
     if(fixed_effects!="NONE" & nchar(fixed_effects) > 0){
       f_lin <- reformulate(fixed_effects)
@@ -468,6 +488,16 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
     if(use_ctry_res){
       ## add an numeric gaul code to use in random effects
       design_matrix$CTRY.ID <- gaul_convert(df$country, shapefile_version = shapefile_version)
+    }
+    
+    if (use_subnat_res) {
+      ## add subnat ID to use in random effects
+      design_matrix$SUBNAT.ID <- df$ADM1_CODE
+      
+      if(remove_non_subnats) {
+        ## NA out subnational rows which are 0
+        design_matrix$SUBNAT.ID[design_matrix$SUBNAT.ID == 0] <- NA
+      }
     }
 
     if(use_nugget){
@@ -502,107 +532,201 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
 }
 
 
-fit_mbg <- function(indicator_family, stack.obs, spde, cov, N, int_prior_mn, int_prior_prec=1, f_mbg, run_date, keep_inla_files, cores,verbose_output=FALSE,wgts=0,intstrat='eb', fe_mean_prior = 0, fe_sd_prior = 1) {
-
-  if(wgts[1]==0) wgts=rep(1,length(N))
-  # Check if user has allocated less cores in their qsub than they specified in their config file
-  cores_available <- Sys.getenv("NSLOTS")
-  #if(cores_available!="" & cores_available < cores) stop(paste0("You've specified ", cores, " for INLA to use but you've only requested ", cores_available, " in your qsub"))
-  #if(cores_available=="") message(paste0("It looks like you're running interactively, be sure your environment has the number of cores available that you've told INLA to use (", cores, ")"))
-
-  ## Add fixed effect on GAUL_CODE if specified
-
-
+#' @title Fit MBG model in INLA
+#' @description Fit MBG model in INLA
+#' @param indicator_family PARAM_DESCRIPTION
+#' @param stack.obs PARAM_DESCRIPTION
+#' @param spde PARAM_DESCRIPTION
+#' @param cov PARAM_DESCRIPTION
+#' @param N PARAM_DESCRIPTION
+#' @param int_prior_mn PARAM_DESCRIPTION
+#' @param int_prior_prec PARAM_DESCRIPTION, Default: 1
+#' @param f_mbg PARAM_DESCRIPTION
+#' @param run_date PARAM_DESCRIPTION
+#' @param keep_inla_files PARAM_DESCRIPTION
+#' @param cores PARAM_DESCRIPTION
+#' @param verbose_output PARAM_DESCRIPTION, Default: FALSE
+#' @param wgts PARAM_DESCRIPTION, Default: 0
+#' @param intstrat PARAM_DESCRIPTION, Default: 'eb'
+#' @param fe_mean_prior PARAM_DESCRIPTION, Default: 0
+#' @param fe_sd_prior PARAM_DESCRIPTION, Default: 1
+#' @param omp_start OpenMP strategy to be used, one of \code{c('small', 'medium', 'large', 'huge', 'default', 'pardiso.serial', 'pardiso.parallel')}.
+#' Default: \code{'huge'}, which is the INLA default for TAUCS solver.
+#' @param blas_cores Number of BLAS threads to use. Default: 1.
+#' @param pardiso_license Path to PARDISO license. Must be provided if using a Pardiso startegy in \code{omp_strat}. Default: NULL
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples
+#' \dontrun{
+#' if (interactive()) {
+#'   # EXAMPLE1
+#' }
+#' }
+#' @rdname fit_mbg
+#' @export
+fit_mbg <- function(indicator_family,
+                    stack.obs,
+                    spde,
+                    cov,
+                    N,
+                    int_prior_mn,
+                    int_prior_prec = 1,
+                    f_mbg,
+                    run_date,
+                    keep_inla_files,
+                    cores, 
+                    verbose_output = FALSE,
+                    wgts = 0,
+                    intstrat = "eb",
+                    fe_mean_prior = 0,
+                    fe_sd_prior = 1,
+                    omp_strat = "huge",
+                    blas_cores = 1,
+                    pardiso_license = NULL) {
+  if (wgts[1] == 0) {
+    wgts <- rep(1, length(N))
+  }
+  
+  ## Assert that omp_strat is in the domains of what is possible
+  stopifnot(omp_strat %in% c("small", "medium", "large", "huge", "default", "pardiso.serial", "pardiso.parallel"))
+  
+  
+  message("Checking to see if PARDISO strategy is used")
+  if (grepl("pardiso", omp_strat)) {
+    
+    ## Pardiso strategy NEEDS a license
+    stopifnot(!is.null(pardiso_license))
+    
+    ## Set up and test PARDISO solver
+    inla.setOption("pardiso.license", pardiso_license)
+    (success_msg <- inla.pardiso.check())
+    
+    if (!grepl("SUCCESS", success_msg)) {
+      warning("PARDISO solver was not set up properly. Reverting to 'huge' strategy")
+      omp_strat <- "huge"
+    } else {
+      message(paste0("Pardiso solver being used with strategy ", omp_strat))
+    }
+  }
+  
+  
   # ~~~~~~~~~~~~~~~~
   # fit the model
   # enable weights
   inla.setOption("enable.inla.argument.weights", TRUE)
-
-  message('Fitting INLA model')
-
+  
+  message("Fitting INLA model")
+  
   # set a prior variance of 1.96 on the intercept as this is
   # roughly as flat as possible on logit scale without >1 inflection
-
+  
   # code just to fit the model (not predict)
-  inla_working_dir <- paste0('/snfs1/temp/geospatial/inla_intermediate/inla_', run_date)
+  inla_working_dir <- paste0("/share/scratch/tmp/geos_inla_intermediate/inla_", run_date)
   dir.create(inla_working_dir, showWarnings = FALSE)
-  if(indicator_family=='binomial') {
+  if (indicator_family == "binomial") {
     system.time(
       res_fit <- inla(f_mbg,
                       data = inla.stack.data(stack.obs),
-                      control.predictor = list(A = inla.stack.A(stack.obs),
-                                               link = 1,
-                                               compute = FALSE),
-                      control.fixed = list(expand.factor.strategy = 'inla',
-                                           prec.intercept = int_prior_prec,
-                                           mean.intercept = int_prior_mn,
-                                           mean = fe_mean_prior,
-                                           prec = fe_sd_prior),
-                      control.compute = list(dic = TRUE,
-                                             cpo = TRUE,
-                                             config = TRUE),
+                      control.predictor = list(
+                        A = inla.stack.A(stack.obs),
+                        link = 1,
+                        compute = FALSE
+                      ),
+                      control.fixed = list(
+                        expand.factor.strategy = "inla",
+                        prec.intercept = int_prior_prec,
+                        mean.intercept = int_prior_mn,
+                        mean = fe_mean_prior,
+                        prec = fe_sd_prior
+                      ),
+                      control.compute = list(
+                        dic = TRUE,
+                        cpo = TRUE,
+                        config = TRUE,
+                        openmp.strategy = omp_strat
+                      ),
                       control.inla = list(int.strategy = intstrat, h = 1e-3, tolerance = 1e-6),
-                      family = 'binomial',
+                      family = "binomial",
                       num.threads = cores,
+                      blas.num.threads = blas_cores,
                       Ntrials = N,
                       verbose = verbose_output,
                       working.directory = inla_working_dir,
                       weights = wgts,
-                      keep = TRUE)
+                      keep = TRUE
+      )
     )
   }
-  if(indicator_family=='gaussian') {
+  if (indicator_family == "gaussian") {
     system.time(
       res_fit <- inla(f_mbg,
                       data = inla.stack.data(stack.obs),
-                      control.predictor = list(A = inla.stack.A(stack.obs),
-                                               compute = FALSE),
-                      control.fixed = list(expand.factor.strategy = 'inla',
-                                           prec.intercept = 1,
-                                           mean.intercept = int_prior_mn,
-                                           mean = 0,
-                                           prec = 2),
-                      control.compute = list(dic = TRUE,
-                                             cpo = TRUE,
-                                             config = TRUE),
+                      control.predictor = list(
+                        A = inla.stack.A(stack.obs),
+                        compute = FALSE
+                      ),
+                      control.fixed = list(
+                        expand.factor.strategy = "inla",
+                        prec.intercept = 1,
+                        mean.intercept = int_prior_mn,
+                        mean = 0,
+                        prec = 2
+                      ),
+                      control.compute = list(
+                        dic = TRUE,
+                        cpo = TRUE,
+                        config = TRUE,
+                        openmp.strategy = omp_strat
+                      ),
                       control.inla = list(int.strategy = intstrat, h = 1e-3, tolerance = 1e-6),
-                      family = 'Gaussian',
+                      family = "gaussian",
                       num.threads = cores,
+                      blas.num.threads = blas_cores,
                       verbose = TRUE,
                       working.directory = inla_working_dir,
                       weights = wgts,
                       scale = N,
-                      keep = TRUE)
+                      keep = TRUE
+      )
     )
   }
-  if(indicator_family=='beta') {
+  if (indicator_family == "beta") {
     system.time(
       res_fit <- inla(f_mbg,
                       data = inla.stack.data(stack.obs),
-                      control.predictor = list(A = inla.stack.A(stack.obs),
-                                               compute = FALSE),
-                      control.fixed = list(expand.factor.strategy = 'inla',
-                                           prec.intercept = 1,
-                                           mean.intercept = int_prior_mn,
-                                           mean = 0,
-                                           prec = 2),
-                      control.compute = list(dic = TRUE,
-                                             cpo = TRUE,
-                                             config = TRUE),
+                      control.predictor = list(
+                        A = inla.stack.A(stack.obs),
+                        compute = FALSE
+                      ),
+                      control.fixed = list(
+                        expand.factor.strategy = "inla",
+                        prec.intercept = 1,
+                        mean.intercept = int_prior_mn,
+                        mean = 0,
+                        prec = 2
+                      ),
+                      control.compute = list(
+                        dic = TRUE,
+                        cpo = TRUE,
+                        config = TRUE,
+                        openmp.strategy = omp_strat
+                      ),
                       control.inla = list(int.strategy = intstrat, h = 1e-3, tolerance = 1e-6),
-                      family = 'Beta',
+                      family = "beta",
                       num.threads = cores,
+                      blas.num.threads = blas_cores,
                       verbose = TRUE,
                       working.directory = inla_working_dir,
                       weights = wgts,
                       scale = N,
-                      keep = TRUE)
+                      keep = TRUE
+      )
     )
   }
-
+  
   return(res_fit)
-
 }
+
 
 
 
@@ -651,7 +775,13 @@ fit_mbg <- function(indicator_family, stack.obs, spde, cov, N, int_prior_mn, int
 #' @param nperiod number of temporal periods in res_fit
 #'
 #' @param stacker_names string vector containing names of child models used for stacking in res_fit
+#'
+#' @param shapefile_version Shapefile version
 #' 
+#' @param simple_raster_subnats simple raster for the subnational country
+#' 
+#' @param subnat_country_to_get ISO code for subnational country
+#'
 #' @return list containing mean raster, sd raster, and a matrix of
 #'   space-time pixel cell predictions. The cell prediction matrix is
 #'   wide on draws and long on space-time locations. The space-time
@@ -670,7 +800,9 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
                                          length(eval(parse(text = year_list))),
                                          length(year_list)),
                         stacker_names = child_model_names,
-                        shapefile_version = 'current') {
+                        shapefile_version = 'current',
+                        simple_raster_subnats = NULL,
+                        subnat_country_to_get = NULL) {
 
   if(nchar(stacker_names[1]) == 0 & coefs.sum1 == TRUE){
     message("WARNING! You've chosen sum-to-1 but don't appear to be using any stackers. Unless you have a very good reason to do this, it probably doesn't make sense. As such, we're setting coefs.sum1 <- FALSE")
@@ -717,7 +849,8 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
     l_idx <- grep('covar', par_names)
     l_idx_int <- match(sprintf('%s.1', res_fit$names.fixed), ## main effects
                        par_names)
-    if(mean(is.na(l_idx_int)) == 1) l_idx_int <- match(sprintf('%s', res_fit$names.fixed), par_names) ##
+    if(mean(is.na(l_idx_int)) == 1) l_idx_int <- match(sprintf('%s', res_fit$names.fixed), par_names)
+    if(mean(is.na(l_idx_int)) == 1) l_idx_int <- match(sprintf('%s:1', res_fit$names.fixed), par_names)##
     l_idx = c(l_idx, ## covars in sum-to-1
               l_idx_int) ## intercept
 
@@ -739,11 +872,11 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
 
   ## get samples as matrices
   if(pred_gp){
-    pred_s <- sapply(draws, function (x)
-      x$latent[s_idx])
+    pred_s <- sapply(draws, function(x) {
+      x$latent[s_idx]})
   }
-  pred_l <- sapply(draws, function (x)
-    x$latent[l_idx])
+  pred_l <- sapply(draws, function(x) {
+    x$latent[l_idx]})
   if(length(l_idx)==1) pred_l=t(as.matrix(pred_l))
 
   if(coefs.sum1){
@@ -775,7 +908,7 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
       print('WARNING:ONLY ONE COUNTRY PRESENT IN DATA AND RE FIT')
       pred_ctry_res <- matrix(pred_ctry_res, nrow = 1)
     }
-    rownames(pred_ctry_res) <- substr(ctry.res.names, 9, nchar(ctry.res.names))
+    rownames(pred_ctry_res) <- res_fit$summary.random$CTRY.ID$ID
 
     ## also get the hyperparam precision in case not all countries had data and we need to take draws
     pred_ctry_prec <- sapply(draws, function(x){
@@ -785,10 +918,44 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
     pred_ctry_res <- NULL
   }
 
+  ## check to see if admin-1 (subnat) random effects were used
+  if (sum(grepl("SUBNAT.ID", par_names)) > 0) {
+    
+    ## then country random effects were used - get the fitted values
+    subnat.res.idx <- grep("SUBNAT.ID*", par_names)
+    pred_subnat_res <- sapply(draws, function(x) x$latent[subnat.res.idx])
+    subnat.res.names <- par_names[subnat.res.idx]
+    if (length(subnat.res.names) == 1) {
+      message("WARNING:ONLY ONE SUBNAT UNIT PRESENT IN DATA AND RE FIT")
+      print("WARNING:ONLY ONE SUBNAT UNIT PRESENT IN DATA AND RE FIT")
+      pred_subnat_res <- matrix(pred_subnat_res, nrow = 1)
+    }
+    rownames(pred_subnat_res) <- res_fit$summary.random$SUBNAT.ID$ID
+    
+    ## also get the hyperparam precision in case not all countries had data and we need to take draws
+    pred_subnat_prec <- sapply(draws, function(x) {
+      subnat.prec.idx <- which(grepl("SUBNAT.ID", names(draws[[1]]$hyper)))
+      x$hyperpar[[subnat.prec.idx]]
+    }) ## this gets the precision for country REs
+  } else {
+    pred_subnat_res <- NULL
+  }
+  
+  
+  
   ## get coordinates of cells to predict to
   ## these are are needed both for raster extraction and GP projection
   coords <- xyFromCell(template, seegSDM:::notMissingIdx(template))
 
+  ## Create coords and stuff for the subnational simple raster
+  if(!is.null(simple_raster_subnats)) {
+    template_subnat <- simple_raster_subnats
+    subnat_cell_idx <- seegSDM:::notMissingIdx(template_subnat)
+    subnat_coords <- raster::xyFromCell(template_subnat, notMissingIdx(template_subnat))
+  }
+  
+  
+  
   ## setup coords for GP projection. convert coords to spherical if
   ## using spherical modeling mesh. used if you made a mesh on s2
   if(mesh_s$manifold == "S2"){
@@ -830,7 +997,8 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
   if(pred_gp){
     # Using `crossprod()` here for product of a large, sparse matrix and a dense matrix is ~2x
     # faster than using `%*%`
-    cell_s <- as.matrix(crossprod(t(A.pred), pred_s))
+    # cell_s <- as.matrix(crossprod(t(A.pred), pred_s))
+    cell_s <- as.matrix(Matrix::crossprod(Matrix::t(A.pred), pred_s))
   }else{
     cell_s <- 0
   }
@@ -848,7 +1016,9 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
 
   ## start by ensuring the same mask and cell size
   ## I think we don't need this next line anymore since everything should be done at the top of this function...
-  cov_list = setNames(lapply(cov_list, function(x) mask(resample(x,template),template)),names(cov_list))
+  cov_list = setNames(lapply(cov_list, function(x) {
+    mask(resample(x, template), template)
+  }), names(cov_list))
 
   #extract the covariates
   vals = data.table(do.call(cbind, lapply(cov_list, function(x) raster::extract(x,coords))))
@@ -859,16 +1029,18 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
   #reshape long
   vals[,id:= 1:nrow(vals)] #create an id to ensure that melt doesn't sort things
 
-  #convert the time varying names into meltable values
-  tv_cov_colnames = grep(paste(tvnames, collapse = "|"), names(vals), value = T) #unlisted
-  tv_cov_colist = lapply(tvnames, function(x) grep(paste0("^", x, "\\.[[:digit:]]*$"), names(vals), value = T))
+  if (!is.null(mesh_t)){
+    #convert the time varying names into meltable values
+    tv_cov_colnames = grep(paste(tvnames, collapse = "|"), names(vals), value = T) #unlisted
+    tv_cov_colist = lapply(tvnames, function(x) grep(paste0("^", x, "\\.[[:digit:]]*$"), names(vals), value = T))
 
-  vals = melt(vals, id.vars = c('id','int',pars), measure = tv_cov_colist, value.name = tvnames, variable.factor =F)
+    vals = melt(vals, id.vars = c('id','int',pars), measure = tv_cov_colist, value.name = tvnames, variable.factor =F)
 
-  #fix the names
-  #melt returns different values of variable based on if its reshaping 1 or 2+ columns.
-  #enforce that it must end with the numeric after the period
-  vals[,variable:= as.numeric(substring(variable,regexpr("(\\.[0-9]+)$", variable)[1]+1))]
+    #fix the names
+    #melt returns different values of variable based on if its reshaping 1 or 2+ columns.
+    #enforce that it must end with the numeric after the period
+    vals[,variable:= as.numeric(substring(variable,regexpr("(\\.[0-9]+)$", variable)[1]+1))]
+  }
 
   #Tests suggest this is not needed anymore/as a carry over. Keep just in case
   #if(length(tv_cov_colist)==1){
@@ -929,6 +1101,58 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
     }
 
   }
+  
+  ## add on subnational random effects if applicable
+  if (!is.null(pred_subnat_res) & !is.null(subnat_country_to_get)) {
+    cell_subnat_res <- matrix(0, ncol = ncol(cell_l), nrow = nrow(cell_l))
+    
+    ## We will identify pixels at where the parent country of the subnational is in
+    ## and because simple_raster2 is perfectly aligned with a subset of simple_raster for that country,
+    ## we can simply add on the REs for those 
+    
+    subnat_gauls.with.res <- as.numeric(rownames(pred_subnat_res))
+    subnat_gaul.vec <- values(simple_raster2)[subnat_cell_idx]
+    subnat_gaul.t.vec <- rep(subnat_gaul.vec, nperiod) ## expand gaul vec in time
+    
+    
+    ## Get the rows where the simple_raster corresponds to the target
+    ## subnat country
+    # gg.rows <- which(values(simple_raster) == get_adm0_codes(subnat_country_to_get), arr.ind = T)
+    # 
+    # ## Get inverse of above (non subnat)
+    # gg.not.rows <- which(values(simple_raster) != get_adm0_codes(subnat_country_to_get), arr.ind = T)
+    
+    for (gsubnat in subnat_gauls.with.res) {
+      
+      ## Find the rows in simple_raster2 corresponding to the iterating subnat
+      gsubnat.rows <- which(subnat_gaul.t.vec == gsubnat)
+      gg.idx <- which(subnat_gauls.with.res == gsubnat)
+      
+      if (gsubnat %in% subnat_gauls.with.res) {
+      
+      message(paste0("adding RE for subnat ", gsubnat))
+      
+      cell_subnat_res[gsubnat.rows, ] <- cell_subnat_res[gsubnat.rows, ] + 
+        matrix(rep(pred_subnat_res[gg.idx, ], length(gsubnat.rows)), ncol = ncol(cell_subnat_res), byrow = TRUE)
+      
+      } else {
+
+        ## this subnat unit had no data and we need to take a draw from the RE dist for draw in preds
+        ## for draw, we draw one value of the random effect using pred_subnat_prec
+        re.draws <- rnorm(n = ncol(cell_subnat_res), mean = 0, sd = 1 / sqrt(pred_subnat_prec))
+        
+        ## replicate by all rows in that country and add it on
+        cell_subnat_res[gsubnat.rows, ] <- cell_subnat_res[gsubnat.rows, ] + 
+          matrix(rep(re.draws, length(gsubnat.rows)), ncol = ncol(cell_subnat_res), byrow = TRUE)
+      }
+    }
+  }
+  
+  
+  
+  
+  
+  
 
   ## get sd from fixed effects
   cell_l_sd <-  apply(cell_l, 1, sd)
@@ -952,23 +1176,33 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
     cell_ctry_res_sd <- apply(cell_ctry_res, 1, sd)
   }
 
+  ## get uncertainty from subnat res
+  if (!is.null(pred_subnat_res)) {
+    cell_subnat_res_sd <- apply(cell_subnat_res, 1, sd)
+  }
+  
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   ## combine to get cell-level sd
   ## ASSUMES INDEPENDENCE!
-
+  
   # do all of this by adding squares
-  cell_sd <- cell_l_sd ^ 2 + cell_s_sd ^ 2
-
+  cell_sd <- cell_l_sd^2 + cell_s_sd^2
+  
   # add nugget if present
   if (!is.null(pred_n)) {
-    cell_sd <- cell_sd + cell_n_sd ^ 2
+    cell_sd <- cell_sd + cell_n_sd^2
   }
-
+  
   # add country res if present
   if (!is.null(pred_ctry_res)) {
-    cell_sd <- cell_sd + cell_ctry_res_sd ^ 2
+    cell_sd <- cell_sd + cell_ctry_res_sd^2
   }
-
+  
+  # add subnat res if present
+  if (!is.null(pred_subnat_res)) {
+    cell_sd <- cell_sd + cell_subnat_res_sd^2
+  }
+  
   # finally, take the square root
   cell_sd <- sqrt(cell_sd)
 
@@ -985,10 +1219,18 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
   if (!is.null(pred_ctry_res)) {
     cell_all <- cell_all + cell_ctry_res
   }
+  
+  # add subnat res if present
+  if (!is.null(pred_subnat_res)) {
+    cell_all <- cell_all + cell_subnat_res
+  }
 
   # get predictive draws on probability scale
-  if(transform=='inverse-logit') { cell_pred <- plogis(as.matrix(cell_all))
-  } else cell_pred <- eval(parse(text=transform))
+  if(transform == 'inverse-logit') {
+    cell_pred <- plogis(as.matrix(cell_all))
+  } else {
+    cell_pred <- eval(parse(text = transform))
+  }
 
   # get prediction mean (integrated probability)
   pred_mean <- rowMeans(cell_pred)
@@ -1003,9 +1245,8 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
                          matrix(cell_sd,
                                 ncol = nperiod))
 
-  names(mean_ras) <-
-    names(sd_ras) <-
-    paste0('period_', 1:nperiod)
+  names(mean_ras) <- paste0('period_', 1:nperiod)
+  names(sd_ras)   <- paste0('period_', 1:nperiod)
 
   return_list <- list(mean_ras, sd_ras, cell_pred)
 

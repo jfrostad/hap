@@ -340,7 +340,7 @@ subnational_ts_plots <- function(ad0_df,
   
   # Add simple world shapefile if region is specified as Africa
   if ("ad0" %in% plot_levels & "africa" %in% tolower(ad0_map_regions)) world_shape_simple <- readRDS('/share/geospatial/mbg/time_trend_plots/world_shape_simple.rds')
-  
+
   # Define some utility functions -----------------------------------------------------------------------------------------------------
   # Function to fix aspect ratios
   aspect_ratio_plot <- function(plt, aspect_ratio = 1, expand=0.05){
@@ -442,7 +442,7 @@ subnational_ts_plots <- function(ad0_df,
   # Add IHME logo for plotting later
   ihme_logo <- png::readPNG('/share/geospatial/mbg/time_trend_plots/ihme_logo.png')
   ihme_grob <- rasterGrob(ihme_logo)
-  
+
   # Add slightly different version for plotting multiple runs
   ihme_grob_multiple <- rasterGrob(ihme_logo, y = 0.2)
   
@@ -529,7 +529,7 @@ subnational_ts_plots <- function(ad0_df,
       # A locator map --------------------------------------------------------------
       gg_locator_map <- location_map_draw(subset(ad0_shape_simple, ADM0_CODE %in% ad0_reg_codes), ad0_shape_simple)
       if (ad0_reg_title == "Africa") gg_locator_map <- location_map_draw(subset(world_shape_simple, ADM0_CODE %in% ad0_reg_codes), world_shape_simple)
-      
+
       # A labeled map by countries -------------------------------------------------
       ad0_shape_reg <- subset(ad0_shape_simple, ADM0_CODE %in% ad0_reg_codes)
       
@@ -661,12 +661,12 @@ subnational_ts_plots <- function(ad0_df,
       if (plot_data == T) ad1_data_ctry[, plot_name := as.factor(stringr::str_wrap(ADM1_NAME, width = wrap_width))]
       
       # Admin 1 time series plot ----------------------------------------------------
-      
+
       if (plot_data == F & multiple_runs == F) gg_ad1ts <- time_series(ad1_df_plot, admin = 1, val_range, title_plot_size, ind_title)
       if (plot_data == T & multiple_runs == F) gg_ad1ts <- time_series_data(ad1_df_plot, ad1_data_ctry, admin = 1, val_range, title_plot_size, ind_title)
       if (plot_data == F & multiple_runs == T) gg_ad1ts <- time_series_multiple(ad1_df_plot, admin = 1, val_range, title_plot_size, ind_title)
       if (plot_data == T & multiple_runs == T) gg_ad1ts <- time_series_multiple_data(ad1_df_plot, ad1_data_ctry, admin = 1, val_range, title_plot_size, ind_title)
-      
+
       # A locator map --------------------------------------------------------------
       
       gg_locator_map <- location_map_draw(subset(ad0_shape_simple, ADM0_CODE == ad0_code), ad0_shape_simple)
@@ -816,12 +816,12 @@ subnational_ts_plots <- function(ad0_df,
         }
         
         # Admin 2 time-series plot -------------------------------------------------
-        
+
         if (plot_data == F & multiple_runs == F) gg_ad2ts <- time_series(plot_df, admin = 2, val_range, title_plot_size, ind_title)
         if (plot_data == T & multiple_runs == F) gg_ad2ts <- time_series_data(plot_df, ad2_data_ad1, admin = 2, val_range, title_plot_size, ind_title)
         if (plot_data == F & multiple_runs == T) gg_ad2ts <- time_series_multiple(plot_df, admin = 2, val_range, title_plot_size, ind_title)
         if (plot_data == T & multiple_runs == T) gg_ad2ts <- time_series_multiple_data(plot_df, ad2_data_ad1, admin = 2, val_range, title_plot_size, ind_title)
-        
+
         # A locator map ------------------------------------------------------------
         
         gg_locator_map <- ggplot() +
@@ -1838,6 +1838,7 @@ plot_ordered_admins_colors <- function(df,
 #' @param sample_column This is the name of the column that contains the sum of the sample weights for the collapsed points.
 #' @param subnational_nids If specified, these are the nids of surveys that are not nationally representative, and appear on the data plots with a different shape
 #' @param shapefile_version String indicating version of shapefile to pull
+#' @param use_kish boolean - If TRUE, admin aggregated N's are calculated using Kish approx
 #'
 #' @return a list containing three data tables that correspond to collapsed admin levels, named ad0/ad1/ad2. This list should then
 #' be assigned to parameters ad0_data/ad1_data/ad2_data for the visualization function if plot_data == T. The admin data will have columns
@@ -1887,7 +1888,8 @@ input_aggregate_admin <- function(indicator,
                                   svy_id = "nid",
                                   sample_column = "sum_of_sample_weights",
                                   subnational_nids = NULL,
-                                  shapefile_version = 'current') {
+                                  shapefile_version = 'current',
+                                  use_kish = FALSE) {
   
   # Make sure this is run on singularity container in Rstudio or lbd singularity to use sf package
   if(!is_lbd_singularity() & !is_rstudio(check_singularity = TRUE)){
@@ -2004,7 +2006,9 @@ input_aggregate_admin <- function(indicator,
     dplyr::summarise(
       year = floor(median(year, na.rm = T)),
       outcome = weighted.mean(prev, sample_column),
-      N = sum(N * weight)
+      N = ifelse(use_kish, 
+                 sum(as.numeric(sample_column))^2 / sum(as.numeric(sample_column^2 / N)), 
+                 sum(N * weight))
     ) %>%
     ungroup() %>%
     data.table()
@@ -2017,7 +2021,9 @@ input_aggregate_admin <- function(indicator,
     dplyr::summarise(
       year = floor(median(year, na.rm = T)),
       outcome = weighted.mean(prev, sample_column),
-      N = sum(N * weight)
+      N = ifelse(use_kish, 
+                 sum(as.numeric(sample_column))^2 / sum(as.numeric(sample_column^2 / N)), 
+                 sum(N * weight))
     ) %>%
     ungroup() %>%
     data.table()
@@ -2030,7 +2036,9 @@ input_aggregate_admin <- function(indicator,
     dplyr::summarise(
       year = floor(median(year, na.rm = T)),
       outcome = weighted.mean(prev, sample_column),
-      N = sum(N * weight)
+      N = ifelse(use_kish, 
+                 sum(as.numeric(sample_column))^2 / sum(as.numeric(sample_column^2 / N)), 
+                 sum(N * weight))
     ) %>%
     ungroup() %>%
     data.table()

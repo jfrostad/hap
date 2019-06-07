@@ -148,7 +148,8 @@ plot_stackers <- function(reg,
                           shapefile_version = 'current') {
 
   # Load master shape for outlines
-  master_shape <- readRDS('/share/geospatial/rds_shapefiles/gdcv_custom/master_shape_all.rds')
+  # master_shape <- readRDS('/share/geospatial/rds_shapefiles/gdcv_custom/master_shape_all.rds')
+  master_shape <- readRDS(get_admin_shapefile(admin_level = 0, version = shapefile_version, suffix = ".rds"))
   master_shape <- subset(master_shape, ADM0_CODE %in% get_adm0_codes(reg, shapefile_version = shapefile_version))
 
   # Set up output dir
@@ -215,7 +216,7 @@ plot_stackers <- function(reg,
 
     if (!is.null(ctry)) {
       input_df <- subset(input_df, country == ctry)
-      master_shape <- subset(master_shape, ADM0_CODE == get_adm0_codes(ctry, shapefile_verion = shapefile_version))
+      master_shape <- subset(master_shape, ADM0_CODE == get_adm0_codes(ctry, shapefile_version = shapefile_version))
       stacker_list <- lapply(stacker_list, function(x) {
         x <- suppressMessages(crop(x, extent(master_shape)))
         x <- suppressMessages(mask(x, master_shape))
@@ -326,7 +327,7 @@ plot_stackers <- function(reg,
         message(paste0("No shapes in master_shape corresponding to admin 0 code for ", c, " - skipping..."))
       } else {
         message(paste0("Saving stacker maps for country: ", c))
-      save_maps(input_df, stacker_list, master_shape, result_brick, zmin, zmax, yl, ind, ig, sh_dir, highisbad, o_dir, ctry = c)
+      save_maps(input_df, stacker_list, master_shape, result_brick, zmin, zmax, yl, ind, ig, sh_dir, highisbad, o_dir, ctry = c, shapefile_version = shapefile_version)
       }  
     }
   }
@@ -514,15 +515,23 @@ multiplot <- function(..., plotlist=NULL, cols=1, layout=NULL, legend = NULL) {
 #'   model_diagnostics.R script on the cluster and does the system call to actually
 #'   submit the job
 #'
+#' @param code Name of script, with relative path if desired.
+#' 
+#' @param code_path Full path to R script. Overrides \code{code} and \code{script_dir}
+#' 
+#' @param cores Number of threads. Default: 5.
+#' 
+#' @param memory RAM to be reserved, in GBs
+#'
 #' @param geo_nodes If TRUE, your job will be submitted to the geos (LBD)
 #'   cluster, if FALSE, it will be submitted to the prod cluster. Note that if
 #'   using the 'proj' argument, make sure to use project name which is valid on
 #'   the cluster you are submitting to. [default = FALSE]
 #'
-#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on 
+#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on
 #'   the prod cluster, if FALSE, the C2 nodes are not specified. Note that if
 #'   FALSE, your job may land on a node with much less memory or your node may
-#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes' 
+#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes'
 #'   arguments are set to TRUE, then the code will issue a warning and default
 #'   to the geos nodes. [default = FALSE]
 #'
@@ -530,11 +539,18 @@ multiplot <- function(..., plotlist=NULL, cols=1, layout=NULL, legend = NULL) {
 #'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
 #'   will be submitted to the prod cluster under the default project
 #'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
-#'   submitted to the geos (LBD) nodes under the default project 
+#'   submitted to the geos (LBD) nodes under the default project
 #'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
 #'   be submitted under that project. Note that this function does not check for
-#'   valid project names since these are likely to change often and likely 
+#'   valid project names since these are likely to change often and likely
 #'   valid project names are different on each cluster. [default = NULL]
+#'
+#' @param queue Queue to be used on the fair cluster.
+#'
+#' @param run_time Run-time to be used on the fair cluster.
+#'
+#' @param priority Job priority that can be deprioritized if needed, and can only be used for values in [-1023,0]. Default = 0.
+#' This value will get bounded to 0 or -1023 if the user supplies a value outside those bounds.
 #'
 #' @param singularity Instead of using the default R installation on the geos
 #'   or prod nodes, launch R from a Singularity image. This arg currently takes
@@ -561,7 +577,7 @@ multiplot <- function(..., plotlist=NULL, cols=1, layout=NULL, legend = NULL) {
 #'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
 #'   SET_MKL_THREADS=4 can be achieved by passing in
 #'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = NULL]
+#'   [default = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)<Paste>]
 #'
 #' @return None
 #'
@@ -570,104 +586,81 @@ multiplot <- function(..., plotlist=NULL, cols=1, layout=NULL, legend = NULL) {
 #'   \code{\link{get_singularity}}
 #'   \code{\link{qsub_sing_envs}}
 #'
-make_model_diagnostics <- function(user             = Sys.info()['user'],
-                                   cores            = 5,
-                                   memory           = 10,
-                                   proj             = NULL,
-                                   ig               = indicator_group,
-                                   corerepo         = core_repo,
-                                   indic            = indicator,
-                                   rd               = run_date,
-                                   log_location     = 'sgeoutput',
-                                   code             = "model_diagnostics",
-                                   script_dir       = 'mbg_central/share_scripts',
-                                   keepimage        = FALSE,
-                                   shell            = "r_shell.sh",
-                                   geo_nodes        = FALSE,
-                                   use_c2_nodes     = FALSE,
-                                   singularity      = NULL,
-                                   singularity_opts = NULL){
-
-  sharedir <- paste0('/share/geospatial/mbg/', ig, '/', indic, '/output/', rd, '/')
-  temp_dir <- paste0(sharedir, 'temp_post_est/')
-  dir.create(temp_dir, showWarnings = F)
-
-  if(log_location=='sgeoutput')
-    logloc = sprintf('/share/temp/sgeoutput/%s/',user)
-  if(log_location=='sharedir'){
-   logloc = sharedir
-   dir.create(sprintf('%serrors',logloc), showWarnings = F)
-   dir.create(sprintf('%soutput',logloc), showWarnings = F)
-  }
-
+#' @export
+#'
+make_model_diagnostics <- function(user = Sys.info()["user"],
+                                   code_path = NULL,
+                                   cores = 5,
+                                   memory = 10,
+                                   proj = NULL,
+                                   ig = indicator_group,
+                                   corerepo = core_repo,
+                                   indic = indicator,
+                                   rd = run_date,
+                                   log_location = "sgeoutput",
+                                   code = "model_diagnostics",
+                                   script_dir = "mbg_central/share_scripts",
+                                   keepimage = FALSE,
+                                   shell = "r_shell.sh",
+                                   geo_nodes = FALSE,
+                                   use_c2_nodes = FALSE,
+                                   queue = NULL,
+                                   run_time = NULL,
+                                   priority = 0,
+                                   singularity = singularity_version,
+                                   singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)) {
+  # Define project first (necessary to validate node options)
+  proj <- get_project(proj, use_geo_nodes = geo_nodes)
+  
+  # Validate arguments
+  validate_singularity_options(singularity, singularity_opts)
+  validate_node_option(geo_nodes, use_c2_nodes, proj)
+  
+  temp_dir <- path_join(get_model_output_dir(ig, indic, rd), "temp_post_est")
+  dir.create(temp_dir, showWarnings = FALSE)
+  
+  # Determine where stdout and stderr files will go
+  output_err <- setup_log_location(log_location, user, indic, ig, rd)
+  output_log_dir <- output_err[[1]]
+  error_log_dir <- output_err[[2]]
+  
   # Since we no longer rely on `setwd()`'s, we need to construct a sensible
   # "script_dir". If someone wants to use a special script, we assume it is
   # somewhere in their corerepo here:
-  script_dir <- paste(corerepo, script_dir, sep = '/')
-
-  # Submit to geo or prod nodes with different default projects. 
-  if(geo_nodes) {
-    # The geo nodes have default project 'proj_geo_nodes' if the 'proj' argument 
-    # is left as NULL and also require the '-l geos_node=TRUE' complex for UGE
-    if(is.null(proj)) proj <- "proj_geo_nodes"
-    node.flag <- "-l geos_node=TRUE"
-  } else {
-    # The prod nodes have default project 'proj_geospatial' if the 'proj'
-    # argument is left as NULL
-    if(is.null(proj)) proj <- "proj_geospatial"
-    if(use_c2_nodes) node.flag <- "-q all.q@@c2-nodes" else node.flag <- ""
+  script_dir <- path_join(corerepo, script_dir)
+  code <- path_join(script_dir, paste0(code, ".R"))
+  
+  # If code_path is not NULL, then override `code`
+  if(!is.null(code_path)) {
+    code <- code_path
   }
-
-  # At least give a warning if both 'geo_nodes' and 'use_c2_nodes' are requested
-  if(geo_nodes & use_c2_nodes) {
-    message("WARNING: Both 'geo_nodes' and 'use_c2_nodes' arguments were set to TRUE")
-    message(paste0("         Submitting job to LBD nodes under project: '", proj, "'"))
-  }
-
-  # If the user has passed in options for the Singularity container in the
-  # 'singularity_opts' argument, but the 'singularity' argument is 'NULL' exit
-  # with an error.
-  if(is.null(singularity) & !is.null(singularity_opts)) {
-    message("'singularity' argument is 'NULL' but options passed in for 'singularity_opts'")
-    stop("Exiting!")
-  }
-
-  # If the script is to be run with R from a Singularity container, point to
-  # the shell script to launch the container. Users can provide the 'default'
-  # keyword to get the default Singulariy image, just the name of the image
-  # located at the default path, or the full path to the image.
-  if(!is.null(singularity)) {
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
-    # Determine which Singularity image to use (see mbg_central/misc_functions.R)
-    sing_image <- get_singularity(image = singularity)
-  } else {
-    # if not, fire up the appropriate version of R depending on the cluster node
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_cluster.sh')
-  }
-
-
-  # Piece together lengthy `qsub` command
-  qsub <- paste0("qsub ",
-                 "-e ", logloc, "errors ",
-                 "-o ", logloc, "output ",
-                 "-cwd -l mem_free=", memory, "G ",
-                 "-pe multi_slot ", cores, " ",
-                 "-P ", proj, " ", node.flag)
-
-  # If a Singularity image is being used, pass the name of the image from
-  # `get_singularity` as well as any other environmentals the user asked for
-  # from the 'singularity_opts' argument to the qsub job
-  if(!is.null(singularity)) qsub <- qsub_sing_envs(qsub, singularity_opts,
-                                                   sing_image)
-
-  # append the rest of the qsub command
-  qsub <- paste0(qsub,
-                 " -N job_dx_", indic, " ",
-                  shell, " ",
-                  script_dir, "/", code, ".R ",
-                  indic, " ", ig, " ", rd, " ", cores,
-                  " ", corerepo)
-
+  
+  # Define remaining job attributes
+  job_name <- paste0("job_dx_", indic)
+  run_time <- get_run_time(use_geo_nodes = geo_nodes, use_c2_nodes = use_c2_nodes, queue = queue, run_time = run_time)
+  queue <- get_queue(use_geo_nodes = geo_nodes, use_c2_nodes = use_c2_nodes, queue = queue, run_time = run_time)
+  shell <- paste0(corerepo, "/mbg_central/share_scripts/shell_sing.sh")
+  sing_image <- get_singularity(image = singularity)
+  
+  # resources are all the -l qsub arguments
+  resources <- get_resources(use_geo_nodes = geo_nodes, cores = cores, ram_gb = memory, runtime = run_time)
+  
+  qsub <- generate_qsub_command(
+    # qsub-specific arguments
+    stderr_log = error_log_dir,
+    stdout_log = output_log_dir,
+    project = proj,
+    resources = resources,
+    job_name = job_name,
+    singularity_str = qsub_sing_envs("", singularity_opts, sing_image),
+    cores = cores,
+    queue = queue,
+    priority = priority,
+    # Command to qsub
+    shell, code, indic, ig, rd, cores, corerepo
+  )
+  
   # make the qsub call
   system(qsub)
 }
+

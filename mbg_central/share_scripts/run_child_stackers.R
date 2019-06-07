@@ -62,6 +62,11 @@ if ('xgboost' %in% child_model_names){
     message("Tuning xgboost on default grid search")
     hyperparameter_filepath = NULL
   }
+  
+  if (xg_model_tune == T & exists("hyperparameter_filepath")){
+    message("Tuning xgboost on pre-specified grid search")
+  }
+  
   xgboost <- fit_xgboost_child_model(df = the_data,
                                      covariates = all_fixed_effects,
                                      weight_column = 'weight',

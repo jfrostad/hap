@@ -86,7 +86,7 @@ get_location_hierarchy <- function(location_set_version_id, china.fix=FALSE) {
   if (china.fix) df <- china_hierarchy_fix(df)
   
   ## Create hierarchy
-  hierarchy <- str_split_fixed(df$path_to_top_parent, ",", max(df$level) + 1) %>% data.table
+  hierarchy <- stringr::str_split_fixed(df$path_to_top_parent, ",", max(df$level) + 1) %>% data.table
   hierarchy <- hierarchy[, lapply(.SD, as.numeric)]
   setnames(hierarchy, names(hierarchy), paste0("level_", seq(0, max(df$level))))
   df <- cbind(df, hierarchy)

@@ -1,3 +1,4 @@
+CC_ENV_DIR <- '/ihme/cc_resources/libraries/gbd_env/r'
 #################################################################################
 ### Pull GBD estimates from database and return as a data table
 ## Inputs:
@@ -21,9 +22,10 @@ load_gbd_data     <- function(gbd_type,
                               year_ids = c(2000:2017),
                               return_by_age_sex = "no",
                               collapse_age_sex = FALSE,
-                              shapefile_version = 'current', 
+                              shapefile_version = 'current',
                               gbd_round_id = 5,
-                              named_location_field = "GAUL_CODE") {
+                              named_location_field = "GAUL_CODE",
+                              ...) {
 
   # get GAUL to location_id mapping
   gaul_to_loc_id <- get_location_code_mapping(shapefile_version = shapefile_version)
@@ -41,19 +43,24 @@ load_gbd_data     <- function(gbd_type,
     covariate_by_sex <- metadata[covariate_name_short == tolower(gbd_name), by_sex]
 
     # get covariate data
-    source('/snfs1/temp/central_comp/libraries/current/r/get_covariate_estimates.R')
-    if (covariate_by_age) gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, age_group_id = age_group_id, gbd_round_id = gbd_round_id)
-    if (!covariate_by_age) gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, gbd_round_id = gbd_round_id)
+    source(path_join(CC_ENV_DIR, 'get_covariate_estimates.R'))
+    if (covariate_by_age) {
+        gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, age_group_id = age_group_id, gbd_round_id = gbd_round_id, ...)
+    } else {
+        gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, gbd_round_id = gbd_round_id, ...)
+    }
 
     # collapse to all age, both sexes (if specified, and if there are multiple age and/or sex groups)
     if (collapse_age_sex & gbd_estimates[, uniqueN(age_group_name) > 1 | uniqueN(sex_id) > 1]) {
 
       # get population data
-      source('/snfs1/temp/central_comp/libraries/current/r/get_population.R')
+      source(path_join(CC_ENV_DIR, 'get_population.R'))
       gbd_pops <- get_population(age_group_id = gbd_estimates[, unique(age_group_id)],
                                  location_id = gbd_estimates[, unique(location_id)],
                                  year_id = gbd_estimates[, unique(year_id)],
-                                 sex_id = gbd_estimates[, unique(sex_id)])
+                                 sex_id = gbd_estimates[, unique(sex_id)],
+                                 gbd_round_id = gbd_round_id,
+                                 ...)
 
       # population-weight the covariate data
       gbd_estimates <- merge(gbd_estimates, gbd_pops, by=c('location_id', 'sex_id', 'age_group_id', 'year_id'))
@@ -74,13 +81,13 @@ load_gbd_data     <- function(gbd_type,
   if (gbd_type == "output") {
 
     # get cause metadata
-    source('/snfs1/temp/central_comp/libraries/current/r/get_cause_metadata.R')
+    source(path_join(CC_ENV_DIR, 'get_cause_metadata.R'))
     metadata <- get_cause_metadata(cause_set_id = 2, gbd_round_id = gbd_round_id)
     cause_id <- suppressWarnings(as.numeric(gbd_name))
     if (is.na(cause_id)) cause_id <- metadata[acause == gbd_name, cause_id]
 
     # get cause data
-    source('/snfs1/temp/central_comp/libraries/current/r/get_outputs.R')
+    source(path_join(CC_ENV_DIR, 'get_outputs.R'))
     gbd_estimates <- get_outputs(topic = "cause",
                                  version = "best",
                                  gbd_round_id = gbd_round_id,
@@ -89,7 +96,8 @@ load_gbd_data     <- function(gbd_type,
                                  metric_id = metric_id,
                                  age_group_id = age_group_id,
                                  location_id = loc_ids,
-                                 year_id = year_ids)
+                                 year_id = year_ids,
+                                 ...)
 
     all_data <- merge(gaul_to_loc_id, gbd_estimates, by="location_id")
     setnames(all_data, c(named_location_field, "year_id", "val"), c("name", "year", "mean"))
@@ -151,7 +159,7 @@ get_gbd_locs <- function(reg,
     get_location_code_mapping(shapefile_version = shapefile_version)[ADM_CODE %in% get_adm0_codes(reg, shapefile_version = shapefile_version),
                                                                      list(location_id = loc_id, ADM_CODE)]
   }
-  
+  return(data.table(connector))
 }
 
 ## get_gbd_estimates
@@ -166,7 +174,7 @@ get_gbd_locs <- function(reg,
 #' @param year_ids = numeric vector of years to pull
 #' @param shapefile_version string of dated shapefile version to use when generating list of ihme loc ids and ADM code
 #' @param rake_subnational Logical. do you want subnational estimates or just national ones
-#' @param gbd_round_ir numeric gbd round id to pull from
+#' @param gbd_round_id numeric gbd round id to pull from
 #' 
 #' @return Returns 3-column data.table where "name" = ihme loc id, "year" = year, and
 #'      "mean" = value. Consistent with expected input for rake_cell_pred and calculate_raking_factors. 
@@ -183,24 +191,41 @@ get_gbd_estimates <- function(gbd_type,
                               gbd_round_id = 5) {
 
   ## get GAUL to location_id mapping
-  gaul_to_loc_id <- get_gbd_locs(reg = region,
-                                 rake_subnational = rake_subnational,
-                                 shapefile_version = shapefile_version)
-
-  gaul_to_loc_id <- as.data.table(gaul_to_loc_id)[, list(location_id, ADM_CODE)]
-
+  gaul_to_loc_id <- get_gbd_locs(
+    reg = region,
+    rake_subnational = rake_subnational,
+    shapefile_version = shapefile_version
+  )
+  
+  ## If we had subnational raking on, then we additionally pull in the national estimates
+  ## because fractional rates raking needs it
+  if(rake_subnational) {
+    gaul_to_loc_id_nats <- get_gbd_locs(
+      reg = region,
+      rake_subnational = FALSE,
+      shapefile_version = shapefile_version
+    )
+    
+    gaul_to_loc_id <- rbindlist(list(as.data.table(gaul_to_loc_id)[, list(location_id, ADM_CODE)],
+                                     as.data.table(gaul_to_loc_id_nats)), use.names = TRUE)
+    
+  } else {
+    gaul_to_loc_id <- as.data.table(gaul_to_loc_id)[, list(location_id, ADM_CODE)]
+  }
+  
+  gaul_to_loc_id <- unique(gaul_to_loc_id)
   loc_ids <- gaul_to_loc_id[, location_id]
   
   ## get cause metadata
-  source('/snfs1/temp/central_comp/libraries/current/r/get_cause_metadata.R')
+  source(path_join(CC_ENV_DIR, 'get_cause_metadata.R'))
   metadata <- get_cause_metadata(cause_set_id = 2, gbd_round_id = gbd_round_id)
   cause_id <- suppressWarnings(as.numeric(gbd_name))
   if (is.na(cause_id)) cause_id <- metadata[acause == gbd_name, cause_id]
 
   ## get cause data
-  source('/snfs1/temp/central_comp/libraries/current/r/get_outputs.R')
+  source(path_join(CC_ENV_DIR, 'get_outputs.R'))
   gbd_estimates <- get_outputs(topic = "cause",
-                               version = "best",
+                               version = "latest",
                                gbd_round_id = gbd_round_id,
                                cause_id = cause_id,
                                measure_id = measure_id,
@@ -280,9 +305,9 @@ load_admin_raster  <- function(admin_level, simple_raster, disag_fact=NULL,
   cropped_shapes <- crop(shapes, extent(sr), snap="out")
 
   ## Fix rasterize
-  initial_raster <- rasterize(cropped_shapes, sr, field = paste0('ADM', admin_level,'_CODE'))
+  initial_raster <- rasterize_check_coverage(cropped_shapes, sr, field = paste0('ADM', admin_level,'_CODE'))
   if(length(cropped_shapes[!cropped_shapes[[paste0('ADM', admin_level,'_CODE')]]%in%unique(initial_raster),])!=0) {
-    rasterized_shape <- merge(rasterize(cropped_shapes[!cropped_shapes[[paste0('ADM', admin_level,'_CODE')]]%in%unique(initial_raster),], sr, field = paste0('ADM', admin_level,'_CODE')), initial_raster)
+    rasterized_shape <- merge(rasterize_check_coverage(cropped_shapes[!cropped_shapes[[paste0('ADM', admin_level,'_CODE')]]%in%unique(initial_raster),], sr, field = paste0('ADM', admin_level,'_CODE')), initial_raster)
   }
   if(length(cropped_shapes[!cropped_shapes[[paste0('ADM', admin_level,'_CODE')]]%in%unique(initial_raster),])==0) {
     rasterized_shape <- initial_raster
@@ -1549,7 +1574,7 @@ get.cov.wts <- function(rd, ## run_date
     imp.mat["enet", ] <- imp.mat["enet", ] / sum(imp.mat["enet", ])
 
   }
-  
+
   ## ~~~~~~~~~
   ## xgboost ~
   ## ~~~~~~~~~
@@ -1558,13 +1583,15 @@ get.cov.wts <- function(rd, ## run_date
     load_R_packages("caret")
     # Extract row names to then assign to column names
     xg_names <- rownames(varImp(xgboost, scale = FALSE)$importance)
+
     
     # Extract coefficients, already correctly scaled
     scaled.coefs <- varImp(xgboost, scale = FALSE)$importance[[1]]
     
+
     # Assign column names
     names(scaled.coefs) <- xg_names
-    
+
     # put them in the matrix
     imp.mat["xgboost", ] <- scaled.coefs[rc]
   }
@@ -1668,39 +1695,6 @@ plot.cov.wts <- function(rd, ## run_date
   ## print(p)
   ## dev.off()
   return(p)
-
-}
-
-submit_results_table <- function(reg, indicator, indicator_group,
-                                 run_date, pop_measure, repo, log_dir,
-                                 baseline_year, goal_threshold,
-                                 diarrhea_measure='',
-                                 target_type='less', geos_node = F,
-                                 shapefile_version = 'current') {
-  dir.create(log_dir)
-  dir.create(paste0(log_dir, '/errors'))
-  dir.create(paste0(log_dir, '/output'))
-
-  shell.file <- ifelse(geos_node,
-                       "/mbg_central/r_shell_geos.sh",
-                       "/mbg_central/r_shell.sh")
-
-  proj.flag <- ifelse(geos_node,
-                      "-P proj_geo_nodes -l gn=TRUE",
-                      "-P proj_geospatial")
-
-  qsub <- paste0('qsub -e ', log_dir, '/errors -o ', log_dir,
-                 '/output -cwd -pe multi_slot 30 ', proj.flag, ' -N ',
-                 indicator, '_', reg, '_table ', repo, shell.file,
-                 ' ', repo, '/mbg_central/run_results_table.R ',
-                 indicator, ' ', indicator_group, ' ', run_date, ' ',
-                 pop_measure, ' ', repo, ' ', reg, ' ', baseline_year,
-                 ' ', goal_threshold, ' ', diarrhea_measure, ' ',
-                 target_type, ' ', shapefile_version)
-
-  system(qsub)
-
-  return(NULL)
 
 }
 
@@ -2082,67 +2076,88 @@ prep_postest <- function(indicator,
   save(list = save_objs, file = temp_file)
 }
 
-post_load_combine_save <- function(regions    = strata,
-                                   summstats  = c('mean','cirange','upper','lower'),
-                                   raked      = c('raked','unraked'),
-                                   rf_table   = TRUE,
-                                   run_summ   = TRUE,
-                                   indic      = indicator,
-                                   ig         = indicator_group,
-                                   sdir       = sharedir){
-
+post_load_combine_save <- function(regions = strata,
+                                   summstats = c("mean", "cirange", "upper", "lower"),
+                                   raked = c("raked", "unraked"),
+                                   rf_table = TRUE,
+                                   run_summ = TRUE,
+                                   indic = indicator,
+                                   ig = indicator_group,
+                                   sdir = sharedir,
+                                   proj = FALSE,
+                                   proj_folder = NULL) {
+  
   message(paste0("indic: ", indic))
   message(paste0("ig: ", ig))
-
+  
   rake_addin <- character()
   if ("unraked" %in% raked) {
-    lookup_dir <- paste0(sprintf('share/geospatial/mbg/%s/%s/output/%s/', ig, indic, run_date))
+    lookup_dir <- paste0(sprintf("share/geospatial/mbg/%s/%s/output/%s/", ig, indic, run_date))
     ur <- length(grep(paste0(indic, ".*unraked.*raster.tif"), list.files(lookup_dir)))
+    if(proj) ur <- length(grep(paste0(indic, ".*unraked_PROJ.*raster_PROJ.tif"), list.files(lookup_dir)))
     if (ur > 0) rake_addin <- c(rake_addin, unraked = "_unraked")
     if (ur == 0) rake_addin <- c(rake_addin, unraked = "")
   }
-
+  
   if ("raked" %in% raked) {
     rake_addin <- c(rake_addin, raked = "_raked")
   }
-
+  
   # loop through and combine all rasters
   message("\nCombining rasters...")
-  for(rake in rake_addin){
+  for (rake in rake_addin) {
     message(names(rake_addin)[which(rake_addin == rake)])
     rr <- rake
-    for(ss in summstats){
-      message(paste0('  ',ss))
+    for (ss in summstats) {
+      message(paste0("  ", ss))
       rlist <- list()
-      for(reg in regions){
-        message(paste0('    ',reg))
+      for (reg in regions) {
+        message(paste0("    ", reg))
         rlist[[reg]] <-
-          brick(sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s%s_%s_raster.tif',ig,indic,run_date,indic,reg,rake,ss))
+          brick(ifelse(proj,
+                       sprintf("/share/geospatial/mbg/%s/%s/output/%s/%s_%s%s_%s_raster_PROJ.tif", ig, indic, run_date, indic, reg, rake, ss),
+                       sprintf("/share/geospatial/mbg/%s/%s/output/%s/%s_%s%s_%s_raster.tif", ig, indic, run_date, indic, reg, rake, ss)
+          ))
       }
-      if (length(rlist) > 1) rlist <- do.call(raster::merge,unname(rlist)) else rlist <- rlist[[1]]
-      if(ss=='cirange') ssname = 'range' else ssname = ss # naming convention
-      save_post_est(rlist, 'raster',
-                    paste0(ssname,rr,'_raster'),
-                    indic)
+      if (length(rlist) > 1) rlist <- do.call(raster::merge, unname(rlist)) else rlist <- rlist[[1]]
+      if (ss == "cirange") ssname <- "range" else ssname <- ss # naming convention
+      save_post_est(
+        rlist, "raster",
+        ifelse(!proj, 
+               paste0(ssname, rr, "_raster"),
+               paste0(ssname, rr, "_raster_PROJ")),
+        indic
+      )
     }
   }
-
+  
   # do rf also
-  if(rf_table){
-    message('RF table')
+  if (rf_table) {
+    message("RF table")
     rflist <- list()
-    for(reg in regions){
+    for (reg in regions) {
       rflist[[reg]] <-
-        read.csv(sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_rf.csv',ig, indic,run_date,indic,reg))
+        if(proj) {
+          read.csv(sprintf("/share/geospatial/mbg/%s/%s/output/%s/%s_%s_rf_PROJ.csv", ig, indic, run_date, indic, reg))  
+        } else {
+          read.csv(sprintf("/share/geospatial/mbg/%s/%s/output/%s/%s_%s_rf.csv", ig, indic, run_date, indic, reg))  
+        }
     }
-    save_post_est(do.call(rbind.fill,rflist),'csv','rf', indic)
+    if(!proj) {
+      save_post_est(do.call(rbind.fill, rflist), "csv", "rf", indic)
+    } else {
+      save_post_est(do.call(rbind.fill, rflist), "csv", "rf_PROJ", indic)
+    }
+    
   }
-
+  
   # make a run summary graph
-  if(run_summ) {
-    graph_run_summary(run_date = run_date,
-                      indicator_group = ig,
-                      indicator = indic)
+  if (run_summ) {
+    graph_run_summary(
+      run_date = run_date,
+      indicator_group = ig,
+      indicator = indic
+    )
   }
 }
 
@@ -2167,4 +2182,138 @@ clean_after_postest <- function(indicator,
   if(delete_region_rasters == T) unlink(region_rasters)
 }
 
+
+
+#' @title Get GBD age group for the given WorldPop measure
+#' @description This function will return the age group from the GBD age group ID table
+#' which corresponds to the WorldPop measures used
+#'
+#' @note Currently only taking in measures starting with "a" and for 12 month interval (ending with "t"). And \code{total}.
+#'
+#' @param pop_measure The WorldPop measure, e.g. \code{a0004t}. Default: \code{a0004t}
+#'
+#' @return The \code{age_group_id} for the associated \code{pop_measure} input.
+#'
+#' @rdname
+#' @export
+get_age_group_from_worldpop <- function(pop_measure) {
+  
+  ## Strsplit out the 4 digits from the middle (always fixed length),
+  ## only if its not total
+  age_measures <- pop_measure
+  if (!pop_measure %in% c("total", "wocba")) {
+    age_measures <- substr(x = pop_measure, start = 2, stop = 5)
+  }
+  
+  ## NOT ALL the ages have perfect 1:1 measure, and so we may
+  ## have to aggregate out some age groups
+  
+  ## Here's a dictionary of age mappings
+  age_dict <- list(
+    "0004" = c(2, 3, 4, 5),
+    "0514" = c(23),
+    "1014" = c(7),
+    "1519" = c(8),
+    "1549" = c(24),
+    "2024" = c(9),
+    "2529" = c(10),
+    "3034" = c(11),
+    "3539" = c(12),
+    "4044" = c(13),
+    "4549" = c(14),
+    "5054" = c(15),
+    "5559" = c(16),
+    "6064" = c(17),
+    "total" = c(22),
+    "wocba" = c(24)
+  )
+  
+  ## Lookup the GBD age group for the given WorldPop measure and return it
+  return(unlist(age_dict[paste0(age_measures)]))
+}
+
+#' @title Extrapolate GBD measure to future
+#' @description Use a simple loess model to extrapolate GBD input data to desired year
+#' 
+#' @param gbd The data.table with name, year, and mean values (output from \code{get_gbd_estimates})
+#' @param year_list List of in sample years (config argument)
+#' @param year_forecast_end Year to forecast to. Default: 2030
+#'
+#' @return A data.table with name, year and mean columns extrapolated to \code{year_forecast_end}
+#' 
+#' @importFrom stats loess
+#' @export
+loess_extrap_gbd_input_by_loc <- function(gbd, year_list, year_forecast_end = 2030) {
+  gbd_forecast <- data.table(expand.grid(name = unique(gbd$name), 
+                                         year = union(year_list, c(max(year_list):year_forecast_end))))
+  gbd_forecast <- merge(gbd_forecast, gbd, c('name', 'year'), all.x = TRUE)
+  
+  ## Loop over all locations
+  lapply(unique(gbd$name), function(loc) {
+    
+    ## Run a simple loess and extrapolate in log space
+    gbd_fc_vector <- predict(stats::loess(formula = log(mean) ~ year, 
+                                          data = gbd_forecast[name == loc], 
+                                          control = loess.control(surface = "direct")), 
+                             newdata = gbd_forecast[name == loc]) 
+    gbd_forecast[name == loc, mean_forecast:= gbd_fc_vector]
+    
+    ## Intercept shift at last year of in-sample data
+    gbd_forecast[year == max(year_list), int_shift:= log(mean) - mean_forecast]
+    gbd_forecast[name == loc, int_shift:= mean(int_shift, na.rm = TRUE), by = 'name']
+    gbd_forecast[name == loc & year >= max(year_list), mean:= exp(mean_forecast + int_shift)]
+    gbd_forecast[, c('mean_forecast', 'int_shift'):= NULL]
+    return(0)
+  })
+  
+  return(gbd_forecast)
+}
+
+
+#' @title Get pre-saved FHS population outputs
+#' @description Access pre-saved RDS population outputs from FHS (saved out in \code{/share/geospatial/fhs-outputs/population})
+#' 
+#' @param population_version A version tag found from looking into: \code{/share/geospatial/fhs-outputs/population}.
+#' Default: \code{"20190403_test_new_cluster_1000d_rerun_fix_draw_squeezed_agg_ordered"}
+#' @param pop_measure WorldPop measure; only one allowed for now! Default: a0004t
+#' @param sex_id Sex ID. Default: 3
+#' @param scenario FHS scenario. Default: 0 (reference).
+#' @param year_ids. Year_id to query. Default: NULL (get all years)
+#' @param gbd_regions Regions to query (GBD Location IDs). Default: NULL (get all regions)
+#'
+#' @return A data.table with location_id, year_id, age_group_id = pop_measure, sex_id, run_id, population
+#' 
+#' @export
+get_fhs_population <- function(population_version = "20190403_test_new_cluster_1000d_rerun_fix_draw_squeezed_agg_ordered",
+                               pop_measure = "a0004t",
+                               sex_ids = 3,
+                               scenarios = 0,
+                               year_ids = NULL,
+                               gbd_regions = NULL) {
+  
+  ## Get pop data
+  pop_data <- readRDS(paste0("/share/geospatial/fhs-outputs/population/", population_version, ".rds"))
+  
+  ## Keep on subsettin'
+  pop_data <- pop_data[(age_group_id %in% get_age_group_from_worldpop(pop_measure = pop_measure)) & (scenario %in% scenarios) & (sex_id %in% sex_ids)]
+  
+  if(!is.null(year_ids)) {
+    pop_data <- pop_data[year_id %in% year_ids]
+  }
+  if(!is.null(gbd_regions)) {
+    pop_data <- pop_data[location_id %in% gbd_regions]
+  }
+  
+  ## Return data with alignment of our choice, keeping unique summed up population entries
+  pop_data[, age_group_id:= NULL]
+  pop_data[, age_group_id:= pop_measure]
+  pop_data <- pop_data[, .(population = sum(population)), by = c('location_id', 'year_id', 'age_group_id', 'sex_id')]
+  
+  ## Make fake run_id column
+  pop_data[, run_id:= paste0(population_version)]
+  
+  setkeyv(pop_data, c('location_id', 'year_id', 'age_group_id', 'sex_id'))
+  return(pop_data)
+  
+}
 

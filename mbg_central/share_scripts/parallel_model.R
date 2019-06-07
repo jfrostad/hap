@@ -18,13 +18,14 @@ holdout                  <- as.numeric(commandArgs()[8])
 indicator                <- as.character(commandArgs()[9])
 indicator_group          <- as.character(commandArgs()[10])
 
+
 ## make a pathaddin that get used widely
 pathaddin <- paste0('_bin',age,'_',reg,'_',holdout)
 
 ## load an image of the main environment
 load(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/pre_run_tempimage_', run_date, pathaddin,'.RData'))
 
-## In case anything got overwritten in the load, reload args
+# ## In case anything got overwritten in the load, reload args
 reg                      <- as.character(commandArgs()[4])
 age                      <- as.numeric(commandArgs()[5])
 run_date                 <- as.character(commandArgs()[6])
@@ -71,7 +72,8 @@ record_git_status(core_repo = core_repo, check_core_repo = TRUE)
 if(grepl("geos", Sys.info()[4])) INLA:::inla.dynload.workaround()
 
 ## cores to use
-cores_to_use <- round(as.numeric(slots)*.5)
+cores_to_use <- Sys.getenv("SGE_HGR_fthread")
+message(paste("Model set to use", cores_to_use, "cores"))
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -109,8 +111,7 @@ if(as.logical(skiptoinla) == FALSE){
     if(age!=0) df <- as.data.table(stratum_ho[[paste('region',reg,'_age',age,sep='__')]])
     if(age==0) df <- as.data.table(stratum_ho[[paste('region',reg,sep='__')]])
     df <- df[fold != holdout, ]
-  }
-  if(holdout==0) {
+  } else {
     message('Holdout == 0 so loading in full dataset using load_input_data()')
     df <- load_input_data(indicator   = gsub(paste0('_age',age),'',indicator),
                           simple      = simple_polygon,
@@ -161,10 +162,8 @@ if(as.logical(skiptoinla) == FALSE){
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   ## Define modeling space. In years only for now.
-  if(yearload=='annual') period_map <-
-                         make_period_map(modeling_periods = c(min(year_list):max(year_list)))
-  if(yearload=='five-year') period_map <-
-                            make_period_map(modeling_periods = seq(min(year_list),max(year_list),by=5))
+  if(yearload=='annual') period_map <- make_period_map(modeling_periods = c(min(year_list):max(year_list)))
+  if(yearload=='five-year') period_map <- make_period_map(modeling_periods = seq(min(year_list), max(year_list), by = 5))
 
   ## Make placeholders for covariates
   cov_layers <- gbd_cov_layers <- NULL
@@ -220,7 +219,7 @@ if(as.logical(skiptoinla) == FALSE){
                                                subset_only = TRUE,
                                                shapefile_version = modeling_shapefile_version)
     fe_subset_shape     <- simple_polygon_list[[1]]
-    gaul_code <- rasterize(fe_subset_shape, fe_template, field = 'ADM0_CODE')
+    gaul_code <- rasterize_check_coverage(fe_subset_shape, fe_template, field = 'ADM0_CODE')
     gaul_code <- setNames(gaul_code,'gaul_code')
     gaul_code <- create_categorical_raster(gaul_code)
 
@@ -276,7 +275,8 @@ if(as.logical(skiptoinla) == FALSE){
                                 period_map          = period_map)
 
   # A check to see if any of the variables do not vary across the data. This could break model later so we check and update some objects
-  covchecklist <- check_for_cov_issues(check_pixelcount = check_cov_pixelcount)
+  covchecklist <- check_for_cov_issues(check_pixelcount = check_cov_pixelcount,
+                                       check_pixelcount_thresh = ifelse(exists("pixelcount_thresh"), as.numeric(pixelcount_thresh), 0.95))
   for(n in names(covchecklist)){
     assign(n, covchecklist[[n]])
   }
@@ -315,26 +315,26 @@ if(as.logical(skiptoinla) == FALSE){
   ## seperated out into a different script
   if(as.logical(use_stacking_covs)){
     message('Fitting Stackers')
-    # sourcing this script will run the child stackers:
-    source(paste0(core_repo, '/mbg_central/share_scripts/run_child_stackers.R'))
-
-    ## combine the children models
-    the_data  <- cbind(the_data, do.call(cbind, lapply(lapply(child_model_names, 'get'), function(x) x[[1]])))
-    child_model_objs <- setNames(lapply(lapply(child_model_names, 'get'), function(x) x[[2]]), child_model_names)
-
-    ## fit GAM stacker -- SOON TO BE DEPRECIATED, right Daniel?
-    stacked_results <- gam_stacker(the_data,
-                                   model_names      = child_model_names,
-                                   indicator        = indicator,
-                                   indicator_family = indicator_family)
-
+    
+    # Run the child stacker models 
+    child_model_run <- run_child_stackers(models = child_model_names, input_data = the_data)
+    
+    # Bind the list of predictions into a data frame
+    child_mods_df <- do.call(cbind, lapply(child_model_run, function(x) x[[1]]))
+    
+    ## combine the children models with the_data
+    the_data  <- cbind(the_data, child_mods_df)
+    
+    ## Rename the child model objects into a named list
+    child_model_objs <- setNames(lapply(child_model_run, function(x) x[[2]]), child_model_names)
+    
+    
+    
     ## return the stacked rasters
     stacked_rasters <- make_stack_rasters(covariate_layers = all_cov_layers, #raster layers and bricks
                                           period           = min(period_map[, period_id]):max(period_map[, period_id]),
                                           child_models     = child_model_objs,
-                                          stacker_model    = stacked_results[[2]],
                                           indicator_family = indicator_family,
-                                          return_children  = TRUE,
                                           centre_scale_df  = covs_cs_df)
 
     ## plot stackers
@@ -409,7 +409,11 @@ if(as.logical(skiptoinla) == FALSE){
                              s2params = s2_mesh_params)
 
   ## Build temporal mesh (standard for now)
-  mesh_t <- build_time_mesh(periods=eval(parse(text=mesh_t_knots)))
+  if (length(unique(year_list)) == 1) {
+    mesh_t <- NULL
+  } else { 
+    mesh_t <- build_time_mesh(periods = eval(parse(text = mesh_t_knots)))
+  }
 
 
   ## ## For raw covs, don't want to center-scale (as that will happen in `build_mbg_data_stack()`)
@@ -476,7 +480,18 @@ if (as.logical(stackers_in_transform_space) & indicator_family == 'binomial' & a
   message('Converting stackers to logit space')
 
   ## transform the rasters
-  for (ii in child_model_names) cov_list[[ii]] <- logit(cov_list[[ii]])
+  for (ii in child_model_names) {
+    
+    ## Preserve variable names in the raster first
+    tmp_rastvar <- names(cov_list[[ii]])
+    
+    ## Logit
+    cov_list[[ii]] <- logit(cov_list[[ii]])
+    
+    ## Reassign names
+    names(cov_list[[ii]]) <- tmp_rastvar
+    rm(tmp_rastvar)
+  }
 
   ## transform the stacker values that are in df
   stacker_cols <- grep(paste0("(", paste(child_model_names, collapse="|"), ")(.*_pred)"), names(df), value=T)
@@ -550,6 +565,22 @@ if(is.null(weights)){
 
 tic("MBG - fit model") ## Start MBG - model fit timer
 
+## Set the number of cores to be equal to input;
+## If missing, then revert to cores_to_use value
+if(Sys.getenv("OMP_NUM_THREADS") != "") {
+    setompthreads(Sys.getenv("OMP_NUM_THREADS"))
+} else {
+    print("Threading information not found; setting cores_to_use as the input OpenMP threads.")
+    setompthreads(cores_to_use)
+}
+
+if(Sys.getenv("MKL_NUM_THREADS") != "") {
+    setmklthreads(Sys.getenv("MKL_NUM_THREADS"))
+} else {
+    print("Threading information not found; setting cores_to_use as the input MKL threads.")
+    setmklthreads(cores_to_use)
+}
+
 ## Fit MBG model
 if(!as.logical(skipinla)) {
   if(fit_with_tmb == FALSE) {
@@ -567,10 +598,9 @@ if(!as.logical(skipinla)) {
                          cores            = cores_to_use,
                          wgts             = weights,
                          intstrat         = intstrat,
-                         fe_sd_prior      = 1 / 9) ## this actually sets precision!. prec=1/9 -> sd=3
-  }
-
-  if(fit_with_tmb == TRUE) {
+                         fe_sd_prior      = 1 / 9)    ## this actually sets precision!. prec=1/9 -> sd=3
+                       
+  } else {
     message('Fitting model with TMB')
     message(sprintf('%i Data points and %i mesh nodes',nrow(df),length(input_data$Parameters$Epsilon_stz)))
 
@@ -590,8 +620,6 @@ if(!as.logical(skipinla)) {
 
     # clamping
     clamp_covs <- TRUE # TODO CONFIG THIS
-
-
   }
 
   saveRDS(object = model_fit, ## save this here in case predict dies
@@ -631,8 +659,7 @@ pm <- lapply(chunks, function(samp) {
                 transform     = transform,
                 coefs.sum1    = coefs_sum1,
                 pred_gp       = as.logical(use_gp),
-                shapefile_version = modeling_shapefile_version
-                )[[3]]
+                shapefile_version = modeling_shapefile_version)[[3]]
   } else {
     predict_mbg_tmb(samples              = samp,
                     seed                 = NULL,

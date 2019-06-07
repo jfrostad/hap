@@ -221,11 +221,12 @@ combine_aggregation <- function(rd = run_date,
                                 raked,
                                 dir_to_search = NULL,
                                 delete_region_files = T,
-                                merge_hierarchy_list = F) {
-
+                                merge_hierarchy_list = F,
+                                check_for_dupes = F) {
+  
   # Combine aggregation objects across region
   # Jon Mosser / jmosser@uw.edu
-
+  
   # Args:
   #   run_date, indicator, indicator_group for this run
   #   ages: single value or vector of ages
@@ -235,65 +236,79 @@ combine_aggregation <- function(rd = run_date,
   #   dir_to_search: which directory to search in (defaults to share directory)
   #   delete_region_files: logical. Should we delete the region-specific intermediate files?
   #   merge_hierarchy_list: logical. Do you want to merge the sp_hierarchy_list onto your admin tables?
-
+  
   # Outputs:
   #   rdata files for each combo of age/holdout/raked
   #   each with admin_0, admin_1, admin_2 data table objects & the sp_hierarchy_list object
   #   that maps them to names of admin units
-
+  
   if (is.null(dir_to_search)) {
     dir_to_search <- paste0("/share/geospatial/mbg/",ig,"/",indic,"/output/",run_date,"/")
   }
-
+  
   message("Combining aggregation results...")
-
-   for(rake in raked) {
+  
+  for(rake in raked) {
     for (holdout in holdouts) {
       for (age in ages) {
         message(paste0("\nWorking on age: ", age, " | holdout: ", holdout, " | raked: ", rake))
-
+        
         # Set up lists
         ad0 <- list()
         ad1 <- list()
         ad2 <- list()
         sp_h <- list()
-
+        
+       
         for (reg in regions) {
           message(paste0("  Region: ", reg))
+          
           load(paste0(dir_to_search, indic, "_", ifelse(rake, "raked", "unraked"),
                       "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"))
-
+          
           if(merge_hierarchy_list == T) {
             # Prepare hierarchy list for adm0
             ad0_list <- subset(sp_hierarchy_list, select = c("ADM0_CODE", "ADM0_NAME", "region")) %>% unique
-
+            
             # Prepare hierarchy list for adm1
             ad1_list <- subset(sp_hierarchy_list,
                                select = c("ADM0_CODE", "ADM1_CODE", "ADM0_NAME", "ADM1_NAME", "region")) %>%
-                        unique
-
+              unique
+            
             # Merge
             admin_0 <- merge(ad0_list, admin_0, by = "ADM0_CODE", all.y = T)
             admin_1 <- merge(ad1_list, admin_1, by = "ADM1_CODE", all.y = T)
             admin_2 <- merge(sp_hierarchy_list, admin_2, by = "ADM2_CODE", all.y = T)
             rm(ad0_list, ad1_list)
           }
-
-          ad0[[reg]] <- admin_0
-          ad1[[reg]] <- admin_1
-          ad2[[reg]] <- admin_2
-          sp_h[[reg]] <- sp_hierarchy_list
-
+          if(check_for_dupes){
+            adms <- get_adm0_codes(reg)
+            sp_hier <- get_sp_hierarchy()
+            include_ad0 <- sp_hier$ADM0[ADM0_CODE %in% adms, ADM0_CODE]
+            include_ad1 <- sp_hier$ADM1[ADM0_CODE %in% adms, ADM1_CODE]
+            include_ad2 <- sp_hier$ADM2[ADM0_CODE %in% adms, ADM2_CODE]
+            
+            ad0[[reg]] <- admin_0[ADM0_CODE %in% include_ad0]
+            ad1[[reg]] <- admin_1[ADM1_CODE %in% include_ad1]
+            ad2[[reg]] <- admin_2[ADM2_CODE %in% include_ad2]
+            sp_h[[reg]] <- sp_hierarchy_list
+          } else{
+            ad0[[reg]] <- admin_0
+            ad1[[reg]] <- admin_1
+            ad2[[reg]] <- admin_2
+            sp_h[[reg]] <- sp_hierarchy_list
+          }
+          
           rm(admin_0, admin_1, admin_2, sp_hierarchy_list)
         }
-
+        
         # Get to long format & save
         message("  Combining...")
         admin_0 <- rbindlist(ad0)
         admin_1 <- rbindlist(ad1)
         admin_2 <- rbindlist(ad2)
         sp_hierarchy_list <- rbindlist(sp_h)
-
+        
         message("  Saving combined file...")
         save(admin_0, admin_1, admin_2, sp_hierarchy_list,
              file = paste0(dir_to_search, indic, "_",
@@ -303,33 +318,32 @@ combine_aggregation <- function(rd = run_date,
       }
     }
   }
-
+  
   if (delete_region_files == T) {
     # Make sure all full files are written
     combos <- expand.grid(ifelse(raked, "raked", "unraked"), ages, holdouts)
     files_to_check <- sapply(1:nrow(combos), function(i) {
-                          paste0(dir_to_search, indic, "_", combos[i, 1],
-                          "_admin_draws_eb_bin", combos[i, 2], "_", combos[i,3], ".RData")
-                        })
-
+      paste0(dir_to_search, indic, "_", combos[i, 1],
+             "_admin_draws_eb_bin", combos[i, 2], "_", combos[i,3], ".RData")
+    })
+    
     if (all(file.exists(files_to_check))) {
       message("All anticipated combined files were created successfully.  Deleting intermediate files...")
       combos <- expand.grid(ifelse(raked, "raked", "unraked"), ages, regions, holdouts)
       files_to_delete <- sapply(1:nrow(combos), function(i) {
-                              paste0(dir_to_search, indic, "_", combos[i, 1],
-                              "_admin_draws_eb_bin", combos[i, 2], "_", combos[i,3], "_", combos[i, 4], ".RData")
-                            })
+        paste0(dir_to_search, indic, "_", combos[i, 1],
+               "_admin_draws_eb_bin", combos[i, 2], "_", combos[i,3], "_", combos[i, 4], ".RData")
+      })
       unlink(files_to_delete)
     } else {
       warning("Did not delete intermediate files - not all output files created successfully!")
     }
   }
-
+  
   # Finally, delete the "fin" files
   fin_files_to_delete <- list.files(dir_to_search, pattern = "fin_agg_", full.names=T)
   unlink(fin_files_to_delete)
 }
-
 ## get_singularity ------------------------------------------------------------
 #' Which Singularity image to use
 #'
@@ -453,208 +467,73 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
   return(qsub_stub)
 }
 
-# make_qsub --------------------------------------------------------------------
-#'
-#' Constructs a qsub string and returns it
-#'
-#' @param geo_nodes If TRUE, your job will be submitted to the geos (LBD)
-#'   cluster, if FALSE, it will be submitted to the prod cluster. Note that if
-#'   using the 'proj' argument, make sure to use project name which is valid on
-#'   the cluster you are submitting to. [default = FALSE]
-#'
-#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on 
-#'   the prod cluster, if FALSE, the C2 nodes are not specified. Note that if
-#'   FALSE, your job may land on a node with much less memory or your node may
-#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes' 
-#'   arguments are set to TRUE, then the code will issue a warning and default
-#'   to the geos nodes. [default = FALSE]
-#'
-#' @param proj Can pass in a project name to submit your job under. If default
-#'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
-#'   will be submitted to the prod cluster under the default project
-#'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
-#'   submitted to the geos (LBD) nodes under the default project 
-#'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
-#'   be submitted under that project. Note that this function does not check for
-#'   valid project names since these are likely to change often and likely 
-#'   valid project names are different on each cluster. [default = NULL]
-#' 
-#' @param singularity Launch R from a Singularity image. The default is
-#   'default' indicating that you wish to launch a Singularity container from
-#'   the default image. You may also provide a string which can be either a complete
-#'   path to a Singularity image that is not located at the default image
-#'   location, or just the name of the Singularity image that is assumed located
-#'   at the default image location. NULL is also accepted, which will launch R
-#'   using the default R installation on the geos or prod nodes, but this is
-#'   no longer recommended and will likely be deprecated at some point in the
-#'   future.
-#'
-#'   If 'default' is chosen, the default image is defined in the shell script
-#'   executed by this R script ('shell_sing.sh') so that no R code need be
-#'   updated when the default image is updated. Different versions of a
-#'   Singularity image or test versions may be specified by providing the name
-#'   or path of the image. Currently, all standard images for LBD are kept at
-#'   the default location of /share/singularity-images/lbd.
-#'   [default = 'default']
-#' @param singularity_opts pass in a named list of environmental variables.
-#'   \code{qsub_sing_envs} will check that the names of the list members passed
-#'   in match the environmental variables that the shell_sing.sh script knows
-#'   about: 'SET_OMP_THREADS' and/or 'SET_MKL_THREADS'. Passing in other
-#'   environmental names in the list will result in an error. If this is left
-#'   as 'NULL' and a Singularity image is used, SET_OMP_THREADS and
-#'   SET_MKL_THREADS will remain unset and the shell_sing.sh script will use
-#'   the default setting of SET_OMP_THREADS=1 and SET_MKL_THREADS={max_threads}
-#'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
-#'   SET_MKL_THREADS=4 can be achieved by passing in
-#'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = NULL]
-#'
-#' @return Returns a qsub string
-#'
-make_qsub <- function(user                     = Sys.info()['user'],
-                      code,
-                      cores                    = slots,
-                      memory                   = 100,
-                      proj                     = NULL,
-                      ig                       = indicator_group,
-                      indic                    = indicator,
-                      reg                      = "test",
-                      age                      = 0,
-                      vallevel                 = '',
-                      hard_set_sbh_wgt         = TRUE,
-                      pct_sbh_wgt              = 100,
-                      rd                       = run_date,
-                      log_location             = 'sgeoutput',
-                      saveimage                = FALSE,
-                      test                     = FALSE,
-                      holdout                  = 0,
-                      use_base_covariates      = FALSE,
-                      test_pv_on_child_models  = TRUE,
-                      constrain_children_0_inf = FALSE,
-                      child_cv_folds           = 5,
-                      fit_stack_cv             = TRUE,
-                      shell                    = "r_shell.sh",
-                      modeltype                = 'full',
-                      corerepo                 = core_repo,
-                      geo_nodes                = FALSE,
-                      use_c2_nodes             = FALSE,
-                      singularity              = 'default',
-                      singularity_opts         = NULL) {
-
-  if(test) t=1 else t=0
-  if(use_base_covariates) b=1 else b=0
-  if(test_pv_on_child_models) pvc=1 else pvc=0
-  if(constrain_children_0_inf) cc0i=1 else cc0i=0
-  if(fit_stack_cv) fscv=1 else fscv=0
-  if(hard_set_sbh_wgt) hssw=1 else hssw=0
-
-  if(saveimage==TRUE)  save.image(paste0('/share/geospatial/mbg/', ig, '/', indic, '/model_image_history/pre_run_tempimage_', rd, '_bin',age,'_',reg,'_',holdout,'.RData'))
-
-  #dir.create(sprintf('%s/output/%s',sharedir,rd))
-  dir.create(paste0('/share/geospatial/mbg/', ig, '/', indic,'/output/',rd), showWarnings = F)
-
-  sharedir <- sprintf('/share/geospatial/mbg/%s/%s',ig,indic)
-
-  if(log_location=='sgeoutput')
-    logloc = sprintf('/share/temp/sgeoutput/%s',user)
-  if(log_location=='sharedir'){
-    logloc = sprintf('%s/output/%s',sharedir,rd)
-    dir.create(sprintf('%s/errors',logloc), showWarnings = F)
-    dir.create(sprintf('%s/output',logloc), showWarnings = F)
-  }
-
-  # Submit to geo or prod nodes with different default projects. 
-  if(geo_nodes) {
-    # The geo nodes have default project 'proj_geo_nodes' if the 'proj' argument 
-    # is left as NULL and also require the '-l geos_node=TRUE' complex for UGE
-    if(is.null(proj)) proj <- "proj_geo_nodes"
-    node.flag <- "-l geos_node=TRUE"
-  } else {
-    # The prod nodes have default project 'proj_geospatial' if the 'proj'
-    # argument is left as NULL
-    if(is.null(proj)) proj <- "proj_geospatial"
-    if(use_c2_nodes) node.flag <- "-q all.q@@c2-nodes" else node.flag <- ""
-  }
-
-  # At least give a warning if both 'geo_nodes' and 'use_c2_nodes' are requested
-  if(geo_nodes & use_c2_nodes) {
-    message("WARNING: Both 'geo_nodes' and 'use_c2_nodes' arguments were set to TRUE")
-    message(paste0("         Submitting job to LBD nodes under project: '", proj, "'"))
-  }
-
-  # If the user has passed in options for the Singularity container in the
-  # 'singularity_opts' argument, but the 'singularity' argument is 'NULL' exit
-  # with an error.
-  if(is.null(singularity) & !is.null(singularity_opts)) {
-    message("'singularity' argument is 'NULL' but options passed in for 'singularity_opts'")
-    stop("Exiting!")
-  }
-
-  # If the script is to be run with R from a Singularity container, point to
-  # the shell script to launch the container. Users can provide the 'default'
-  # keyword to get the default Singulariy image, just the name of the image
-  # located at the default path, or the full path to the image.
-  if(!is.null(singularity)) {
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
-    # Determine which Singularity image to use:
-    sing_image <- get_singularity(image = singularity)
-  } else {
-    # if not, fire up the appropriate version of R depending on the cluster node
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_cluster.sh')
-  }
-
-  # Piece together lengthy `qsub` command
-  qsub <- paste0("qsub",
-                 " -e ", logloc, "/errors",
-                 " -o ", logloc, "/output",
-                 " -cwd -l mem_free=", memory, "G",
-                 " -pe multi_slot ", cores,
-                 " -P ", proj, " ", node.flag)
-
-  # If a Singularity image is being used, pass the name of the image from
-  # `get_singularity` as well as any other environmentals the user asked for
-  # from the 'singularity_opts' argument to the qsub job
-  if(!is.null(singularity)) qsub <- qsub_sing_envs(qsub, singularity_opts,
-                                                   sing_image)
-
-  # append the rest of the qsub command
-  qsub <- paste0(qsub,
-                 " -N job_", reg, "_", age, "_", holdout, vallevel,
-                 " ", ig, "/", shell, " ", ig, "/", code, ".R")
-  qsub <- paste(qsub,
-                reg, age, rd, t, holdout, indic, ig, b, pvc, cc0i,
-                child_cv_folds, fscv, modeltype, vallevel, pct_sbh_wgt, hssw,
-                sep = " ")
-
-  return(qsub)
-}
-
 # make_qsub_share --------------------------------------------------------------
 #'
-#' Constructs a qsub string and returns it
+#' @title Make qsub string (share)
+#'
+#' @description Constructs a qsub string and returns it
+#'
+#' @param user Username
+#' 
+#' @param code Name of script, with relative path if desired.
+#' 
+#' @param code_path Full path to R script. Override \code{code}
+#' 
+#' @param cores Number of threads. Default: 2
+#' 
+#' @param memory RAM to be reserved, in GBs
+#'
+#' @param proj Can pass in a project name to submit your job under. If default
+#'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
+#'   will be submitted to the prod cluster under the default project
+#'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
+#'   submitted to the geos (LBD) nodes under the default project
+#'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
+#'   be submitted under that project. Note that this function does not check for
+#'   valid project names since these are likely to change often and likely
+#'   valid project names are different on each cluster. [default = NULL]
+#'
+#' @param ig Indicator Group
+#' 
+#' @param indic Indicator
+#' 
+#' @param reg Region
+#' 
+#' @param age Age
+#' 
+#' @param rd Run date
+#' 
+#' @param log_location Location of logs
+#' 
+#' @param addl_job_name Additional name appended to end of job
+#'
+#' @param saveimage Save image of prerun image?
+#' 
+#' @param test Run test job?
+#' 
+#' @param holdout Holdout
+#' 
+#' @param corerepo Path to core repo
 #'
 #' @param geo_nodes If TRUE, your job will be submitted to the geos (LBD)
 #'   cluster, if FALSE, it will be submitted to the prod cluster. Note that if
 #'   using the 'proj' argument, make sure to use project name which is valid on
 #'   the cluster you are submitting to. [default = FALSE]
 #'
-#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on 
+#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on
 #'   the prod cluster, if FALSE, the C2 nodes are not specified. Note that if
 #'   FALSE, your job may land on a node with much less memory or your node may
-#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes' 
+#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes'
 #'   arguments are set to TRUE, then the code will issue a warning and default
 #'   to the geos nodes. [default = FALSE]
+
+#' @param queue Queue to be used on the fair cluster.
 #'
-#' @param proj Can pass in a project name to submit your job under. If default
-#'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
-#'   will be submitted to the prod cluster under the default project
-#'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
-#'   submitted to the geos (LBD) nodes under the default project 
-#'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
-#'   be submitted under that project. Note that this function does not check for
-#'   valid project names since these are likely to change often and likely 
-#'   valid project names are different on each cluster. [default = NULL]
-#' 
+#' @param run_time Run-time to be used on the fair cluster.
+#'
+#' @param priority Job priority that can be deprioritized if needed, and can only be used for values in [-1023,0]. Default = 0.
+#' This value will get bounded to 0 or -1023 if the user supplies a value outside those bounds.
+#'
 #' @param singularity Launch R from a Singularity image. The default is
 #   'default' indicating that you wish to launch a Singularity container from
 #'   the default image. You may also provide a string which can be either a complete
@@ -672,6 +551,7 @@ make_qsub <- function(user                     = Sys.info()['user'],
 #'   or path of the image. Currently, all standard images for LBD are kept at
 #'   the default location of /share/singularity-images/lbd.
 #'   [default = 'default']
+#' 
 #' @param singularity_opts pass in a named list of environmental variables.
 #'   \code{qsub_sing_envs} will check that the names of the list members passed
 #'   in match the environmental variables that the shell_sing.sh script knows
@@ -683,143 +563,171 @@ make_qsub <- function(user                     = Sys.info()['user'],
 #'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
 #'   SET_MKL_THREADS=4 can be achieved by passing in
 #'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = NULL]
+#'   [default = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)]
 #'
 #' @return Returns a qsub string
+#' @export
 #'
-make_qsub_share <- function(user             = Sys.info()['user'],
-                            code             = NULL,
-                            cores            = slots,
-                            memory           = 100,
-                            proj             = NULL,
-                            ig               = indicator_group,
-                            indic            = indicator,
-                            reg              = "test",
-                            age              = 0,
-                            rd               = run_date,
-                            log_location     = 'sharedir',
-                            addl_job_name    = '',
-                            saveimage        = FALSE,
-                            test             = FALSE,
-                            holdout          = 0,
-                            corerepo         = core_repo,
-                            geo_nodes        = FALSE,
-                            use_c2_nodes     = FALSE,
-                            singularity      = 'default',
-                            singularity_opts = NULL) {
-
+make_qsub_share <- function(user = Sys.info()["user"],
+                            code = NULL,
+                            code_path = NULL,
+                            cores = 2,
+                            memory = 100,
+                            proj = NULL,
+                            ig = indicator_group,
+                            indic = indicator,
+                            reg = "test",
+                            age = 0,
+                            rd = run_date,
+                            log_location = "sharedir",
+                            addl_job_name = "",
+                            saveimage = FALSE,
+                            test = FALSE,
+                            holdout = 0,
+                            corerepo = core_repo,
+                            geo_nodes = FALSE,
+                            use_c2_nodes = FALSE,
+                            queue = NULL,
+                            run_time = NULL,
+                            priority = 0,
+                            singularity = singularity_version,
+                            singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)) {
+  
   # save an image
-  if(saveimage==TRUE)  save.image(paste0('/share/geospatial/mbg/', ig, '/', indic, '/model_image_history/pre_run_tempimage_', rd, '_bin',age,'_',reg,'_',holdout,'.RData'))
-
-  # sort directories
-  sharedir <- sprintf('/share/geospatial/mbg/%s/%s',ig,indic)
-  dir.create(sprintf('%s/output/%s',sharedir,rd), showWarnings = FALSE)
-
-  if(log_location=='sgeoutput')
-    logloc = sprintf('/share/temp/sgeoutput/%s',user)
-  if(log_location=='sharedir'){
-    logloc = sprintf('%s/output/%s',sharedir,rd)
-    dir.create(sprintf('%s/errors',logloc), showWarnings = FALSE)
-    dir.create(sprintf('%s/output',logloc), showWarnings = FALSE)
-  }
-
-  # Submit to geo or prod nodes with different default projects. 
-  if(geo_nodes) {
-    # The geo nodes have default project 'proj_geo_nodes' if the 'proj' argument 
-    # is left as NULL and also require the '-l geos_node=TRUE' complex for UGE
-    if(is.null(proj)) proj <- "proj_geo_nodes"
-    node.flag <- "-l geos_node=TRUE"
+  if (saveimage == TRUE) save.image(pre_run_image_path(ig, indic, rd, age, reg, holdout))
+  
+  # Define project first (necessary to validate node options)
+  proj <- get_project(proj, use_geo_nodes = geo_nodes)
+  
+  # Validate arguments
+  validate_singularity_options(singularity, singularity_opts)
+  validate_node_option(geo_nodes, use_c2_nodes, proj)
+  
+  # Create sharedir (TODO is this necessary?)
+  sharedir <- get_model_output_dir(ig, indic, rd)
+  dir.create(sharedir, showWarnings = FALSE)
+  
+  # Determine where stdout and stderr files will go
+  output_err <- setup_log_location(log_location, user, indic, ig, rd)
+  output_log_dir <- output_err[[1]]
+  error_log_dir <- output_err[[2]]
+  
+  # Define remaining job attributes
+  job_name <- paste0("job_", addl_job_name, "_", reg, "_", age, "_", holdout)
+  run_time <- get_run_time(use_geo_nodes = geo_nodes, use_c2_nodes = use_c2_nodes, queue = queue, run_time = run_time)
+  queue <- get_queue(use_geo_nodes = geo_nodes, use_c2_nodes = use_c2_nodes, queue = queue, run_time = run_time)
+  shell <- paste0(corerepo, "/mbg_central/share_scripts/shell_sing.sh")
+  sing_image <- get_singularity(image = singularity)
+  
+  # resources are all the -l qsub arguments
+  resources <- get_resources(use_geo_nodes = geo_nodes, cores = cores, ram_gb = memory, runtime = run_time)
+  
+  # set code to shared parallel if its NULL
+  if (is.null(code)) {
+    code <- sprintf("%s/mbg_central/share_scripts/parallel_model.R", corerepo)
   } else {
-    # The prod nodes have default project 'proj_geospatial' if the 'proj'
-    # argument is left as NULL
-    if(is.null(proj)) proj <- "proj_geospatial"
-    if(use_c2_nodes) node.flag <- "-q all.q@@c2-nodes" else node.flag <- ""
+    code <- sprintf("%s/%s/%s.R", corerepo, ig, code)
   }
-
-  # At least give a warning if both 'geo_nodes' and 'use_c2_nodes' are requested
-  if(geo_nodes & use_c2_nodes) {
-    message("WARNING: Both 'geo_nodes' and 'use_c2_nodes' arguments were set to TRUE")
-    message(paste0("         Submitting job to LBD nodes under project: '", proj, "'"))
+  
+  # If code_path is not NULL, then override `code`
+  if(!is.null(code_path)) {
+    code <- code_path
   }
-
-  # If the user has passed in options for the Singularity container in the
-  # 'singularity_opts' argument, but the 'singularity' argument is 'NULL' exit
-  # with an error.
-  if(is.null(singularity) & !is.null(singularity_opts)) {
-    message("'singularity' argument is 'NULL' but options passed in for 'singularity_opts'")
-    stop("Exiting!")
-  }
-
-  # If the script is to be run with R from a Singularity container, point to
-  # the shell script to launch the container. Users can provide the 'default'
-  # keyword to get the default Singulariy image, just the name of the image
-  # located at the default path, or the full path to the image.
-  if(!is.null(singularity)) {
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
-    # Determine which Singularity image to use:
-    sing_image <- get_singularity(image = singularity)
-  } else {
-    # if not, fire up the appropriate version of R depending on the cluster node
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_cluster.sh')
-  }
-
-  # set code to shared paralel if its NULL
-  if(is.null(code)) {
-    code <- sprintf('%s/mbg_central/share_scripts/parallel_model.R',corerepo)
-  } else {
-    code <- sprintf('%s/%s/%s.R',corerepo,ig,code)
-  }
-
-  # Piece together lengthy `qsub` command
-  qsub <- paste0("qsub",
-                 " -e ", logloc, "/errors",
-                 " -o ", logloc, "/output",
-                 " -cwd -l mem_free=", memory, "G",
-                 " -pe multi_slot ", cores,
-                 " -P ", proj, " ", node.flag)
-
-  # If a Singularity image is being used, pass the name of the image from
-  # `get_singularity` as well as any other environmentals the user asked for
-  # from the 'singularity_opts' argument to the qsub job
-  if(!is.null(singularity)) qsub <- qsub_sing_envs(qsub, singularity_opts,
-                                                   sing_image)
-
-  # append the rest of the qsub command
-  qsub <- paste0(qsub,
-                 " -N job_", addl_job_name, "_", reg, "_", age, "_", holdout)
-  qsub <- paste(qsub,
-                shell, code, reg, age, rd, as.numeric(test), holdout, indic, ig, "fin",
-                sep = " ")
-
+  
+  qsub <- generate_qsub_command(
+    # qsub-specific arguments
+    stderr_log = error_log_dir,
+    stdout_log = output_log_dir,
+    project = proj,
+    resources = resources,
+    job_name = job_name,
+    singularity_str = qsub_sing_envs("", singularity_opts, sing_image),
+    cores = cores,
+    queue = queue,
+    priority = priority,
+    # Command to qsub
+    shell, code, reg, age, rd, as.numeric(test), holdout, indic, ig, "fin"
+  )
+  
   return(qsub)
 }
+
 
 # make_qsub_postest -------------------------------------------------------------
 #'
-#' Constructs a qsub string for the post_estimation script and returns it
+#' @title Make qsub string for post estimation
+#'
+#' @description Constructs a qsub string for the post estimation script and returns it
+#'
+#' @param user Username
+#'
+#' @param code Name of script, with relative path if desired.
+#'
+#' @param code_path Full path to R script. Overrides \code{code} and \code{script_dir}
+#'
+#' @param cores Number of threads. Default: 2.
+#'
+#' @param memory RAM to be reserved, in GBs
+#'
+#' @param proj Can pass in a project name to submit your job under. If default
+#'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
+#'   will be submitted to the prod cluster under the default project
+#'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
+#'   submitted to the geos (LBD) nodes under the default project
+#'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
+#'   be submitted under that project. Note that this function does not check for
+#'   valid project names since these are likely to change often and likely
+#'   valid project names are different on each cluster. [default = NULL]
+#'
+#' @param ig Indicator Group
+#'
+#' @param indic Indicator
+#'
+#' @param stratum "Strata" , usually region
+#'
+#' @param age Age
+#'
+#' @param rd Run date
+#'
+#' @param log_location Location of logs
+#'
+#' @param script_dir Location of post-estimation script
+#'
+#' @param addl_job_name Additional name appended to end of job
+#'
+#' @param saveimage Save image of prerun image?
+#'
+#' @param test Run test job?
+#'
+#' @param holdout Holdout
+#'
+#' @param corerepo Path to core repo
+#'
+#' @param modeling_shapefile_version Modeling shapefile version, defaults to "current"
+#'
+#' @param raking_shapefile_version Raking shapefile version, defaults to "current",
+#'
+#' @param subnat_raking Do subnational raking?
 #'
 #' @param geo_nodes If TRUE, your job will be submitted to the geos (LBD)
 #'   cluster, if FALSE, it will be submitted to the prod cluster. Note that if
 #'   using the 'proj' argument, make sure to use project name which is valid on
 #'   the cluster you are submitting to. [default = FALSE]
 #'
-#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on 
+#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on
 #'   the prod cluster, if FALSE, the C2 nodes are not specified. Note that if
 #'   FALSE, your job may land on a node with much less memory or your node may
-#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes' 
+#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes'
 #'   arguments are set to TRUE, then the code will issue a warning and default
 #'   to the geos nodes. [default = FALSE]
+
+#' @param queue Queue to be used on the fair cluster.
 #'
-#' @param proj Can pass in a project name to submit your job under. If default
-#'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
-#'   will be submitted to the prod cluster under the default project
-#'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
-#'   submitted to the geos (LBD) nodes under the default project 
-#'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
-#'   be submitted under that project. Note that this function does not check for
-#'   valid project names since these are likely to change often and likely 
-#'   valid project names are different on each cluster. [default = NULL]
-#' 
+#' @param run_time Run-time to be used on the fair cluster.
+#'
+#' @param priority Job priority that can be deprioritized if needed, and can only be used for values in [-1023,0]. Default = 0.
+#' This value will get bounded to 0 or -1023 if the user supplies a value outside those bounds.
+#'
 #' @param singularity Launch R from a Singularity image. The default is
 #   'default' indicating that you wish to launch a Singularity container from
 #'   the default image. You may also provide a string which can be either a complete
@@ -837,6 +745,7 @@ make_qsub_share <- function(user             = Sys.info()['user'],
 #'   or path of the image. Currently, all standard images for LBD are kept at
 #'   the default location of /share/singularity-images/lbd.
 #'   [default = 'default']
+#'
 #' @param singularity_opts pass in a named list of environmental variables.
 #'   \code{qsub_sing_envs} will check that the names of the list members passed
 #'   in match the environmental variables that the shell_sing.sh script knows
@@ -848,115 +757,97 @@ make_qsub_share <- function(user             = Sys.info()['user'],
 #'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
 #'   SET_MKL_THREADS=4 can be achieved by passing in
 #'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = NULL]
+#'   [default = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)]
 #'
 #' @return Returns a qsub string
 #'
-make_qsub_postest <- function(user             = Sys.info()['user'],
+#' @export
+make_qsub_postest <- function(user = Sys.info()["user"],
                               code,
-                              cores            = slots,
-                              memory           = 100,
-                              proj             = NULL,
-                              ig               = indicator_group,
-                              indic            = indicator,
-                              stratum          = "test",
-                              rd               = run_date,
-                              log_location     = 'sgeoutput',
-                              script_dir       = NULL,
-                              keepimage        = FALSE,
-                              corerepo         = core_repo,
-                              modeling_shapefile_version = 'current',
-                              raking_shapefile_version = 'current',
-                              subnat_raking    = TRUE, 
-                              geo_nodes        = FALSE,
-                              use_c2_nodes     = FALSE,
-                              singularity      = 'default',
-                              singularity_opts = NULL) {
-
-  sharedir <- paste0('/share/geospatial/mbg/', ig, '/', indic, '/output/', rd, '/')
-  temp_dir <- paste0(sharedir, 'temp_post_est/')
+                              code_path = NULL,
+                              cores = 2,
+                              memory = 100,
+                              proj = NULL,
+                              ig = indicator_group,
+                              indic = indicator,
+                              stratum = "test",
+                              addl_job_name = "",
+                              rd = run_date,
+                              log_location = "sgeoutput",
+                              script_dir = NULL,
+                              keepimage = FALSE,
+                              corerepo = core_repo,
+                              modeling_shapefile_version = "current",
+                              raking_shapefile_version = "current",
+                              subnat_raking = TRUE,
+                              geo_nodes = FALSE,
+                              use_c2_nodes = FALSE,
+                              queue = NULL,
+                              run_time = NULL,
+                              priority = 0,
+                              singularity = singularity_version,
+                              singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)) {
+  
+  # Create test_post_est dir within model dir.
+  temp_dir <- path_join(get_model_output_dir(ig, indic, rd), "test_post_est")
   dir.create(temp_dir, showWarnings = F)
-
-  if(is.null(script_dir)) script_dir <- paste0(corerepo, '/mbg_central/share_scripts')
-
-  if(log_location=='sgeoutput')
-    logloc = sprintf('/share/temp/sgeoutput/%s',user)
-  if(log_location=='sharedir'){
-    logloc = sharedir
-    dir.create(sprintf('%serrors',logloc), showWarnings = F)
-    dir.create(sprintf('%soutput',logloc), showWarnings = F)
+  
+  # Define project first (necessary to validate node options)
+  proj <- get_project(proj, use_geo_nodes = geo_nodes)
+  
+  # Validate arguments
+  validate_singularity_options(singularity, singularity_opts)
+  validate_node_option(geo_nodes, use_c2_nodes, proj)
+  
+  # Create sharedir (TODO is this necessary?)
+  sharedir <- get_model_output_dir(ig, indic, rd)
+  dir.create(sharedir, showWarnings = FALSE)
+  
+  # Determine where stdout and stderr files will go
+  output_err <- setup_log_location(log_location, user, indic, ig, rd)
+  output_log_dir <- output_err[[1]]
+  error_log_dir <- output_err[[2]]
+  
+  # Define remaining job attributes
+  job_name <- paste("job_pe", indic, stratum, sep = "_")
+  job_name <- paste0(job_name, addl_job_name)
+  run_time <- get_run_time(use_geo_nodes = geo_nodes, use_c2_nodes = use_c2_nodes, queue = queue, run_time = run_time)
+  queue <- get_queue(use_geo_nodes = geo_nodes, use_c2_nodes = use_c2_nodes, queue = queue, run_time = run_time)
+  shell <- paste0(corerepo, "/mbg_central/share_scripts/shell_sing.sh")
+  sing_image <- get_singularity(image = singularity)
+  
+  # resources are all the -l qsub arguments
+  resources <- get_resources(use_geo_nodes = geo_nodes, cores = cores, ram_gb = memory, runtime = run_time)
+  
+  # code is short-hand for a file in the script_dir directory; script_dir defaults to share_scripts
+  if (is.null(script_dir)) script_dir <- path_join(corerepo, "mbg_central", "share_scripts")
+  code <- path_join(script_dir, paste0(code, ".R"))
+  
+  # If code_path is not NULL, then override `code`
+  if (!is.null(code_path)) {
+    code <- code_path
   }
-
-  # Submit to geo or prod nodes with different default projects. 
-  if(geo_nodes) {
-    # The geo nodes have default project 'proj_geo_nodes' if the 'proj' argument 
-    # is left as NULL and also require the '-l geos_node=TRUE' complex for UGE
-    if(is.null(proj)) proj <- "proj_geo_nodes"
-    node.flag <- "-l geos_node=TRUE"
-  } else {
-    # The prod nodes have default project 'proj_geospatial' if the 'proj'
-    # argument is left as NULL
-    if(is.null(proj)) proj <- "proj_geospatial"
-    if(use_c2_nodes) node.flag <- "-q all.q@@c2-nodes" else node.flag <- ""
-  }
-  gn <- as.character(geo_nodes)
-
-  # At least give a warning if both 'geo_nodes' and 'use_c2_nodes' are requested
-  if(geo_nodes & use_c2_nodes) {
-    message("WARNING: Both 'geo_nodes' and 'use_c2_nodes' arguments were set to TRUE")
-    message(paste0("         Submitting job to LBD nodes under project: '", proj, "'"))
-  }
-
-  # If the user has passed in options for the Singularity container in the
-  # 'singularity_opts' argument, but the 'singularity' argument is 'NULL' exit
-  # with an error.
-  if(is.null(singularity) & !is.null(singularity_opts)) {
-    message("'singularity' argument is 'NULL' but options passed in for 'singularity_opts'")
-    stop("Exiting!")
-  }
-
-  # If the script is to be run with R from a Singularity container, point to
-  # the shell script to launch the container. Users can provide the 'default'
-  # keyword to get the default Singulariy image, just the name of the image
-  # located at the default path, or the full path to the image.
-  if(!is.null(singularity)) {
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
-    # Determine which Singularity image to use:
-    sing_image <- get_singularity(image = singularity)
-  } else {
-    # if not, fire up the appropriate version of R depending on the cluster node
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_cluster.sh')
-  }
-
-  # Piece together lengthy `qsub` command
-  # last line below sets args for parallel script
-  qsub <- paste0("qsub",
-                " -e ", logloc, "errors",
-                " -o ", logloc, "output",
-                " -cwd -l mem_free=", memory, "G",
-                " -pe multi_slot ", cores,
-                " -P ", proj, " ", node.flag)
-
-  # If a Singularity image is being used, pass the name of the image from
-  # `get_singularity` as well as any other environmentals the user asked for
-  # from the 'singularity_opts' argument to the qsub job
-  if(!is.null(singularity)) qsub <- qsub_sing_envs(qsub, singularity_opts,
-                                                   sing_image)
-
-  # append the rest of the qsub command
-  qsub <- paste0(qsub,
-                 " -N job_pe_", indic, "_", stratum, " ",
-                shell, " ",
-                script_dir, "/", code, ".R")
-  qsub <- paste(qsub,
-                stratum, rd, indic, ig, gn,
-                modeling_shapefile_version,
-                raking_shapefile_version,
-                subnat_raking, 
-                sep = " ")
-
+  
+  qsub <- generate_qsub_command(
+    # qsub-specific arguments
+    stderr_log = error_log_dir,
+    stdout_log = output_log_dir,
+    project = proj,
+    resources = resources,
+    job_name = job_name,
+    singularity_str = qsub_sing_envs("", singularity_opts, sing_image),
+    cores = cores,
+    queue = queue,
+    priority = priority,
+    # Command to qsub
+    shell, code, stratum, rd, indic, ig, as.character(geo_nodes),
+    modeling_shapefile_version, raking_shapefile_version, subnat_raking
+  )
+  
   return(qsub)
 }
+
+
 
 # use my condSim update until forked repo is pulled by NG
 #source('../seegMBG/R/gis_functions.R')
@@ -2950,7 +2841,7 @@ check_config <- function(cr = core_repo) {
       message("You are missing a 'use_nid_res' argument in your config. Defaulting to FALSE")
       use_nid_res <<- FALSE
       message(paste0('  ', confs, ': ', get(confs)))
-
+ 
     } else if (confs == "rho_prior") {
       message("You are missing a 'rho_prior' argument in your config. Defaulting to 'list(prior = 'normal', param = c(0, 0.1502314))'")
       rho_prior <<- "list(prior = 'normal', param = c(0, 1/(2.58^2)))"
@@ -2985,11 +2876,56 @@ check_config <- function(cr = core_repo) {
       message("You are missing a 'check_cov_pixelcount' argument in your config. Defaulting to FALSE")
       check_cov_pixelcount <<- FALSE
       message(paste0('  ', confs, ': ', get(confs)))
+
+    } else if (confs == "memory") {
+      message("You are missing a 'memory' argument in your config. Defaulting to 10G")
+      memory <<- 10
+
+    } else if (confs == "singularity_version") {
+      message("You are missing a 'singularity_version' argument in your config. Defaulting to 'default'")
+      singularity_version <<- "default"
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "queue") {
+      message("You are missing a 'queue' argument in your config. Defaulting to 'long.q', unless you have use_geos_nodes to TRUE, which will override this to geospatial.q")
+      queue <<- "long.q"
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "run_time") {
+      message("You are missing a 'run_time' argument in your config. Defaulting to 16 days ('16:00:00:00')")
+      run_time <<- "16:00:00:00"
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "countries_not_to_rake") {
+      message("You are missing a 'countries_not_to_rake' argument in your config. Defaulting to ESH+GUF")
+      countries_not_to_rake <<- "ESH+GUF"
+      message(paste0("  ", confs, ": ", get(confs)))
+      
+    } else if (confs == "countries_not_to_subnat_rake") {
+      message("You are missing a 'countries_not_to_subnat_rake' argument in your config. Defaulting to PHL+NGA+PAK+ETH+KEN")
+      countries_not_to_subnat_rake <<- "PHL+NGA+PAK+ETH+KEN"
+      message(paste0("  ", confs, ": ", get(confs)))
+      
+    } else if (confs == "rake_countries") {
+      message("You are missing a 'rake_countries' argument in your config. Defaulting to TRUE")
+      rake_countries <<- TRUE
+      message(paste0("  ", confs, ": ", get(confs)))
       
     } else {
-      stop(paste0(confs,' is missing, add it to your config'))
+      stop(paste0(confs, " is missing, add it to your config"))
     }
   }
+
+
+  ## Test for subnational random effect
+  if(exists("use_subnat_res", envir = .GlobalEnv)) {
+    stopifnot(exists("subnat_country_to_get", envir = .GlobalEnv))
+    # stopifnot(length(eval(parse(text = subnat_country_to_get))) == 1)
+  } else {
+    use_subnat_res <<- FALSE
+    subnat_country_to_get <<- FALSE
+  }
+
 
   message("\nAdditional covariates: ")
   extras <- config$V1[!(config$V1 %in% must_haves)]
@@ -2997,11 +2933,277 @@ check_config <- function(cr = core_repo) {
 
   ## print out shapeilfe info
   m.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = modeling_shapefile_version))
-  r.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = modeling_shapefile_version))
+  r.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = raking_shapefile_version))
   message("\n\n\nSHAPEFILE VERSION INFORMATION: ")
   message(sprintf("\n--MODELING SHAPEFILE VERSION: %s -- which contains %s codes", m.sf.info$shpfile_date, toupper(m.sf.info$shpfile_type)))
   message(sprintf("\n--RAKING SHAPEFILE VERSION:   %s -- which contains %s codes\n", r.sf.info$shpfile_date, toupper(r.sf.info$shpfile_type)))
 }
+
+
+#' @title Easy eval-parse
+#' @description Allows for easily eval-parsing through a config dataset
+#' @param data The data.table 
+#' @param column The column with the string call
+#' @return Evaluated call
+#' @export
+#' @rdname ez_evparse
+ez_evparse <- function(data, column) {
+  return(eval(parse(text = data[, column, with = FALSE])))
+}
+
+
+
+
+
+
+#' @title Set up config
+#' @description Setting up configuration variables for an MBG run
+#' @param repo Location where you've cloned the MBG repository for your indicator.
+#' @param core_repo Location where you've cloned the lbd_core repository. Not necessary in the package version.
+#' @param indicator_group Category of indicator, i.e. "education"
+#' @param indicator Specific outcome to be modeled within indicator category, i.e. "edu_0"
+#' @param config_name Name of configuration file in the indicator folder, Default: NULL
+#' @param config_file Full path to configuration file that overrides \code{config_name}, Default: NULL
+#' @param covs_name Name of covariates configuration file, Default: NULL
+#' @param covs_file Full path to covariates configuration file that overrides \code{covs_name}, Default: NULL
+#' @param post_est_only Set up only for post estimation? Default: FALSE
+#' @param run_date Run date, Default: ''
+#' @param push_to_global_env Should the config parameters be pushed to the global environment? Default: TRUE
+#' @param run_tests Run the assertion tests? This will run the tests and error out if there's an 
+#' inconsistent config parameter. Default: TRUE
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples
+#' \dontrun{
+#' if (interactive()) {
+#'   config <- load_config(repo = core_repo,
+#'     indicator_group = indicator_group,
+#'     indicator = indicator,
+#'     config_name = 'config_training',
+#'     covs_name = 'covs_training')
+#' }
+#' }
+#' @rdname set_up_config
+#' @importFrom assertthat is.flag is.string is.number
+#' @export
+set_up_config <- function(repo, 
+                          core_repo = repo,
+                          indicator_group, 
+                          indicator, 
+                          config_name = NULL, 
+                          config_file = NULL, 
+                          covs_name = NULL, 
+                          covs_file = NULL,
+                          post_est_only = FALSE, 
+                          run_date = "", 
+                          push_to_global_env = TRUE,
+                          run_tests = TRUE) {
+  
+  ###### Block 1: Equivalent to load_config ######
+  
+  print("[1/6] Load the configs")
+  
+  ####### Logic checking for model config ####### 
+  ## Make sure only one of config_name or config_file are not null
+  if (!is.null(config_name) & !is.null(config_file)) {
+    stop("You must specify just one of config_name or config_file, not both", call. = FALSE)
+  }
+  
+  ## Pull config from indicator repo
+  if (is.null(config_name) & is.null(config_file)) {
+    message("Pulling config from default folder, since config_name and config_file are NULL")
+    ## If new model run, pull config from /share repo
+    if (post_est_only == FALSE) 
+      config <- fread(paste0(repo, "/", indicator_group, "/config_", indicator, ".csv"), header = FALSE)
+    ## If running analysis on existing model, use config from that model's outputs folder
+    if (post_est_only == TRUE) 
+      config <- fread(paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date, "/config.csv"))
+  }
+  
+  ## Pull by specific config name
+  if (!is.null(config_name) & is.null(config_file)) {
+    message("Pulling config from specified name")
+    config <- fread(paste0(repo, "/", indicator_group, "/", config_name, ".csv"), header = FALSE)
+  }
+  ## Pull specified config file
+  if (is.null(config_name) & !is.null(config_file)) {
+    message("Pulling config from specified filepath")
+    config <- fread(config_file, header = FALSE)
+  }
+  
+  ####### Logic checking for covariates config ####### 
+  ## Make sure only one of covs_name or covs_file are not null
+  if (!is.null(covs_name) & !is.null(covs_file)) {
+    stop("You must specify just one of covs_name or covs_file, not both", call. = FALSE)
+  }
+  
+  ## Covs not pulled
+  if (is.null(covs_name) & is.null(covs_file)) {
+    message("Not pulling covs since covs_name and covs_file are NULL")
+    covs <- NULL
+  }
+  
+  ## Pull by specific covs name
+  if (!is.null(covs_name) & is.null(covs_file)) {
+    message("Pulling covs from specified name")
+    covs <- fread(paste0(repo, "/", indicator_group, "/", covs_name, ".csv"), header = TRUE)
+  }
+  
+  ## Pull specified covs file
+  if (is.null(covs_name) & !is.null(covs_file)) {
+    message("Pulling covs from specified filepath")
+    covs <- fread(covs_file, header = TRUE)
+  }
+  
+  ## For parsimony, let's make sure that the config column names are V1 and V2
+  config <- data.table(config)
+  if(colnames(config)[1] != "V1" & colnames(config)[2] != "V2") {
+    warning("Renaming config column names to V1 and V2. Please verify that 'config' is properly built")
+    colnames(config) <- c("V1", "V2")
+  }
+  
+  
+  # If a covariate .csv file exists, use that instead
+  if (!is.null(covs)) {
+    
+    # Grab fixed effects & measures (and gbd fixed effects & measures) from CSV if present
+    
+    # After update to data.table 1.11.4, 'T' and 'F' are not read in as logical, 
+    ## but as characters, which we need to remedy here. 
+    ## We are assuming that the 'covs.csv' has an 'include' and 'gbd' column here
+    covs[, `:=`(gbd, as.logical(gbd))]
+    covs[, `:=`(include, as.logical(include))]
+    covs <- subset(covs, include == T)  # Use only those where include flag set to true
+    fe <- subset(covs, gbd == F)
+    gbd <- subset(covs, gbd == T)
+    gbd[measure != "output", `:=`(measure, "covariate")]  # FIXME: This is a hack for backwards compatability -- basically it assumes you meant 'covariate' if you specified anything other than 'outcome' (eg, mean or NA)
+    fixed_effects <- paste0(fe$covariate, collapse = " + ")
+    fixed_effects_measures <- paste0(fe$measure, collapse = " + ")
+    gbd_fixed_effects <- paste0(gbd$covariate, collapse = " + ")
+    gbd_fixed_effects_measures <- paste0(gbd$measure, collapse = " + ")
+    
+    # Remove any other versions from original config and 
+    # override with covariates config outputs
+    for(varz in c("fixed_effects", "fixed_effects_measures", "gbd_fixed_effects", "gbd_fixed_effects_measures")) {
+      if(!(varz %in% colnames(config))) {
+        config <- rbindlist(list(config, data.table(V1 = varz, V2 = get(varz))))
+      } else {
+        config[V1 == varz, V2:= get(varz)]
+      }
+    }
+    
+  }
+  
+  
+  ###### Block 2: Add fields in config that are not in the default set ######
+  
+  print("[2/6] Add fields that are in the default config set but not in user's config")
+  
+  ## Load in the default config dataset
+  config_values <- fread(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/config_values.csv'), header = TRUE, stringsAsFactors = FALSE)
+  
+  ## Now, go through each of the values in `config_values` and 
+  ## add on all the fields that are not in the user-specified config
+  for(conf_vars in names(config_values)) {
+    if(!(conf_vars %in% config$V1)) {
+      message(paste0(conf_vars, ' not found in config. Adding in default value of: ', config_values[1, conf_vars, with=F]))
+      config <- rbindlist(list(config, data.table(V1 = conf_vars, V2 = config_values[1, conf_vars, with=F] )))
+    }
+  }
+  
+  
+  ###### Block 3: Extra parameters in config ######
+  
+  print("[3/6] Add fields that are in user's config but not in the default config set")
+  message("\nAdditional covariates: ")
+  extras <- config$V1[!(config$V1 %in% names(config_values))]
+  for (extra in extras) {
+    message(paste0("  ", extra, ": ", config[V1 == extra, V2] ))
+  }
+  
+  ###### Block 4: Print out shapefile info from config ######
+  
+  print("[4/6] Print out shapefile info from config")
+  m.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = config[V1 == 'modeling_shapefile_version', V2]))
+  r.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = config[V1 == 'raking_shapefile_version', V2]))
+  message("\n\n\nSHAPEFILE VERSION INFORMATION: ")
+  message(sprintf("\n--MODELING SHAPEFILE VERSION: %s -- which contains %s codes", m.sf.info$shpfile_date, toupper(m.sf.info$shpfile_type)))
+  message(sprintf("\n--RAKING SHAPEFILE VERSION:   %s -- which contains %s codes\n", r.sf.info$shpfile_date, toupper(r.sf.info$shpfile_type)))
+  
+  
+  ###### Block 5: Run tests on all the configuration variables loaded ######
+  if(run_tests) {
+    print("[5/6] Running simple type-assertion tests on config parameters")
+    config_tests <- fread(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/config_tests.csv'), header = TRUE, stringsAsFactors = FALSE)
+    
+    ## Test for params only in the config_tests list of params
+    for (param in sort(config[, V1])) {
+      cat(paste0("Testing config parameter: ", param))
+      if(param %in% config_tests$variable) {
+        test_call_1 <- config_tests[variable == param, test_call]
+        test_call_2 <- config_tests[variable == param, extra_test1]
+        test_call_3 <- config_tests[variable == param, extra_test2]
+        
+        if(test_call_1 != "") {
+          ## For a string in the config file, the eval-parse combo will
+          ## fail to evaluate it, and so we build in this exception for that
+          tryCatch(
+            get(test_call_1)(ez_evparse(config[V1 == param, ], "V2")),
+            error = function(e) {
+              if(attributes(e)$class[[1]] == 'simpleError' & test_call_1 == "is.string") {
+                message(paste0("Assertion on ", param, " errored out because it's tested as a string. Please check for the real type manually"))
+              }
+            }
+          )
+        }
+        if(test_call_2 != ""  ) {
+          tryCatch(
+            assertthat::assert_that(eval(parse(text = test_call_2))),
+            error = function(e) {
+              stop(paste0("The following test failed: ", test_call_2) )
+            }
+          )
+        }
+        if(test_call_3 != ""  ) {
+          tryCatch(
+            assertthat::assert_that(eval(parse(text = test_call_3))),
+            error = function(e) {
+              stop(paste0("The following test failed: ", test_call_3) )
+            }
+          )
+        }
+        cat(" OK. \n")
+      }
+    }
+      
+  } else {
+    warning("[5/6] Skipping over type-assertion")
+  }
+  
+  
+  
+
+  ###### Final Block :  Assign all the covariates to the environment if desired ######
+  
+  if(push_to_global_env) {
+    print("[6/6] Pushing config parameters into global environment")
+    for (param in config[, V1]) { 
+      assign(param, config[V1 == param, V2], envir = globalenv())
+    }
+  } else {
+    print("[6/6] Config parameters not passed into global environment")
+  }
+  
+  ## Return the config data.table
+  message("Saving out config...")
+  return(config)
+  
+  
+}
+
+
+
+
 
 ## proportional_area_map ################################################
 
@@ -3276,10 +3478,10 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
 #'   using the 'proj' argument, make sure to use project name which is valid on
 #'   the cluster you are submitting to. [default = FALSE]
 #'
-#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on 
+#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on
 #'   the prod cluster, if FALSE, the C2 nodes are not specified. Note that if
 #'   FALSE, your job may land on a node with much less memory or your node may
-#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes' 
+#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes'
 #'   arguments are set to TRUE, then the code will issue a warning and default
 #'   to the geos nodes. [default = FALSE]
 #'
@@ -3287,10 +3489,10 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
 #'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
 #'   will be submitted to the prod cluster under the default project
 #'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
-#'   submitted to the geos (LBD) nodes under the default project 
+#'   submitted to the geos (LBD) nodes under the default project
 #'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
 #'   be submitted under that project. Note that this function does not check for
-#'   valid project names since these are likely to change often and likely 
+#'   valid project names since these are likely to change often and likely
 #'   valid project names are different on each cluster. [default = NULL]
 #'
 #' @param ig indicator group [default = indicator_group]
@@ -3333,6 +3535,10 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
 #' @param geos_nodes run on the geos nodes or not? Defaults to running on prod
 #'                   with the 'proj_geospatial' project (see the 'proj' arg).
 #'                   [default = FALSE]
+#' @param runtime Run-time for usage in the fair cluster (unused with prod)
+#' @param priority Job priority that can be deprioritized if needed, and can only be used for values in [-1023,0]. Default = 0. 
+#' This value will get bounded to 0 or -1023 if the user supplies a value outside those bounds.
+#' @param threads numeric number of threads to request on fair cluster (unused with prod)
 #' @param singularity Launch R from a Singularity image. The default is
 #   'default' indicating that you wish to launch a Singularity container from
 #'   the default image. You may also provide a string which can be either a complete
@@ -3413,13 +3619,16 @@ parallelize <- function(user = Sys.info()['user'],
                         corerepo         = core_repo,
                         geo_nodes        = FALSE,
                         use_c2_nodes     = FALSE,
-                        singularity      = 'default',
+                        queue            = NULL,
+                        run_time         = NULL,
+                        priority         = 0,
+                        threads          = 2,
+                        singularity      = singularity_version,
                         singularity_opts = NULL) {
 
   # Setup ---------------------------------------------------------------
-
-  str_match <- stringr::str_match
-
+  # allocate cores based on threads argument if on the new cluster. Otherwise respect historical "slot" usage
+  cores <- ifelse(is_new_cluster(), threads, slots)
   # Attempt to locate the R script we intend to run and verify that it
   # actually exists
   # We assume that the script ends with '.R'. If the user supplied
@@ -3431,65 +3640,28 @@ parallelize <- function(user = Sys.info()['user'],
     stop(paste0("Could not locate R script: ", script_file))
   }
 
-  # set up the share directory and temp directory
-  tmp_dir <- "/share/geospatial/tmp/"
+  # Define project first (necessary to validate node options)
+  proj <- get_project(proj, use_geo_nodes=geo_nodes)
 
-  if (log_location=='sgeoutput') {
-    logloc = sprintf('/share/temp/sgeoutput/%s/',user)
-  } else if(log_location=='sharedir') {
-    sharedir <- paste0('/share/geospatial/mbg/', ig, '/', indic, '/output/', rd, '/')
-    logloc = sharedir
-    dir.create(sprintf('%serrors',logloc), showWarnings = F)
-    dir.create(sprintf('%soutput',logloc), showWarnings = F)
-  } else {
-    logloc <- log_location
-    dir.create(sprintf('%serrors',logloc), recursive = T, showWarnings = F)
-    dir.create(sprintf('%soutput',logloc), recursive = T, showWarnings = F)
-  }
+  # Validate arguments
+  validate_singularity_options(singularity, singularity_opts)
+  validate_node_option(geo_nodes, use_c2_nodes, proj)
 
-  # Submit to geo or prod nodes with different default projects. 
-  if(geo_nodes) {
-    # The geo nodes have default project 'proj_geo_nodes' if the 'proj' argument 
-    # is left as NULL and also require the '-l geos_node=TRUE' complex for UGE
-    if(is.null(proj)) proj <- "proj_geo_nodes"
-    node.flag <- "-l geos_node=TRUE"
-  } else {
-    # The prod nodes have default project 'proj_geospatial' if the 'proj'
-    # argument is left as NULL
-    if(is.null(proj)) proj <- "proj_geospatial"
-    if(use_c2_nodes) node.flag <- "-q all.q@@c2-nodes" else node.flag <- ""
-  }
-  gn <- as.character(geo_nodes)
+  # Determine where stdout and stderr files will go
+  output_err = setup_log_location(log_location, user, indic, ig, rd)
+  output_log_dir = output_err[[1]]
+  error_log_dir = output_err[[2]]
 
-  # At least give a warning if both 'geo_nodes' and 'use_c2_nodes' are requested
-  if(geo_nodes & use_c2_nodes) {
-    message("WARNING: Both 'geo_nodes' and 'use_c2_nodes' arguments were set to TRUE")
-    message(paste0("         Submitting job to LBD nodes under project: '", proj, "'"))
-  }
+  # Define remaining attributes
+  run_time <- get_run_time(use_geo_nodes=geo_nodes, use_c2_nodes=use_c2_nodes, queue=queue, run_time=run_time)
+  queue <- get_queue(use_geo_nodes=geo_nodes, use_c2_nodes=use_c2_nodes, queue=queue, run_time=run_time)
+  shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
+  sing_image <- get_singularity(image = singularity)
+  
+  # resources are all the -l qsub arguments
+  resources <- get_resources(use_geo_nodes=geo_nodes, cores=cores, ram_gb=memory, runtime=run_time)
 
-  # If the user has passed in options for the Singularity container in the
-  # 'singularity_opts' argument, but the 'singularity' argument is 'NULL' exit
-  # with an error.
-  if(is.null(singularity) & !is.null(singularity_opts)) {
-    message("'singularity' argument is 'NULL' but options passed in for 'singularity_opts'")
-    stop("Exiting!")
-  }
-
-  # If the script is to be run with R from a Singularity container, point
-  # to the shell script to launch the container. Users can provide the
-  # 'default' keyword to get the default Singulariy image, just the name
-  # of the image located at the default path, or the full path to the
-  # image.
-  if(!is.null(singularity)) {
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
-    # Determine which Singularity image to use:
-    sing_image <- get_singularity(image = singularity)
-  } else {
-    # if not, fire up the appropriate version of R depending on the cluster node
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_cluster.sh')
-  }
-
-  # Expand loop variables from expand_vars or use lv_table (if provided)
+  # Expand loop variables from expand_vars or lv_table (depending on what was provided)
   if (is.null(lv_table) & is.null(expand_vars)) {
     stop("Need to have one of either lv_table or expand_vars")
   }
@@ -3511,52 +3683,42 @@ parallelize <- function(user = Sys.info()['user'],
   # Save objects ---------------------------------------------------------
 
   # Create filename using time stamp
+  tmp_dir <- "/share/geospatial/tmp/"
   # Append random string on the end to avoid overlapping filenames for
   # rapidly-submitted jobs
   fname <- paste0(user, "_", gsub("-|:| ","_",Sys.time()),  sample(1:100000, 1))
 
-  if (!is.null(save_objs)) {
-   save(file = paste0(tmp_dir, fname, ".RData"),
-        list = c(save_objs, "lv"))
-  } else if (is.null(save_objs)) {
-   save(file = paste0(tmp_dir, fname, ".RData"),
-        list = "lv")
-  }
+  values_to_save <- c("lv")
+  if (!is.null(save_objs)) values_to_save <- c(values_to_save, save_objs)
+  save(file = paste0(tmp_dir, fname, ".RData"),
+       list = values_to_save)
 
   # Qsub over lv rows
   for (i in 1:nrow(lv)) {
-    jobname <- lv[i, jobname]
+    job_name <- lv[i, jobname]
 
-    # Will qsub and just pass a couple of things:
-    # - where the temp file is saved
-    # - which row of loopvars we're on
-    # The rest will be loaded in the child script
-    qsub <- paste0("qsub",
-                     " -e ", logloc, "errors",
-                     " -o ", logloc, "output",
-                     " -cwd -l mem_free=", memory, "G",
-                     " -pe multi_slot ", slots,
-                     " -P ", proj, " ", node.flag)
-
-    # If a Singularity image is being used, pass the name of the image from
-    # `get_singularity` as well as any other environmentals the user asked for
-    # from the 'singularity_opts' argument to the qsub job
-    if(!is.null(singularity)) qsub <- qsub_sing_envs(qsub, singularity_opts,
-                                                     sing_image)
-
-    # append the rest of the qsub command
-    qsub <- paste(qsub, "-N", jobname,
-                  shell, script_file, fname, i,
-                  sep = " ")
+    qsub <- generate_qsub_command(
+      # qsub-specific arguments
+      stderr_log=error_log_dir,
+      stdout_log=output_log_dir,
+      project=proj,
+      resources=resources,
+      job_name=job_name,
+      singularity_str=qsub_sing_envs("", singularity_opts, sing_image),
+      cores=cores,
+      queue=queue,
+      priority=priority,
+      # Command to qsub
+      shell, script_file, fname, i)
 
     returned <- system(qsub, intern = T)
     message(returned)
-    job_id <- as.numeric(str_match(returned,"Your job ([0-9]*) ")[,2])
+    job_id <- as.numeric(stringr::str_match(returned,"Your job ([0-9]*) ")[,2])
     lv[i, jobid := job_id]
     lv[i, the_qsub := qsub]
 
   }
-  return(list(lv, fname))
+  return(list(lv, fname, qsub))
 }
 
 ## monitor_jobs() ################################################
@@ -3926,10 +4088,10 @@ record_git_status <- function(core_repo,
 #'   using the 'proj' argument, make sure to use project name which is valid on
 #'   the cluster you are submitting to. [default = FALSE]
 #'
-#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on 
+#' @param use_c2_nodes If TRUE, your job will be submitted to the C2 nodes on
 #'   the prod cluster, if FALSE, the C2 nodes are not specified. Note that if
 #'   FALSE, your job may land on a node with much less memory or your node may
-#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes' 
+#'   still land on a C2 node anyway. If both the 'use_c2_nodes' and 'geo_nodes'
 #'   arguments are set to TRUE, then the code will issue a warning and default
 #'   to the geos nodes. [default = FALSE]
 #'
@@ -3937,12 +4099,16 @@ record_git_status <- function(core_repo,
 #'   and the 'geo_nodes' argument is left as its default of 'FALSE', jobs
 #'   will be submitted to the prod cluster under the default project
 #'   'proj_geospatial'. If default and with 'geos_nodes = TRUE', jobs will be
-#'   submitted to the geos (LBD) nodes under the default project 
+#'   submitted to the geos (LBD) nodes under the default project
 #'   'proj_geo_nodes'. If a project name is passed in for 'proj' the job will
 #'   be submitted under that project. Note that this function does not check for
-#'   valid project names since these are likely to change often and likely 
+#'   valid project names since these are likely to change often and likely
 #'   valid project names are different on each cluster. [default = NULL]
 #' 
+#' @param queue Queue to be used on the fair cluster.
+#'
+#' @param run_time Run-time to be used on the fair cluster.
+#'
 #' @param singularity Launch R from a Singularity image. The default is
 #   'default' indicating that you wish to launch a Singularity container from
 #'   the default image. You may also provide a string which can be either a complete
@@ -3974,6 +4140,7 @@ record_git_status <- function(core_repo,
 #'   [default = NULL]
 #' @param modeling_shapefile_version character string specifying which shapefile version was used in modeling
 #' @param raking_shapefile_version character string specifying which shapefile version was used in raking
+#' @param cores specify number of cores to use, defaults to NULL. If this is provided by the user, it is used to assign resources in get_resources
 #'
 submit_aggregation_script <- function(indicator,
                                       indicator_group,
@@ -3989,97 +4156,98 @@ submit_aggregation_script <- function(indicator,
                                       log_dir,
                                       geo_nodes        = FALSE,
                                       use_c2_nodes     = FALSE,
-                                      slots            = 8,
-                                      singularity      = 'default',
-                                      singularity_opts = NULL,
+                                      queue            = NULL,
+                                      run_time         = NULL,
+                                      priority         = 0,
+                                      slots            = cores,
+                                      cores            = 2,
+                                      memory           = 20,
+                                      singularity      = singularity_version,
+                                      singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores),
                                       modeling_shapefile_version = 'current',
-                                      raking_shapefile_version = 'current') {
+                                      raking_shapefile_version = 'current',
+                                      submit_qsubs     = TRUE) {
 
-  # Takes vectors of regions, holdouts, and ages and submits qsubs for each of these
+  # Define project first (necessary to validate node options)
+  proj <- get_project(proj, use_geo_nodes=geo_nodes)
 
-  dir.create(log_dir)
-  dir.create(paste0(log_dir, '/errors'))
-  dir.create(paste0(log_dir, '/output'))
+  # Validate arguments
+  validate_singularity_options(singularity, singularity_opts)
+  validate_node_option(geo_nodes, use_c2_nodes, proj)
 
-  # Submit to geo or prod nodes with different default projects. 
-  if(geo_nodes) {
-    # The geo nodes have default project 'proj_geo_nodes' if the 'proj' argument 
-    # is left as NULL and also require the '-l geos_node=TRUE' complex for UGE
-    if(is.null(proj)) proj <- "proj_geo_nodes"
-    node.flag <- "-l geos_node=TRUE"
-  } else {
-    # The prod nodes have default project 'proj_geospatial' if the 'proj'
-    # argument is left as NULL
-    if(is.null(proj)) proj <- "proj_geospatial"
-    if(use_c2_nodes) node.flag <- "-q all.q@@c2-nodes" else node.flag <- ""
-  }
+  # Create sharedir (TODO is this necessary?)
+  sharedir = get_model_output_dir(indicator_group, indicator, run_date)
+  dir.create(sharedir, showWarnings = FALSE)
 
-  # At least give a warning if both 'geo_nodes' and 'use_c2_nodes' are requested
-  if(geo_nodes & use_c2_nodes) {
-    message("WARNING: Both 'geo_nodes' and 'use_c2_nodes' arguments were set to TRUE")
-    message(paste0("         Submitting job to LBD nodes under project: '", proj, "'"))
-  }
+  # Determine where stdout and stderr files will go
+  output_err = setup_log_location(log_dir, user, indic, ig, rd)
+  output_log_dir = output_err[[1]]
+  error_log_dir = output_err[[2]]
 
-  # If the user has passed in options for the Singularity container in the
-  # 'singularity_opts' argument, but the 'singularity' argument is 'NULL' exit
-  # with an error.
-  if(is.null(singularity) & !is.null(singularity_opts)) {
-    message("'singularity' argument is 'NULL' but options passed in for 'singularity_opts'")
-    stop("Exiting!")
-  }
+  # Define remaining job attributes
+  
+  run_time <- get_run_time(use_geo_nodes=geo_nodes, use_c2_nodes=use_c2_nodes, queue=queue, run_time=run_time)
+  queue <- get_queue(use_geo_nodes=geo_nodes, use_c2_nodes=use_c2_nodes, queue=queue, run_time=run_time)
+  
+  shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
+  sing_image <- get_singularity(image = singularity)
+  singularity_str <- qsub_sing_envs("", singularity_opts, sing_image)
+  # resources are all the -l qsub arguments
+  if(!is.null(cores) & !is.null(slots)) warning("Slots and cores are both specified, cores will be used to assign resources")
+  if(is.null(cores)) cores <- slots
+  resources <- get_resources(use_geo_nodes=geo_nodes, cores=cores, ram_gb=memory, runtime=run_time)
 
-  # If the script is to be run with R from a Singularity container, point to
-  # the shell script to launch the container. Users can provide the 'default'
-  # keyword to get the default Singulariy image, just the name of the image
-  # located at the default path, or the full path to the image.
-  if(!is.null(singularity)) {
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_sing.sh')
-    # Determine which Singularity image to use:
-    sing_image <- get_singularity(image = singularity)
-  } else {
-    # if not, fire up the appropriate version of R depending on the cluster node
-    shell <- paste0(corerepo, '/mbg_central/share_scripts/shell_cluster.sh')
-  }
-
-  proj.flag <- paste('-P', proj, node.flag, sep = ' ')
+  code <- path_join(corerepo, 'mbg_central', 'share_scripts', 'aggregate_results.R')
 
   qsubs_to_make <- expand.grid(regions, holdouts, ages, raked)
+  
+  aggregation_qsubs <- make_qsubs_aggregation(qsubs_to_make, error_log_dir, output_log_dir, proj, resources, singularity_str, queue, priority, slots, shell, code,
+                                              indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version)
 
+  if (submit_qsubs) {
+      for(qsub in aggregation_qsubs) {
+          system(qsub)
+      }
+  }
+  return(aggregation_qsubs)
+}
+
+make_qsubs_aggregation <- function(qsubs_to_make, stderr_log, stdout_log, project, resources, singularity_str, queue = NULL, priority = 0, slots, shell, code,
+                                   indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version) {
+  qsubs <- c()
   for (i in 1:nrow(qsubs_to_make)) {
     region <- qsubs_to_make[i, 1]
     holdout <- qsubs_to_make[i, 2]
     age <- qsubs_to_make[i, 3]
     rake <- qsubs_to_make[i, 4]
-    shapefile_version <- ifelse(rake, raking_shapefile_version, modeling_shapefile_version)
+    shapefile_version <- if(rake) raking_shapefile_version else modeling_shapefile_version
+    job_name <- paste(indicator, region, 'aggregate', sep='_')
 
-    qsub <- paste0('qsub -e ', log_dir, '/errors -o ', log_dir, '/output',
-                   ' -cwd -pe multi_slot ', slots, ' ', proj.flag)
-
-    # If a Singularity image is being used, pass the name of the image from
-    # `get_singularity` as well as any other environmentals the user asked for
-    # from the 'singularity_opts' argument to the qsub job
-    if(!is.null(singularity)) qsub <- qsub_sing_envs(qsub, singularity_opts,
-                                                     sing_image)
-
-    # append the rest of the qsub command
-    qsub <- paste0(qsub, ' -N ', indicator, '_', region, '_aggregate ',
-                   shell, ' ', corerepo, '/mbg_central/share_scripts/aggregate_results.R ',
-                   indicator, ' ',         # arg 4
-                   indicator_group, ' ',   # arg 5
-                   run_date, ' ',          # arg 6
-                   rake, ' ',              # arg 7
-                   pop_measure, ' ',       # arg 8
-                   overwrite, ' ',         # arg 9
-                   age, ' ',               # arg 10
-                   holdout, ' ',           # arg 11
-                   region, ' ',            # arg 12
-                   corerepo, ' ',          # arg 13
-                   shapefile_version)      # arg 14
-
-    system(qsub)
+    
+    qsub <- generate_qsub_command(stderr_log=stderr_log,
+                                  stdout_log=stdout_log,
+                                  project=project,
+                                  resources=resources,
+                                  job_name=job_name,
+                                  singularity_str=singularity_str,
+                                  queue=queue,
+                                  cores=slots,
+                                  priority=priority,
+                                  shell, code,
+                                  indicator,
+                                  indicator_group,
+                                  run_date,
+                                  rake,
+                                  pop_measure,
+                                  overwrite,
+                                  age,
+                                  holdout,
+                                  region,
+                                  corerepo,
+                                  shapefile_version)
+    qsubs <- c(qsubs, qsub)
   }
-
-  return(NULL)
+  return(qsubs)
 }
 
 
@@ -4091,9 +4259,9 @@ submit_aggregation_script <- function(indicator,
 # interactive graphics windows. it is untested on the cluster and is
 # meant for use on local machines
 #
-#' @description Plots, in 3d, a s2-manifold or r2-manifold mesh 
+#' @description Plots, in 3d, a s2-manifold or r2-manifold mesh
 #'
-#' @param mesh an inla.mesh object 
+#' @param mesh an inla.mesh object
 #'
 #' @param draw.edges Logical. Draw the edges between the vertices?
 #'
@@ -4120,7 +4288,7 @@ submit_aggregation_script <- function(indicator,
 #'   static image)
 #'
 #' @param returns nothing but spawns an interactive plot window
-#' 
+#'
 #' @examples
 #'
 #' ## plot a mesh. add color to the background that results from
@@ -4132,19 +4300,19 @@ submit_aggregation_script <- function(indicator,
 #' ## take a snapshot to save to file
 #' fig.path <- '/path/to/outputdir/
 #' rgl.snapshot(file.path(fig.path, "mesh.png"), top=TRUE)
-#' 
+#'
 #' ## shut down the graphics window
 #' rgl.close()
 
 draw.mesh <- function(mesh, draw.edges=TRUE, draw.segments=TRUE,
-                      draw.plane = F, node.cols = NULL, 
+                      draw.plane = F, node.cols = NULL,
                       col.type = 'bw', window.dims = c(840, 400),
                       plot.mirror = FALSE){
 
   require('rgl') ## this is an interactive R graphics. won't work on the cluster
 
   window.dims = c(50, 50, 50 + window.dims[1], 50 + window.dims[2])
-  
+
   if(is.null(node.cols)){
     node.cols <- rep(1, mesh$n)
   }
@@ -4152,7 +4320,7 @@ draw.mesh <- function(mesh, draw.edges=TRUE, draw.segments=TRUE,
   if(col.type == 'bw')  cp <- function (n,...) { return (grey.colors(n,0.95,0.05,...))}
   if(col.type == 'col') cp <- colorRampPalette(c("darkblue", "blue", "cyan",
                                                  "yellow", "red", "darkred"))
-  
+
   mesh0 = inla.mesh.create(loc=cbind(0,0), extend=list(offset=1.1,n=4))
 
   mesh01 = mesh0
@@ -4222,12 +4390,12 @@ lonlat3D <- function(lon,lat){
 #' @description Determines modeling regions from written output dir objects
 #'
 #' @param in_dir directory path containing completed mbg cell_pred objects
-#' 
+#'
 #' @return A vector string of region names
 
 get_output_regions <- function(in_dir) {
   return(unique(stringr::str_match(list.files(in_dir, pattern = paste0('_cell_draws_eb_')),
-                                   '_cell_draws_[^_]+_[^_]+_(.*)_[0-9].RData')[,2]))  
+                                   '_cell_draws_[^_]+_[^_]+_(.*)_[0-9].RData')[,2]))
 }
 
 
@@ -4262,4 +4430,41 @@ delete_model_outputs <- function(
       print(fileDF$moddir[i])
     }
   }
+}
+
+#' @title rank_draws
+#' @description function to transform values to ranks by draw
+#' @param df data frame with columns for each draw
+#' @param 'high' means a high value is rank 1, 'low' means a
+#' low value should be rank 1
+#' @param columns: vector of column names that contain the draws
+#' @export
+
+rank_draws <- function(df, ordr, columns) {
+  # load library
+  library(data.table)
+
+  # Ensure data.table class
+  df <- as.data.table(df)
+  # Separate into df with draws and the rest
+  df1 <- df[, setdiff(names(df), columns), with = FALSE]
+  df2 <- df[, columns, with = FALSE]
+
+  # Transform draws to ranks
+  if (ordr == 'high') {
+    descending <- TRUE
+  } else {
+    descending <- FALSE
+  }
+  df2 <- as.data.table(apply(df2, 2, order, decreasing = descending))
+
+  # Summarize ranks
+  df2 <- df2[, `:=`(median=apply(df2, 1, median),
+                    lci=apply(df2, 1, quantile, 0.025),
+                   uci=apply(df2, 1, quantile, 0.975))]
+
+  # Bind to make a single df
+  df <- cbind(df1, df2)
+  return(df)
+
 }

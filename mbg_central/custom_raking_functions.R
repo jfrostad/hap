@@ -427,8 +427,8 @@ load_custom_admin_raster  <- function(shapefile_path, field, simple_raster, shap
   if(factor_count != number_count) {
     stop("In load_custom_admin_raster(), conversion of shapefile field from factor to number resulted in a different number of unique values")
   }
-  # rasterize shapefile - make sure field is numeric, not factor
-  initial_raster <- rasterize(cropped_shapes, sr, field = "raster_id")
+  # rasterize shapefile with our custom function - make sure field is numeric, not factor
+  initial_raster <- rasterize_check_coverage(cropped_shapes, sr, field = "raster_id")
   
   masked_shapes <- raster::mask(x=initial_raster, mask=sr)
   

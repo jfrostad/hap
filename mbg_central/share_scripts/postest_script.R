@@ -83,7 +83,7 @@ if (!exists("cell_pred")){
 
 # Rake estimates 
 if (!is.null(gbd)) {
-
+  
   ## determine if a crosswalk is needed
   if (modeling_shapefile_version == raking_shapefile_version) crosswalk <- F else crosswalk <- T
   

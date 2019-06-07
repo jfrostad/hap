@@ -60,9 +60,9 @@
 ## ## with ad2
 ## stratum_ad2 <- make_folds(data = data, n_folds = 5, spat_strat = 'poly',
 ##                           temp_strat = "prop", strat_cols = "age_bin",
-##                           admin_shps='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad2_raster.grd',
+##                           admin_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad2_raster.grd',
 ##                           shape_ident="gaul_code",
-##                           admin_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp',
+##                           admin_shps='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp',
 ##                           mask_shape='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_simple.shp',
 ##                           mask_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad0_raster',
 ##                           lat_col = 'lat', long_col = 'long',
@@ -420,9 +420,9 @@ quadtree_folds <- function(xy, ## 2 col matrix of xy locs
 ## OUTPUTS:
 ##
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
-ad2_folds <- function(admin_shps,
+ad2_folds <- function(admin_raster,
                       shape_ident="gaul_code",
-                      admin_raster,
+                      admin_shps,
                       ss=1,
                       xy,
                       n_folds,
@@ -434,9 +434,9 @@ ad2_folds <- function(admin_shps,
   ## data and splits your data into folds of approximately equal
   ## sample size using admin2 units to split the data
 
-  ## admin_shps: file location of all pertinent shapefiles to use when folding (.grd)
+  ## admin_raster: file location of all pertinent shapefiles to use when folding (.grd)
   ## shape_ident: string identifying data col in shapefile used to uniquely identify polygons
-  ## admin_raster: file location of associated raster for admin_shps (.shp)
+  ## admin_shps: file location of associated raster for admin_raster (.shp)
   ## data: complete dataset that you want to fold
   ## strat_cols: vector of column string names to
   ##    stratify over when making folds. if NULL, holdout
@@ -450,21 +450,17 @@ ad2_folds <- function(admin_shps,
   library(raster)
 
   ## make a mask for ther region we care about
-  mask <- rasterize(shapefile(mask_shape), raster(mask_raster))*0
+  mask <- rasterize_check_coverage(shapefile(mask_shape), raster(mask_raster), field=names(shapefile(mask_shape))[1])*0
 
   ## get raster cells in mask
   cell_idx <- cellIdx(mask)
 
   ## load raster and shapefile for admin units
-  rast      <- raster(admin_shps)
+  rast      <- raster(admin_raster)
   rast_cell <- extract(rast, cell_idx)
-  shp_full  <- shapefile(admin_raster)
-  shp       <- shp_full@data[c('name', 'gaul_code')]
+  shp_full  <- shapefile(admin_shps)
+  shp       <- shp_full@data[shape_ident]
   ## plot(shp_full, col=1:length(shp_full))
-
-  ## match raster polys to gaul
-  rast_code <- match(rast_cell, shp$gaul_code)
-  rast_code <- shp$gaul_code[rast_code]
 
   ## get number of datapoints in shapefiles
   shp_cts <- get_sample_counts(ss          = ss,
@@ -499,9 +495,9 @@ ad2_folds <- function(admin_shps,
 ## data <- df
 
 ## shp_full <- shapefile('J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp')
-## folds <- ad2_folds(admin_shps='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad2_raster.grd',
+## folds <- ad2_folds(admin_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad2_raster.grd',
 ##                   shape_ident="gaul_code",
-##                   admin_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp',
+##                   admin_shps='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp',
 ##                   data=df,
 ##                   strat_cols=NULL,
 ##                   ss=data$exposed,
@@ -904,7 +900,7 @@ make_folds <- function(data,
   ## check for unused arguments and give warning if any won't be used
   params <- list(...)
   optional_params <- c('ts', 'mb', 'plot_fn', 'plot_shp', 'shp_fn',
-                       'admin_shps', 'shape_ident', 'admin_raster',
+                       'admin_raster', 'shape_ident', 'admin_shps',
                        'ss_col', 'mask_shape', 'mask_raster',
                        'long_col', 'lat_col', 'yr_col', 'ts_vec')
   unused_params <- setdiff(names(params),optional_params)
@@ -1224,13 +1220,8 @@ get_sample_counts <- function(ss = 1,
   ##    but, if you make your own set of shapes, you may want to select another col
 
   library(sp)
-
-  ## grab relevant cols
-  if(length(ss) == 1){
-    data <- cbind(xy, rep(1, nrow(nrow))) ## samplesize
-  }else{
-    data <- cbind(xy, ss)
-  }
+  
+  data <- cbind(xy, ss)
   colnames(data) <- c("long", "lat", "ss")
 
   ## make sure all relevant cols are truly numeric
@@ -1298,10 +1289,25 @@ make_folds_by_poly <- function(cts_in_polys,
 
   ## randomize the order
 
-  if(n_folds > nrow(cts_in_polys)){
+  if(n_folds > sum(as.numeric(cts_in_polys[, 2]) > 0)){
     message("You have too little data somewhere to split into ", n_folds, " folds")
     message("Check the sample size in each strata, and each strata after time holdouts")
-    stop()
+    message("Still, we will assign the available data randomly to folds...")
+    
+    fold_vec <- sample(x = 1:n_folds, size =  sum(as.numeric(cts_in_polys[, 2]) > 0), replace = F)
+    
+    message("The sample size sum in each fold is: \n")
+    pp.ind <- 1
+    for(i in 1:n_folds){
+      if(i %in% fold_vec){
+        message(sprintf('Fold %i: %s', i, cts_in_polys[which(cts_in_polys[, 1] == pt_poly_map[pp.ind]), 2]))
+        pp.ind <- pp.ind + 1
+      }else{
+        message('0')
+      }
+    }
+    
+    return(fold_vec)
   }
 
   rand_ord <- sample(1:nrow(cts_in_polys))
@@ -1315,7 +1321,7 @@ make_folds_by_poly <- function(cts_in_polys,
   }
 
   ## get the sample size threshhold in each poly
-  total_ct <- sum(cts_in_polys[,2])
+  total_ct <- sum(as.numeric(cts_in_polys[,2]))
   max_fold_ct <- ceiling(total_ct/n_folds)
 
   ## add polys to folds
@@ -1325,7 +1331,7 @@ make_folds_by_poly <- function(cts_in_polys,
   for(fold in 1:(n_folds-1)){
 
     ## check threshhold
-    while(sum(cts_in_polys[rand_ord[start.ind:stop.ind], 2]) < max_fold_ct &
+    while(sum(as.numeric(cts_in_polys[rand_ord[start.ind:stop.ind], 2])) < max_fold_ct &
           stop.ind < nrow(cts_in_polys)){
       stop.ind <- stop.ind + 1
     }
@@ -1340,7 +1346,7 @@ make_folds_by_poly <- function(cts_in_polys,
            cts_in_polys[rand_ord[start.ind:stop.ind], 1])
 
     ## record total in fold
-    total_ct[fold] <- sum(cts_in_polys[rand_ord[start.ind:stop.ind], 2])
+    total_ct[fold] <- sum(as.numeric(cts_in_polys[rand_ord[start.ind:stop.ind], 2]))
 
     ## adjust indices
     start.ind <- stop.ind + 1
@@ -1352,11 +1358,11 @@ make_folds_by_poly <- function(cts_in_polys,
   fold <- n_folds
   assign(paste0('polys_in_fold_', fold),
          cts_in_polys[rand_ord[start.ind:stop.ind], 1])
-  total_ct[fold] <- sum(cts_in_polys[rand_ord[start.ind:stop.ind], 2])
+  total_ct[fold] <- sum(as.numeric(cts_in_polys[rand_ord[start.ind:stop.ind], 2]))
 
-  message("The sum in each different fold is: \n")
+  message("The sample size sum in each fold is: \n")
   for(i in 1:n_folds){
-    message(total_ct[i])
+    message(sprintf('Fold %i: %s', i, total_ct[i]))
   }
 
   ## now we have the polys in different folds. we make a

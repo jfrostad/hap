@@ -302,6 +302,17 @@ cleanv <- function(x) sapply(x[isClean(x)], "[[", 1)
 #####################################################################
 ## Functions relating to offical world shapefiles
 #####################################################################
+## get_admin_shape_dir
+#' @title Return path to admin shapes directory
+#'
+#' @description
+#' Returns path to the official LBD administrative shape file directory. This
+#' actually includes non-shape data that is important for mapping, notably
+#' the standard link table and standard id raster.
+#'
+get_admin_shape_dir <- function(version = "current") {
+    paste0("/snfs1/WORK/11_geospatial/admin_shapefiles/", version, "/")
+}
 
 ## get_admin_shapefile
 #' @title Return path to world admin shapefile at specified admin level
@@ -322,10 +333,11 @@ cleanv <- function(x) sapply(x[isClean(x)], "[[", 1)
 #' get_admin_shapefile(2)
 #' get_admin_shapefile(2, suffix = '.dbf')
 #'
+
 get_admin_shapefile <- function(admin_level = 0, suffix = ".shp", type = "admin", version = 'current', raking = F) {
     if (raking) type = "raking"  # backwards compatibility
 
-    base_dir <- paste0("/snfs1/WORK/11_geospatial/admin_shapefiles/", version, "/")
+    base_dir <- get_admin_shape_dir(version)
 
     if (type == "admin" ) {
         path <- paste0(base_dir, "lbd_standard_admin_", admin_level, suffix)
@@ -343,6 +355,26 @@ get_admin_shapefile <- function(admin_level = 0, suffix = ".shp", type = "admin"
     return(path)
 }
 
+## is_admin_shapefile_string
+#' @title Return logical indicating if string is an admin shapefile version string.
+#'
+#' @description
+#' Checks strings to see if they are equal to "current" or match a YYYY_MM_DD format.
+#' If so, returns TRUE. Else FALSE. No checking is done to ensure that the date string
+#' has a corresponding subdirectory in the admin_shapefiles directory.
+#'
+#' @param s String the string to check.
+#'
+is_admin_shapefile_string <- function(s) {
+  if (s == "current") {
+      TRUE
+  } else if (length(grep("^\\d{4}_\\d{2}_\\d{2}$", s))) {
+      TRUE # "2019_02_27" or another admin shapefile release date
+  } else {
+    FALSE
+  }
+}
+
 
 
 ## detect_adm_shapefile_date_type() ################################################
@@ -350,9 +382,9 @@ get_admin_shapefile <- function(admin_level = 0, suffix = ".shp", type = "admin"
 #' Detects whether the admin shapefile you are using is gaul or gadm
 #' and returns the version/date of the shapefile even if the 'current'
 #' version was specified
-#' 
+#'
 #' @param shpfile_path path to admin shapefile we want to learn about
-#' 
+#'
 #' @return two element named list:
 #'   1) list element 'shpfile_type' contains string: either 'gadm' or 'gaul'
 #'   2) list element 'shpfile_date' contains the actual date of the
@@ -370,12 +402,12 @@ detect_adm_shapefile_date_type <- function(shpfile_path = get_admin_shapefile(ve
   }else{
     full.path <- shpfile_path ## this is faster than resolving if it's an option...
   }
-  
+
   ## grab the date from the full path
   sf.date <- strsplit(full.path, '/')[[1]][6]
 
   ## determine if shpfile.date pertains to gaul or gadm
-  
+
   ## assume versions dated on and after Sept. 1, 2018
   ## (transition.date) are GADM, while dates before transition.date
   ## are GAUL unless otherwise coded in as an exception
@@ -394,5 +426,5 @@ detect_adm_shapefile_date_type <- function(shpfile_path = get_admin_shapefile(ve
   if(sf.date %in% gadm.exceptions) sf.type <- 'gadm'
 
   return(list(shpfile_type = sf.type,
-              shpfile_date = sf.date)) 
+              shpfile_date = sf.date))
 }

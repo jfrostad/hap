@@ -64,7 +64,7 @@ extract_covariates = function(df, covariate_list, id_col = NULL, reconcile_timev
   for(lll in names(covariate_list)){
     if(class(covariate_list[[lll]]) == 'RasterBrick'){
       tv_cov_names = append(tv_cov_names, lll)
-      names(covariate_list[[lll]]) = paste0('XXX',1:length(names(covariate_list[[lll]]))) #use XXX as a place holder
+      if (nrow(period_map) > 1)  names(covariate_list[[lll]]) = paste0('XXX',1:length(names(covariate_list[[lll]]))) #use XXX as a place holder
     }
 
   }
@@ -77,7 +77,7 @@ extract_covariates = function(df, covariate_list, id_col = NULL, reconcile_timev
   cov_values = as.data.frame(lapply(covariate_list, function(x) raster::extract(x, locations)))
 
   #fix the names of the time varying covariates
-  names(cov_values) = sub('XXX', '', names(cov_values))
+  if (nrow(period_map) > 1)  names(cov_values) = sub('XXX', '', names(cov_values))
 
   #right now 4 periods are assumed-- make more flexible later
 
@@ -595,16 +595,16 @@ fit_xgboost_child_model <- function(df,
                              gamma = 0)
     } else {
       message("Selecting pre-specified hyperparameter grid")
-      hyperparam <- read.csv(hyperparameter_filepath)
+      hyperparam <- fread(hyperparameter_filepath)
 
-      # Define grid search and
-      xg_grid_final <- expand.grid(nrounds = hyperparam$nrounds,
-                                   max_depth = hyperparam$max_depth,
-                                   eta = hyperparam$eta,
-                                   colsample_bytree = .5,
-                                   min_child_weight = 1,
-                                   subsample = 1,
-                                   gamma = 0)
+      # Define grid search from the pre-specified hyperparameter settings
+      xg_grid <- expand.grid(nrounds = hyperparam$nrounds,
+                             max_depth = eval(parse(text=hyperparam$max_depth)),
+                             eta = eval(parse(text=hyperparam$eta)),
+                             colsample_bytree = .5,
+                             min_child_weight = 1,
+                             subsample = 1,
+                             gamma = 0)
 
     }
     # Set cross validation options, default to 5 times repeated 5-fold cross validation
@@ -733,16 +733,13 @@ fetch_covariate_layer = function(ras, period = 1){
 #covariate_layers: list of raster objects that consititue the covs. Must share names with the DT that the models were fit on
 #period: what period should be used. 1:N -- as of 11/2 we assume 4
 #child_models: a list of model objects from the child models
-#stacker_model: the model object from the stacker
 #return children: return the prediction rasters from the child models as well
 #todo: allow dataframes of constants to be passed
 produce_stack_rasters = function(covariate_layers = all_cov_layers, #raster layers and bricks
                                  period = 1, #period of analysis
-                                 child_models = list(), #gam model fitted to full data
-                                 stacker_model = stacker,
+                                 child_models = list(),
                                  indicator_family = 'binomial',
-                                 return_children = F,
-                                 centre_scale_df = NULL){ #stacker model
+                                 centre_scale_df = NULL){ 
 
   message(paste0('The Period is ', period))
 
@@ -760,72 +757,68 @@ produce_stack_rasters = function(covariate_layers = all_cov_layers, #raster laye
                                                                                    indicator_family = indicator_family,
                                                                                    centre_scale_df = centre_scale_df)))
 
-  #take the rasters of the stacker predictors and predict using stacker
-  #to: reuse the predict_model_raster function and add glm functionality to it
-  stacked_ras = predict_model_raster(model_call = stacker_model, covariate_layers = stacker_predictors, indicator_family = indicator_family)
 
-
-  #return the results
-  if(return_children){
-    return(list(setNames(stacked_ras,'stacked_results'), stacker_predictors))
-  }else{
-    stacked_ras = setNames(stacked_ras,'stacked_results')
-    return(stacked_ras)
-  }
+  return(stacker_predictors)
 }
 
 
 #Wrapper function for produce stacked rasters
 #Runs all (or a subset of periods) and formats the results.
-make_stack_rasters = function(covariate_layers = all_cov_layers, #raster layers and bricks
-                              period = NULL, #period of analysis, NULL returns all periods
-                              child_models = list(), #gam model fitted to full data
-                              stacker_model = stacked_results[[2]],
-                              indicator_family = 'binomial',
-                              return_children = F,
-                              rd = run_date,
-                              re = reg,
-                              ind_gp = indicator_group,
-                              ind = indicator,
-                              ho = holdout,
-                              centre_scale_df = NULL){
-
+make_stack_rasters <- function(covariate_layers = all_cov_layers,
+                               period = NULL,
+                               child_models = list(),
+                               indicator_family = "binomial",
+                               rd = run_date,
+                               re = reg,
+                               ind_gp = indicator_group,
+                               ind = indicator,
+                               ho = holdout,
+                               centre_scale_df = NULL,
+                               ...) {
+  
   ## first, save child_models for use in get.cov.wts in post_estiamtion if not other places too
-  save(child_models, file=sprintf('/share/geospatial/mbg/%s/%s/output/%s/child_model_list_%s_%i.RData',
-                                  ind_gp, ind, rd, re, ho))
-
-  if(is.null(period)){
-    period = 1:4
+  save(child_models, file = sprintf(
+    "/share/geospatial/mbg/%s/%s/output/%s/child_model_list_%s_%i.RData",
+    ind_gp, ind, rd, re, ho
+  ))
+  
+  if (is.null(period)) {
+    period <- 1:4
   }
-
-  res = lapply(period, function(the_period) produce_stack_rasters(covariate_layers = covariate_layers, #raster layers and bricks. Covariate rasters essentially
-                                                                  period = the_period, #period of analysis. Fed in from the lapply
-                                                                  child_models = child_models, #a list of model objects for the child learners
-                                                                  stacker_model = stacker_model, #the model object of the stacker
-                                                                  indicator_family = indicator_family,
-                                                                  return_children = return_children,
-                                                                  centre_scale_df = centre_scale_df))
-
-  stacked_rasters = brick(lapply(1:length(res), function(x) res[[x]][[1]]))
-
-
-
-  if(return_children){
-    cms = lapply(1:length(res), function(x) res[[x]][[2]])
-    cms = lapply(1:dim(cms[[1]])[[3]], function(x) brick(sapply(cms,'[[', x)))
-
-    ret_obj = unlist(list(stacked_rasters,cms))
-  } else{
-    ret_obj = list(stacked_rasters)
+  
+  ## Create rasters from the child models
+  res <- lapply(period, function(the_period) produce_stack_rasters(
+    covariate_layers = covariate_layers, # raster layers and bricks. Covariate rasters essentially
+    period = the_period, # period of analysis. Fed in from the lapply
+    child_models = child_models, # a list of model objects for the child learners
+    indicator_family = indicator_family,
+    centre_scale_df = centre_scale_df
+  ))
+  
+  
+  ## Prep the rasters to be ordered in the following order:
+  ## raster_brick[[child_models]][[period]]
+  ret_obj <- lapply(names(child_models), function(x_cn) {
+    raster::brick(lapply(period, function(x_t) res[[x_t]][[x_cn]]))
+  })
+  
+  ## Set names of the output raster list
+  names(ret_obj) <- names(child_models)
+  
+  # Make sure that the raster brick dimensions and names are all correct
+  stopifnot(assertthat::are_equal(length(ret_obj), length(names(child_models))))
+  
+  j <- 0
+  for (x_t in ret_obj) {
+    j <- j + 1
+    stopifnot(assertthat::are_equal(names(x_t), paste0(names(child_models)[j], ".", period)))
   }
-
-  #set the names of the return object
-  #unique(gsub("(\\.[0-9]+)$","",names(testy[[1]])))
-  ret_obj_names = unlist(lapply(ret_obj, function(x) unique(gsub("(\\.[0-9]+)$","",names(x)))))
-
-  #return!
-  return(setNames(ret_obj, ret_obj_names))
+  
+  
+  # return!
+  return(ret_obj)
 }
+
 
 #predict model raster: given a model object and some covariates, predict out the results in raster form
 #model call: the model object you want to create rasters from
@@ -1480,7 +1473,7 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
     pop <- load_and_crop_covariates_annual(covs = 'worldpop', measures = pop_measure, simple_polygon = simple_polygon,
                                            start_year = min(year_list), end_year = max(year_list), interval_mo = 12, agebin=1)
     pop <- crop_set_mask(pop[[1]], simple_raster)
-    pop <- data.table(extract(pop, pixel_id))
+    pop <- data.table(raster::extract(pop, pixel_id))
     pop[, pixel_id := pixel_id]
     pop <- melt(pop, id.vars = "pixel_id", variable.name = "year", value.name = "pop")
     pop[, year := min(year_list) + as.numeric(year) - 1]
@@ -1539,4 +1532,162 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
   } else {
     return(all_regions)
   }
+}
+
+
+#' @title Fitting child stackers
+#' @description
+#' Parallelization in stackers is a little bit complicated. Some of the stackers
+#' rely on packages like "mgcv" and "glmnet" which have their own internal
+#' parallelization which we have to make sure plays nice with the MKL.
+#' \code{mclapply()} is used heavily in stackers as well which will hang with
+#' multithreaded operations like OpenMP or MKL.
+
+#' Those stacking functions which have a "cores" argument have an "auto" option
+#' (default) where the stacker function has code to properly determine how many
+#' cores to give each operation based on how it is parallelized, how many cores
+#' are available for the job based on slots, etc. It is highly recommended that
+#' the "auto" option be used. Otherwise, you may pass in an integer argument for
+#' the number of cores. The only value that is known to work generally on all
+#' stackers is 1, or serial operation.
+#'
+#' @param models a vector of sub-models to run
+#' @param input_data the data frame with the input data, defaulted to \code{the_data} from the global environment
+#'
+#' @return A list of sub-model predictions and model objects where the first element of each list member are the predictions,
+#' and the second element the model statistics and summary
+#'
+#' @rdname run_child_stackers
+#'
+#' @importFrom raster extent crop mask
+#'
+#' @export
+run_child_stackers <- function(models, input_data = the_data) {
+  if ("gam" %in% models) {
+    tic("Stacking - GAM")
+    gam_child <- fit_gam_child_model(
+      df = input_data,
+      model_name = "gam",
+      fold_id_col = "fold_id",
+      covariates = all_fixed_effects,
+      additional_terms = NULL,
+      weight_column = "weight",
+      bam = FALSE,
+      spline_args = list(bs = "ts", k = 3),
+      auto_model_select = TRUE,
+      indicator = indicator,
+      indicator_family = indicator_family,
+      cores = "auto"
+    )
+    
+    toc(log = T)
+  }
+  
+  # Fit a GBM/BRT model
+  if ("gbm" %in% models) {
+    tic("Stacking - GBM")
+    gbm_child <- fit_gbm_child_model(
+      df = input_data,
+      model_name = "gbm",
+      fold_id_col = "fold_id",
+      covariates = all_fixed_effects_brt,
+      weight_column = "weight",
+      tc = as.numeric(gbm_tc),
+      lr = as.numeric(gbm_lr),
+      bf = as.numeric(gbm_bf),
+      indicator = indicator,
+      indicator_family = indicator_family,
+      cores = "auto"
+    )
+    toc(log = T)
+  }
+  
+  # Fit a BRT model with Xgboost (faster than GBM)
+  if ("xgboost" %in% models) {
+    tic("Stacking - Xgboost")
+    
+    if (!exists("xg_model_tune")) {
+      message("xg_model_tune not found in config. Will be set to true, and model will be tuned with default grid search")
+      xg_model_tune <- TRUE
+      hyperparameter_filepath <- NULL
+    }
+    
+    if (xg_model_tune == T & !exists("hyperparameter_filepath")) {
+      message("Tuning xgboost on default grid search")
+      hyperparameter_filepath <- NULL
+    }
+    xgboost_child <- fit_xgboost_child_model(
+      df = input_data,
+      covariates = all_fixed_effects,
+      weight_column = "weight",
+      indicator = indicator,
+      indicator_family = indicator_family,
+      outputdir = outputdir,
+      region = reg,
+      xg_model_tune = xg_model_tune,
+      hyperparameter_filepath = hyperparameter_filepath
+    )
+    toc(log = T)
+  }
+  
+  # fit some nets
+  # lasso
+  if ("lasso" %in% models) {
+    tic("Stacking - lasso")
+    lasso_child <- fit_glmnet_child_model(
+      df = input_data,
+      model_name = "lasso",
+      covariates = all_fixed_effects,
+      fold_id_col = "fold_id",
+      additional_terms = NULL,
+      indicator_family = indicator_family,
+      indicator = indicator,
+      alpha = 0,
+      weight_column = "weight",
+      cores = "auto"
+    )
+    toc(log = T)
+  }
+  
+  # ridge
+  if ("ridge" %in% models) {
+    tic("Stacking - ridge")
+    ridge_child <- fit_glmnet_child_model(
+      df = input_data,
+      model_name = "ridge",
+      covariates = all_fixed_effects,
+      fold_id_col = "fold_id",
+      additional_terms = NULL,
+      indicator_family = indicator_family,
+      indicator = indicator,
+      alpha = 1,
+      weight_column = "weight",
+      cores = "auto"
+    )
+    toc(log = T)
+  }
+  
+  # enet
+  if ("enet" %in% models) {
+    tic("Stacking - enet")
+    enet_child <- fit_glmnet_child_model(
+      df = input_data,
+      model_name = "enet",
+      covariates = all_fixed_effects,
+      fold_id_col = "fold_id",
+      additional_terms = NULL,
+      indicator_family = indicator_family,
+      indicator = indicator,
+      alpha = 0.5,
+      weight_column = "weight",
+      cores = "auto"
+    )
+    toc(log = T)
+  }
+  
+  ## Get all child ones
+  child_models <- lapply(paste0(models, "_child"), function(x) get(x))
+  
+  ## Return the list of child stacker (pred and model)
+  return(child_models)
 }
