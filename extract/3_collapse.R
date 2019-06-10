@@ -372,3 +372,49 @@ file.path(share.model.dir, 'cooking_dirty.csv') %>% write.csv(dt, file=., row.na
 #also save a solid fuel only model
 file.path(share.model.dir, 'cooking_fuel_solid.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_fuel_solid.csv') %>% write.csv(dt, file=., row.names=F)
+
+
+#***********************************************************************************************************************************
+#---MERGE CSV's of PROBLEMATIC SURVEYS----------------------------------------------------------------------------------------------
+#merging: new geographies to match, cooking fuel missing strings, dropped clusters 
+
+#read in csv's
+geographies <- fread('/ihme/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/new_geographies_to_match.csv')
+missing_strings <- fread(paste0(j_root, '/WORK/11_geospatial/hap/documentation/str_review/cooking_fuel_missing_strings.csv'))
+dropped_clusters <- fread(paste0(j_root, '/WORK/11_geospatial/hap/documentation/cooking/dropped_clusters.csv'))
+
+
+#prep geographies_to_match csv
+geographies <- subset(geographies, !Stage %in% '3')
+geographies <- select(geographies, iso3, nid, year_start, survey_name)
+geographies$geomatch <- 'X'
+
+#prep missing_strings csv
+missing_strings$unmapped_var <- paste(missing_strings$var, missing_strings$var_mapped) 
+missing_strings$unmapped_string <- missing_strings$var_og 
+percent <- missing_strings$prop * 100
+percent <- round(percent, digits = 1)
+missing_strings$unmapped_percent <- paste0(percent, "%") 
+missing_strings <- select(missing_strings, nid, ihme_loc_id, int_year, survey_name, 
+                          unmapped_var, unmapped_string, unmapped_percent)
+
+#prep dropped_clusters csv
+dropped_clusters$dropped_var <- paste(dropped_clusters$var, dropped_clusters$type)
+percent <- dropped_clusters$count / dropped_clusters$total * 100 
+percent <- round(percent, digits = 1) 
+dropped_clusters$dropped_percent <- paste0(percent, "%  -  (", dropped_clusters$count, "/", 
+                                           dropped_clusters$total, ")")  
+dropped_clusters <- select(dropped_clusters, nid, ihme_loc_id, int_year, dropped_var, 
+                           dropped_percent) %>% distinct()
+
+#merge
+problem_surveys <- merge(geographies, missing_strings, by.x = c('nid', 'iso3', 'year_start', 'survey_name'), 
+                         by.y = c('nid', 'ihme_loc_id', 'int_year', 'survey_name'), all.x = TRUE, all.y = TRUE)
+problem_surveys <- merge(problem_surveys, dropped_clusters, by.x = c('nid', 'iso3', 'year_start'), 
+                         by.y = c('nid', 'ihme_loc_id', 'int_year'), all.x = TRUE, all.y = TRUE)
+problem_surveys <- subset(problem_surveys, year_start > 1999)
+
+#output
+write.csv(problem_surveys, '/home/j/WORK/11_geospatial/hap/documentation/all_problematic_surveys.csv')
+
+
