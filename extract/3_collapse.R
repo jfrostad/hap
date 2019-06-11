@@ -50,6 +50,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 cores <- 20
+modeling_shapefile_version <- "current"
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save.intermediate <- F
@@ -89,7 +90,7 @@ file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 
 lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
-  mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
+mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
   
 #TODO move to misc fx
 #find values %like% helper
@@ -162,9 +163,7 @@ collapseData <- function(this.family,
 
   #loop over various families of indicators
   message(paste('->Processing:', this.family))
-  
-  
-  
+
   #### Subset & Shape Data ####
   dt <- initialClean(raw, var.fam=this.family, is.point=point)
     
@@ -293,8 +292,6 @@ if (save.intermediate == T) {
 cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% 
   rbindlist
 
-stop()
-
 #Run fx for each census file
 cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
   rbindlist
@@ -325,21 +322,30 @@ cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=
 #TODO investigate these issues
 #cooking <- cooking[!(shapefile %like% "2021")]
 cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
+cooking <-cooking[!(shapefile %like% "geo2_ar2")] #TODO problems with the resample functions fx!
 #cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
 #cooking <-cooking[!(shapefile %like% "geo2015_2014_1")]
 #cooking <-cooking[!(shapefile %like% "#N/A")]
 #cooking <-cooking[!(shapefile=='stats_mng_adm3_mics_2013')] #TODO double check this one w brandon
 
+countries <- unique(cooking[polygon==T, iso3]) %>% sort
+shapes <- unique(cooking[polygon==T & shapefile != '', shapefile]) %>% sort
 
+for(country in countries) {
+
+  message('trying for ', country)
+  
 #only work on PER for now
-#cooking <- cooking[iso3 == "PER"]
+temp <- cooking[iso3 == country]
 
 #run core resampling code
-dt <- resample_polygons(data = cooking,
+dt <- suppressMessages(resample_polygons(data = temp,
                         cores = 20,
                         indic = vars,
                         density = 0.001,
-                        gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique)
+                        gaul_list = lapply(unique(temp$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique))
+
+}
 
 #redefine row ID after resampling
 dt[, row_id := .I]
@@ -415,6 +421,6 @@ problem_surveys <- merge(problem_surveys, dropped_clusters, by.x = c('nid', 'iso
 problem_surveys <- subset(problem_surveys, year_start > 1999)
 
 #output
-write.csv(problem_surveys, '/home/j/WORK/11_geospatial/hap/documentation/all_problematic_surveys.csv')
+write.csv(problem_surveys, paste0(j_root, '/WORK/11_geospatial/hap/documentation/all_problematic_surveys.csv'))
 
 

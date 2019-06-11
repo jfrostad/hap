@@ -61,6 +61,13 @@ make_stack_rasters <- function(covariate_layers = all_cov_layers,
     raster::brick(lapply(period, function(x_t) res[[x_t]][[x_cn]]))
   })
   
+  ## Fix for single period (rename with suffix ".1")
+  if(length(period) == 1) {
+    for(i in 1:length(ret_obj)) {
+      names(ret_obj[[i]]) <- paste0(names(child_models)[i], ".1")
+    }
+  }
+  
   ## Set names of the output raster list
   names(ret_obj) <- names(child_models)
 

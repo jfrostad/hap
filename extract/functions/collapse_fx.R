@@ -124,15 +124,15 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
   if (var.fam == 'cooking') {
 
     #generate ordinal cooking risk levels as a function of summed cooking risk scores
-    message('defining -> cooking_risk')
-    ord.vars <- names(out)[names(out) %like% 'ord_c']
-    out[, cooking_risk := rowSums(.SD), .SDcols=ord.vars] #sum the indicators in order to generate aggregated risk
-    ind.vars <- c('cooking_clean', 'cooking_med', 'cooking_dirty')
-    out[!is.na(cooking_risk), (ind.vars) := 0] #initialize, then fill based on risk
-    #TODO investigate assumptions
-    out[cooking_risk<2, cooking_clean := 1]
-    out[cooking_risk==2, cooking_med := 1]
-    out[cooking_risk>2, cooking_dirty := 1]
+    # message('defining -> cooking_risk')
+    # ord.vars <- names(out)[names(out) %like% 'ord_c']
+    # out[, cooking_risk := rowSums(.SD), .SDcols=ord.vars] #sum the indicators in order to generate aggregated risk
+    # ind.vars <- c('cooking_clean', 'cooking_med', 'cooking_dirty')
+    # out[!is.na(cooking_risk), (ind.vars) := 0] #initialize, then fill based on risk
+    # #TODO investigate assumptions
+    # out[cooking_risk<2, cooking_clean := 1]
+    # out[cooking_risk==2, cooking_med := 1]
+    # out[cooking_risk>2, cooking_dirty := 1]
     
     #generate categorical cooking fuel
     #pull the fuel types we are interested in from the definitions file
@@ -140,17 +140,22 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
     #loop over each fuel type and generate the indicator variable
     for (type in fuel.types) {
       
-      varname <- paste0('cooking_fuel_', type)
+      varname <- paste0('cat_cooking_fuel_', type)
       message('defining -> ', varname)
-      out[!is.na(cooking_risk), (varname) := 0] #initialize, then fill based on cooking_fuel_mapped
+      out[!(is.na(cooking_fuel_mapped) & cooking_fuel_mapped == ''), (varname) := 0] #initialize, then fill based on cooking_fuel_mapped
       out[cooking_fuel_mapped==type, (varname) := 1]
       
     }
     
-    #generate binary cooking fuel
-    message('defining -> cooking_fuel_solid')
-    out[!(is.na(cooking_fuel_mapped) & cooking_fuel_mapped == ''), cooking_fuel_solid := 1] #initialize, then fill based on cooking_fuel_mapped
-    out[cooking_fuel_mapped %in% c('none', 'electricity', 'gas', 'kerosene'), cooking_fuel_solid := 0]
+    #generate binary/ordinal cooking fuel
+    message('defining -> cooking_fuel_solid/kerosene/clean')
+    out[!(is.na(cooking_fuel_mapped) & cooking_fuel_mapped == ''), 
+        `:=` (cooking_fuel_solid=0, 
+              cooking_fuel_kerosene=0, 
+              cooking_fuel_clean=0)] #initialize, then fill based on cooking_fuel_mapped
+    out[cooking_fuel_mapped %in% c('coal', 'wood', 'crop', 'dung'), cooking_fuel_solid := 1]
+    out[cooking_fuel_mapped %in% c('kerosene'), cooking_fuel_kerosene := 1]
+    out[cooking_fuel_mapped %in% c('none', 'electricity', 'gas'), cooking_fuel_clean := 1]
  
     #cleanup intermediate vars
     remove.vars <- names(out)[names(out) %like% "row_id|mapped"]
