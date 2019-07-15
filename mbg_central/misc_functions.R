@@ -222,7 +222,9 @@ combine_aggregation <- function(rd = run_date,
                                 dir_to_search = NULL,
                                 delete_region_files = T,
                                 merge_hierarchy_list = F,
-                                check_for_dupes = F) {
+                                check_for_dupes = F,
+                                measure = 'prevalence',
+                                metrics = c('rates', 'counts')) {
   
   # Combine aggregation objects across region
   # Jon Mosser / jmosser@uw.edu
@@ -251,70 +253,89 @@ combine_aggregation <- function(rd = run_date,
   for(rake in raked) {
     for (holdout in holdouts) {
       for (age in ages) {
-        message(paste0("\nWorking on age: ", age, " | holdout: ", holdout, " | raked: ", rake))
-        
-        # Set up lists
-        ad0 <- list()
-        ad1 <- list()
-        ad2 <- list()
-        sp_h <- list()
-        
-       
-        for (reg in regions) {
-          message(paste0("  Region: ", reg))
+        for (metric in metrics) {
+          message(paste0("\nWorking on age: ", age, " | holdout: ", holdout, " | raked: ", rake, " | metric: ", metric))
           
-          load(paste0(dir_to_search, indic, "_", ifelse(rake, "raked", "unraked"),
-                      "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"))
+          # Set up lists
+          ad0 <- list()
+          ad1 <- list()
+          ad2 <- list()
+          sp_h <- list()
           
-          if(merge_hierarchy_list == T) {
-            # Prepare hierarchy list for adm0
-            ad0_list <- subset(sp_hierarchy_list, select = c("ADM0_CODE", "ADM0_NAME", "region")) %>% unique
+          
+          for (reg in regions) {
+            message(paste0("  Region: ", reg))
             
-            # Prepare hierarchy list for adm1
-            ad1_list <- subset(sp_hierarchy_list,
-                               select = c("ADM0_CODE", "ADM1_CODE", "ADM0_NAME", "ADM1_NAME", "region")) %>%
-              unique
+            load(paste0(dir_to_search, indic, "_", 
+                        ifelse(raked, paste0("raked_", measure), "unraked"), 
+                        ifelse(metric == "counts", "_c", ""),
+                        "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"))
             
-            # Merge
-            admin_0 <- merge(ad0_list, admin_0, by = "ADM0_CODE", all.y = T)
-            admin_1 <- merge(ad1_list, admin_1, by = "ADM1_CODE", all.y = T)
-            admin_2 <- merge(sp_hierarchy_list, admin_2, by = "ADM2_CODE", all.y = T)
-            rm(ad0_list, ad1_list)
+            if(merge_hierarchy_list == T) {
+              # Prepare hierarchy list for adm0
+              ad0_list <- subset(sp_hierarchy_list, select = c("ADM0_CODE", "ADM0_NAME", "region")) %>% unique
+              
+              # Prepare hierarchy list for adm1
+              ad1_list <- subset(sp_hierarchy_list,
+                                 select = c("ADM0_CODE", "ADM1_CODE", "ADM0_NAME", "ADM1_NAME", "region")) %>%
+                unique
+              
+              # Merge
+              admin_0 <- merge(ad0_list, admin_0, by = "ADM0_CODE", all.y = T)
+              admin_1 <- merge(ad1_list, admin_1, by = "ADM1_CODE", all.y = T)
+              admin_2 <- merge(sp_hierarchy_list, admin_2, by = "ADM2_CODE", all.y = T)
+              rm(ad0_list, ad1_list)
+            }
+            if(check_for_dupes){
+              adms <- get_adm0_codes(reg)
+              sp_hier <- get_sp_hierarchy()
+              include_ad0 <- sp_hier$ADM0[ADM0_CODE %in% adms, ADM0_CODE]
+              include_ad1 <- sp_hier$ADM1[ADM0_CODE %in% adms, ADM1_CODE]
+              include_ad2 <- sp_hier$ADM2[ADM0_CODE %in% adms, ADM2_CODE]
+              
+              ad0[[reg]] <- admin_0[ADM0_CODE %in% include_ad0]
+              ad1[[reg]] <- admin_1[ADM1_CODE %in% include_ad1]
+              ad2[[reg]] <- admin_2[ADM2_CODE %in% include_ad2]
+              sp_h[[reg]] <- sp_hierarchy_list
+            } else{
+              ad0[[reg]] <- admin_0
+              ad1[[reg]] <- admin_1
+              ad2[[reg]] <- admin_2
+              sp_h[[reg]] <- sp_hierarchy_list
+            }
+            
+            rm(admin_0, admin_1, admin_2, sp_hierarchy_list)
+            
+            # remove any fixed effects collumns
+            if (use_inla_country_fes) {
+              if (nchar(reg) != 3) {
+                ad0[[reg]][, c(grep(pattern = 'gaul_code', colnames(admin_0))) := NULL]
+                ad1[[reg]][, c(grep(pattern = 'gaul_code', colnames(admin_1))) := NULL]
+                ad2[[reg]][, c(grep(pattern = 'gaul_code', colnames(admin_2))) := NULL]
+              }
+            }
+            
+            # add region names to file
+            ad0[[reg]][, region := reg]
+            ad1[[reg]][, region := reg]
+            ad2[[reg]][, region := reg]
           }
-          if(check_for_dupes){
-            adms <- get_adm0_codes(reg)
-            sp_hier <- get_sp_hierarchy()
-            include_ad0 <- sp_hier$ADM0[ADM0_CODE %in% adms, ADM0_CODE]
-            include_ad1 <- sp_hier$ADM1[ADM0_CODE %in% adms, ADM1_CODE]
-            include_ad2 <- sp_hier$ADM2[ADM0_CODE %in% adms, ADM2_CODE]
-            
-            ad0[[reg]] <- admin_0[ADM0_CODE %in% include_ad0]
-            ad1[[reg]] <- admin_1[ADM1_CODE %in% include_ad1]
-            ad2[[reg]] <- admin_2[ADM2_CODE %in% include_ad2]
-            sp_h[[reg]] <- sp_hierarchy_list
-          } else{
-            ad0[[reg]] <- admin_0
-            ad1[[reg]] <- admin_1
-            ad2[[reg]] <- admin_2
-            sp_h[[reg]] <- sp_hierarchy_list
-          }
           
-          rm(admin_0, admin_1, admin_2, sp_hierarchy_list)
+          # Get to long format & save
+          message("  Combining...")
+          admin_0 <- rbindlist(ad0)
+          admin_1 <- rbindlist(ad1)
+          admin_2 <- rbindlist(ad2)
+          sp_hierarchy_list <- rbindlist(sp_h)
+          
+          message("  Saving combined file...")
+          save(admin_0, admin_1, admin_2, sp_hierarchy_list,
+               file = paste0(dir_to_search, indic, "_",
+                             ifelse(rake, paste0("raked_", measure), "unraked"),
+                             ifelse(metric == "counts", "_c", ""),
+                             "_admin_draws_eb_bin", age, "_",
+                             holdout, ".RData"))
         }
-        
-        # Get to long format & save
-        message("  Combining...")
-        admin_0 <- rbindlist(ad0)
-        admin_1 <- rbindlist(ad1)
-        admin_2 <- rbindlist(ad2)
-        sp_hierarchy_list <- rbindlist(sp_h)
-        
-        message("  Saving combined file...")
-        save(admin_0, admin_1, admin_2, sp_hierarchy_list,
-             file = paste0(dir_to_search, indic, "_",
-                           ifelse(rake, "raked", "unraked"),
-                           "_admin_draws_eb_bin", age, "_",
-                           holdout, ".RData"))
       }
     }
   }
@@ -344,6 +365,7 @@ combine_aggregation <- function(rd = run_date,
   fin_files_to_delete <- list.files(dir_to_search, pattern = "fin_agg_", full.names=T)
   unlink(fin_files_to_delete)
 }
+
 ## get_singularity ------------------------------------------------------------
 #' Which Singularity image to use
 #'
@@ -479,7 +501,7 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
 #' 
 #' @param code_path Full path to R script. Override \code{code}
 #' 
-#' @param cores Number of threads. Default: 2
+#' @param cores Number of threads
 #' 
 #' @param memory RAM to be reserved, in GBs
 #'
@@ -563,7 +585,7 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
 #'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
 #'   SET_MKL_THREADS=4 can be achieved by passing in
 #'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)]
+#'   [default = NULL]
 #'
 #' @return Returns a qsub string
 #' @export
@@ -571,7 +593,7 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
 make_qsub_share <- function(user = Sys.info()["user"],
                             code = NULL,
                             code_path = NULL,
-                            cores = 2,
+                            cores = slots,
                             memory = 100,
                             proj = NULL,
                             ig = indicator_group,
@@ -591,7 +613,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
                             run_time = NULL,
                             priority = 0,
                             singularity = singularity_version,
-                            singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)) {
+                            singularity_opts = NULL) {
   
   # save an image
   if (saveimage == TRUE) save.image(pre_run_image_path(ig, indic, rd, age, reg, holdout))
@@ -626,7 +648,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
   if (is.null(code)) {
     code <- sprintf("%s/mbg_central/share_scripts/parallel_model.R", corerepo)
   } else {
-    code <- sprintf("%s/%s/%s.R", corerepo, ig, code)
+    code <- sprintf("%s/%s.R", corerepo, code)
   }
   
   # If code_path is not NULL, then override `code`
@@ -665,7 +687,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
 #'
 #' @param code_path Full path to R script. Overrides \code{code} and \code{script_dir}
 #'
-#' @param cores Number of threads. Default: 2.
+#' @param cores Number of threads
 #'
 #' @param memory RAM to be reserved, in GBs
 #'
@@ -757,7 +779,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
 #'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
 #'   SET_MKL_THREADS=4 can be achieved by passing in
 #'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)]
+#'   [default = NULL]
 #'
 #' @return Returns a qsub string
 #'
@@ -765,7 +787,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
 make_qsub_postest <- function(user = Sys.info()["user"],
                               code,
                               code_path = NULL,
-                              cores = 2,
+                              cores = slots,
                               memory = 100,
                               proj = NULL,
                               ig = indicator_group,
@@ -786,7 +808,7 @@ make_qsub_postest <- function(user = Sys.info()["user"],
                               run_time = NULL,
                               priority = 0,
                               singularity = singularity_version,
-                              singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)) {
+                              singularity_opts = NULL) {
   
   # Create test_post_est dir within model dir.
   temp_dir <- path_join(get_model_output_dir(ig, indic, rd), "test_post_est")
@@ -3097,7 +3119,7 @@ set_up_config <- function(repo,
   
   ###### Block 2: Add fields in config that are not in the default set ######
   
-  print("[2/6] Add fields that are in the default config set but not in user's config")
+  print("[2/6] Add fields in config that are not in the default set")
   
   ## Load in the default config dataset
   config_values <- fread(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/config_values.csv'), header = TRUE, stringsAsFactors = FALSE)
@@ -3114,7 +3136,7 @@ set_up_config <- function(repo,
   
   ###### Block 3: Extra parameters in config ######
   
-  print("[3/6] Add fields that are in user's config but not in the default config set")
+  print("[3/6] Add fields that are in in config but not in the default set")
   message("\nAdditional covariates: ")
   extras <- config$V1[!(config$V1 %in% names(config_values))]
   for (extra in extras) {
@@ -4160,30 +4182,31 @@ submit_aggregation_script <- function(indicator,
                                       run_time         = NULL,
                                       priority         = 0,
                                       slots            = cores,
-                                      cores            = 2,
+                                      cores            = 8,
                                       memory           = 20,
                                       singularity      = singularity_version,
-                                      singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores),
+                                      singularity_opts = NULL,
                                       modeling_shapefile_version = 'current',
                                       raking_shapefile_version = 'current',
-                                      submit_qsubs     = TRUE) {
-
+                                      submit_qsubs     = TRUE,
+                                      measure          = 'prevalence') {
+  
   # Define project first (necessary to validate node options)
   proj <- get_project(proj, use_geo_nodes=geo_nodes)
-
+  
   # Validate arguments
   validate_singularity_options(singularity, singularity_opts)
   validate_node_option(geo_nodes, use_c2_nodes, proj)
-
+  
   # Create sharedir (TODO is this necessary?)
   sharedir = get_model_output_dir(indicator_group, indicator, run_date)
   dir.create(sharedir, showWarnings = FALSE)
-
+  
   # Determine where stdout and stderr files will go
   output_err = setup_log_location(log_dir, user, indic, ig, rd)
   output_log_dir = output_err[[1]]
   error_log_dir = output_err[[2]]
-
+  
   # Define remaining job attributes
   
   run_time <- get_run_time(use_geo_nodes=geo_nodes, use_c2_nodes=use_c2_nodes, queue=queue, run_time=run_time)
@@ -4196,24 +4219,24 @@ submit_aggregation_script <- function(indicator,
   if(!is.null(cores) & !is.null(slots)) warning("Slots and cores are both specified, cores will be used to assign resources")
   if(is.null(cores)) cores <- slots
   resources <- get_resources(use_geo_nodes=geo_nodes, cores=cores, ram_gb=memory, runtime=run_time)
-
+  
   code <- path_join(corerepo, 'mbg_central', 'share_scripts', 'aggregate_results.R')
-
+  
   qsubs_to_make <- expand.grid(regions, holdouts, ages, raked)
   
   aggregation_qsubs <- make_qsubs_aggregation(qsubs_to_make, error_log_dir, output_log_dir, proj, resources, singularity_str, queue, priority, slots, shell, code,
-                                              indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version)
-
+                                              indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version, measure)
+  
   if (submit_qsubs) {
-      for(qsub in aggregation_qsubs) {
-          system(qsub)
-      }
+    for(qsub in aggregation_qsubs) {
+      system(qsub)
+    }
   }
   return(aggregation_qsubs)
 }
 
 make_qsubs_aggregation <- function(qsubs_to_make, stderr_log, stdout_log, project, resources, singularity_str, queue = NULL, priority = 0, slots, shell, code,
-                                   indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version) {
+                                   indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version, measure) {
   qsubs <- c()
   for (i in 1:nrow(qsubs_to_make)) {
     region <- qsubs_to_make[i, 1]
@@ -4244,7 +4267,8 @@ make_qsubs_aggregation <- function(qsubs_to_make, stderr_log, stdout_log, projec
                                   holdout,
                                   region,
                                   corerepo,
-                                  shapefile_version)
+                                  shapefile_version,
+                                  measure)
     qsubs <- c(qsubs, qsub)
   }
   return(qsubs)

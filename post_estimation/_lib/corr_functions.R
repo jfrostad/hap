@@ -1,142 +1,7 @@
 # ---------------------------------------------------------------------------------------------
-# Functions useful for exploratory analysis of ORS, RHF, ORT, and diarrhea
-#
-# Written by Kirsten Wiens
-# 2019-01-25
+# Author: JF
+# Functions used to create long keyed data tables for doing fast uncertainty interval calculations
 # ---------------------------------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------
-# Read in and clean data
-
-get_data <- function(indi, run_date, indicator_group = 'ort', ad = 'admin_0') {
-  
-  # load data
-  mydat <- fread(paste0('/share/geospatial/mbg/', indicator_group, '/', indi, '/output/', run_date, '/pred_derivatives/admin_summaries/', 
-                        indi, '_', ad, '_', ifelse(indi == 'had_diarrhea', 'raked_prevalence', 'unraked'), '_summary.csv'))
-  
-  # clean data
-  mydat <- mydat[!is.na(mean)]
-  mydat[, cirange := NULL]
-  mydat[, indicator := indi]
-  
-  # end function
-  return(mydat)
-}
-# -------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------
-# Calculate fold difference between max and min admin unit
-
-min_max_diff <- function(x) {
-  
-  # calculate fold difference
-  diff <- max(x)/min(x)
-  
-  # end function
-  return(diff)
-}
-# -------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------
-# Calculate relative inequity
-
-rel_dev <- function(x, y) {
-  
-  # calculate fold difference
-  ineq <- (x - y) / y
-  
-  # end function
-  return(ineq)
-}
-# -------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------
-# Calculate absolute inequity
-
-abs_dev <- function(x, y) {
-  
-  # calculate fold difference
-  ineq <- x - y
-  
-  # end function
-  return(ineq)
-}
-# -------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------
-# Correlation coefficient function
-
-# get mean spearman statistic
-get_cor_coef <- function(x, y) {
-  
-  if (!is.na(mean(x)) | !is.na(mean(y))) { 
-    out <- cor.test(x, y, method = 'spearman')[['estimate']][['rho']]
-  } else {
-    out <- NA
-  }
-  
-  #force to numeric to prevent errors in data.table group assignments
-  out %>% as.numeric %>% return
-  
-}
-# -------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------------------------------
-# General deaths averted for comparative risk assessment
-
-# get deaths averted
-get_deaths_averted <- function(observed_rate, counterfactual_rate, observed_deaths, rr, 
-                               counterfactual_is_worse = TRUE) {
-  
-  paf_obs <- (observed_rate*(rr - 1))/(observed_rate*(rr - 1) + 1)
-  
-  paf_ctf <- (counterfactual_rate*(rr - 1))/(counterfactual_rate*(rr - 1) + 1)
-  
-  if (counterfactual_is_worse == TRUE) averted <- observed_deaths*paf_ctf - observed_deaths*paf_obs
-  if (counterfactual_is_worse == FALSE) averted <- observed_deaths*paf_obs - observed_deaths*paf_ctf
-  
-  return(averted)
-}
-# -------------------------------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------------------------------
-# General number of deaths averted by to a given risk factor per 1,000 (rate)
-
-# get ratio averted
-get_rate_averted <- function(deaths_averted, population) {
-  
-  rate <- deaths_averted/population*1000
-  
-  if (rate < 0) rate <- 0
-  
-  return(rate)
-  
-}
-# -------------------------------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------------------------------
-# General ratio of change in deaths attributable to a given risk factor
-
-# get ratio averted
-get_ratio_averted <- function(deaths_averted, change_in_deaths) {
-  
-  ratio <- max(0, deaths_averted)/change_in_deaths
-    
-  if (ratio < 0) ratio <- 0
-  
-  return(ratio)
-
-}
-
-# -------------------------------------------------------------------------------------------
 
 ## format_cell_pred ################################################
 #TODO write documentation
@@ -214,7 +79,7 @@ format_cell_pred <- function(ind_gp,
     link,
     connector
   )
-  
+
   #helper function to load a list of cell preds and then merge them together
   loadCellPreds <- function(i) { 
   
@@ -297,23 +162,216 @@ format_cell_pred <- function(ind_gp,
   
 }
 
+
+#format aggregated results files at admin 0/1/2 lvls
+format_admin_results <- function(ind_gp,
+                                 ind,
+                                 rd,
+                                 measure,
+                                 suffix,
+                                 var_names = ind, # name using ind by default, but can pass custom name
+                                 rk) {
+
+  #helper function to load a list of admin results and format them into a single DT
+  load_admins <- function(i) { 
+    
+    message('~>loading results for: ', ind[[i]])
+
+  # def directory, then read in all the admin objects from a single RData file
+    combined_file <- file.path('/share/geospatial/mbg', ind_gp[[i]], ind[[i]], 'output', rd[[i]]) %>% 
+      paste0(., '/', ind[[i]], 
+             ifelse(rk[[i]], '_raked', '_unraked'), 
+             measure[[i]], '_admin_draws', suffix[[i]], '.RData')
+    
+    #helper function to create the combined file if it is not present
+    create_combined_results <- function(file, sfx='_0.RData') {
+
+      message('combined file not present...building')
+
+      #find all relevant files
+      files <- list.files(gsub(basename(file), '', file), pattern = 'admin_draws', full.names = T) %>% 
+        .[grep(sfx, .)]
+      
+      load_specific_obj <- function(file, obj) {
+        
+        message('loading ->', obj, ' from: ', file)
+        
+        #loads an RData file, and returns the requested object
+        load(file)
+        ls()[ls() == obj] %>% 
+          get %>% 
+          return
+        
+      }
+      
+      #load each of the required objects from all files
+      admin_0 <- lapply(files, load_specific_obj, obj='admin_0') %>% rbindlist
+      admin_1 <- lapply(files, load_specific_obj, obj='admin_1') %>% rbindlist
+      admin_2 <- lapply(files, load_specific_obj, obj='admin_2') %>% rbindlist
+      sp_hierarchy_list <- lapply(files, load_specific_obj, obj='sp_hierarchy_list') %>% rbindlist
+      
+      #return objects in a named list (we can assign this to the parent env using list2env)
+      list('admin_0'=admin_0, 'admin_1'=admin_1, 'admin_2'=admin_2, 'sp_hierarchy_list'=sp_hierarchy_list) %>% 
+        return()
+      
+    }
+
+    #load the combined file (create from all files if has not already been created)
+    if(combined_file %>% file.exists) load(combined_file, verbose=T)
+    else combined_file %>% create_combined_results %>% list2env(., .GlobalEnv) 
+    
+  # harmonize the hierarchy lists (some are using factor variables which don't merge well)
+    factor_vars <- names(sp_hierarchy_list)[vapply(sp_hierarchy_list, is.factor, c(is.factor=FALSE))]
+    if (length(factor_vars) > 0) {
+
+      message('formatting spatial hierarchy table to num/chr - input table uses factor variables')
+      
+      #build helper functions
+      format_hierarchy <- function(dt) {
+        
+      out <- copy(dt)
+      
+      #helper fx to convert factors without information loss
+      #https://stackoverflow.com/questions/3418128/how-to-convert-a-factor-to-integer-numeric-without-loss-of-information
+      facToNum <- function(f) as.numeric(as.character(f))
+
+      #we want to convert the codes to num and the names to chr
+      cols_to_num <- factor_vars[factor_vars %like% 'CODE']
+      cols_to_chr <- factor_vars[factor_vars %like% 'NAME']
+      cols <- list(cols_to_num, cols_to_chr)
+      funs <- rep(c(facToNum, as.character), lengths(cols))
+
+      # convert class based on column name
+      out <- out[, unlist(cols) := Map(function(f, x) f(x), funs, .SD), .SDcols = unlist(cols)] %>% 
+        return
+      
+      }
+      
+      #convert vars
+      sp_hierarchy_list <- format_hierarchy(sp_hierarchy_list)
+
+      #reassess and test
+      #TODO add tests to ensure no information loss?
+      if(vapply(sp_hierarchy_list, is.factor, c(is.factor=FALSE)) %>% any) stop('Failed to convert sp hierarchy!')
+
+    }
+    
+  # format and append
+    bind_results <- function(input_dt, info) {
+
+      dt <- copy(input_dt)
+      
+      #pull out the level of aggregation, rename the variable to harmonize and record the value for later
+      lvl_str <- names(dt)[names(dt) %like% 'CODE']
+      lvl <- substr(lvl_str, start=1, stop=4) #extract level value
+      setnames(dt, lvl_str, 'code') # rename
+      dt[, agg_level := lvl] #record the level
+      dt[, c('pop', 'region') := NULL] #remove unecessary vars
+
+      #merge on location names while simultaneously formatting them
+      out <- merge(dt,
+                   info[, .(code=get(lvl_str), 
+                            name=paste0(lvl, '_NAME') %>% get)] %>% unique, 
+                  by='code',
+                  all.x=T)
+
+      #melt and output
+      melt(out,
+           measure = patterns("V"),
+           variable.name = "draw",
+           value.name = var_names[[i]]) %>% 
+        return
+      
+    }
+    
+    dt <- list(admin_0, admin_1, admin_2) %>% 
+      lapply(., bind_results, info=sp_hierarchy_list) %>% 
+      rbindlist %>% 
+      return
+    
+  }
+
+  #load/format all the admin results and then merge them together
+  dt <- lapply(1:length(ind), load_admins) %>% 
+    Reduce(function(...) merge(..., all = TRUE), .) %>% 
+    return
+  
+}
+
+
 # -------------------------------------------------------------------
-# Crop rasters
+# Helper function to turn a tif raster file into a dt
+raster_to_dt <- function(the_raster,
+                         simple_polygon,
+                         simple_raster,
+                         year_list,
+                         interval_mo,
+                         outputdir,
+                         pixel_id) { #will pull names from raster by default but user can pass in
+
+  
+  message(paste0("Prepping the ", names(the_raster), " raster for this region"))
+  ## extend and crop pop raster to ensure it matches the simple raster #not convinced this is totally needed
+  out  <- extend(the_raster, simple_raster, values = NA)
+  out  <- crop(out, extent(simple_raster))
+  out  <- setExtent(out, simple_raster)
+  out  <- raster::mask(out, simple_raster)
+  
+  ## check to ensure the pop raster matches the simple raster in extent and resolution
+  if (extent(out) != extent(simple_raster)) {
+    stop("raster extent does not match simple raster")
+  }
+  if (any(res(out) != res(simple_raster))) {
+    stop("raster resolution does not match simple raster")
+  }
+  
+  #ensure the dimensions are the same
+  stopifnot(dim(out)[1:2] == dim(simple_raster)[1:2])
+  
+  message("converting the raster into a data.table")
+  #convert to datables, reshape and stuff
+  brick_to_dt = function(bbb, pixel_id = pixel_id){
+    dt = setDT(as.data.frame(bbb))
+    dt[, pxid := .I] #probably uncessary
+    
+    #drop rows now in cellIdx
+    dt = dt[pixel_id,]
+    
+    dt = melt(dt, id.vars = 'pxid', variable.factor = F)
+    dt = dt[,.(value)]
+    return(dt)
+  }
+  
+  dt <- brick_to_dt(bbb = out, pixel_id = pixel_id) %>% 
+    setnames(., names(the_raster))
+  
+  # Add pixel_id, but make sure that its recycled explicitly as per data.table 1.12.2 guidelines
+  dt[, pixel_id := rep(pixel_id, times = nrow(dt) / length(pixel_id))]
+  
+  #add year to covdt
+  yyy = as.vector(unlist(lapply(min(year_list):max(year_list), function(x) rep.int(x, times = length(pixel_id)))))
+  dt[,year := yyy]
+  
+  return(dt)
+  
+}
 
 #TODO write documentation
-prep_rasters <- function(these_rasters,
-                         reg,
-                         measure,
-                         pop_measure,
-                         year_start,
-                         year_end,
-                         var_names = sapply(these_rasters, names), # name using rasters by default, but can pass custom name
-                         matrix_pred_name = NULL,
-                         skip_cols = NULL,
-                         rk = T,
-                         coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
-                         rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
-                         shapefile_version = 'current') {
+format_rasters <- function(these_rasters,
+                           reg,
+                           measure,
+                           pop_measure,
+                           covs = NULL,
+                           cov_measures = NULL,
+                           year_start,
+                           year_end,
+                           var_names = sapply(these_rasters, names), # name using rasters by default, but can pass custom name
+                           matrix_pred_name = NULL,
+                           skip_cols = NULL,
+                           rk = T,
+                           coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
+                           rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
+                           shapefile_version = 'current') {
   
   message('loading simple raster & populations')
   
@@ -342,18 +400,41 @@ prep_rasters <- function(these_rasters,
   #####################################################################
   # load the cell id to admin units link
   link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version)
-  
+
   #####################################################################
-  #turn the rasters into a data.table and merge them together
+  #turn the rasters into a DT and merge them together
   dt <- lapply(these_rasters, raster_to_dt, 
-                  simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
-    Reduce(function(...) merge(..., all = TRUE), .)
+               simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
+    Reduce(function(...) merge(..., all = TRUE), .) %>% 
+    #force names, auto-extracting from raster can be variable depending on the upload name of the cell pred obj
+    setnames(., c('pixel_id', 'year', var_names))
   
   #also merge on population
-  pop <- load_populations_cov(reg, pop_measure=pop_measure, measure = measure, simple_polygon, 
-                              simple_raster, year_list, interval_mo=12, pixel_id = pixel_id)
-  dt <- merge(pop, dt, by=c('pixel_id', 'year'))
+  dt <- load_populations_cov(reg, pop_measure=pop_measure, measure=measure, simple_polygon, 
+                              simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
+   merge(dt, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing pop values?
+
+  #also load/merge on any user-provided covariates
+  if (!is.null(covs)) {
+    
+    #load the covariates as a raster
+    dt <- load_and_crop_covariates_annual(covs = covs,
+                                          measures = cov_measures,
+                                          simple_polygon = simple_polygon,
+                                          start_year  = min(year_list),
+                                          end_year    = max(year_list),
+                                          interval_mo = 12,
+                                          agebin = 1) %>% 
+      #convert to DT and combine
+      lapply(., raster_to_dt, simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
+      Reduce(function(...) merge(..., all = TRUE), .) %>% 
+      #force names, auto-extracting from raster can be variable depending on the upload name of the cell pred obj
+      setnames(., c('pixel_id', 'year', covs)) %>% 
+      #merge to the input rasters DT
+      merge(dt, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing covariate values?
   
+  }
+
   #####################################################################
   # Prepping the cell_pred and link table to be linked by making sure they have the appropriate identifiers.  Also performs a
   # zippering at the region boundary where cells that have a portion of their area outside of the modeling region are reintegrated
@@ -392,67 +473,12 @@ prep_rasters <- function(these_rasters,
   # TODO note that pixel_id col in link dt is a duplicate of ID, and causes a merge issue (pixel_id.x|pixel_id.y)
   # eventually should fix this issue upstream but for now removing it pre-merge is sufficient
   out <- merge(link[, -c('pixel_id')], dt, by.x = "ID", by.y = "cell_id", allow.cartesian = TRUE)
-  
-  # space
-  link <- NULL
-  
+
   #subset to relevant columns and return
+  #note that this is why we needed to force the cov names
   keep_vars <- c('ADM0_CODE', 'ADM1_CODE', 'ADM2_CODE', 
-                 'pixel_id', 'year', 'pop', 'area_fraction', unlist(var_names))
+                 'pixel_id', 'year', 'pop', 'area_fraction', unlist(var_names), covs)
   out[, (keep_vars), with=F] %>% 
     return
   
-}
-
-raster_to_dt <- function(the_raster,
-                        simple_polygon,
-                        simple_raster,
-                        year_list,
-                        interval_mo,
-                        outputdir,
-                        pixel_id){
-  
-message(paste0("Prepping the ", names(the_raster), " raster for this region"))
-## extend and crop pop raster to ensure it matches the simple raster #not convinced this is totally needed
-out  <- extend(the_raster, simple_raster, values = NA)
-out  <- crop(out, extent(simple_raster))
-out  <- setExtent(out, simple_raster)
-out  <- raster::mask(out, simple_raster)
-
-## check to ensure the pop raster matches the simple raster in extent and resolution
-if (extent(out) != extent(simple_raster)) {
-stop("raster extent does not match simple raster")
-}
-if (any(res(out) != res(simple_raster))) {
-stop("raster resolution does not match simple raster")
-}
-
-#ensure the dimensions are the same
-stopifnot(dim(out)[1:2] == dim(simple_raster)[1:2])
-
-message("converting the raster in to a data table")
-#convert to datables, reshape and stuff
-brick_to_dt = function(bbb, pixel_id = pixel_id){
-dt = setDT(as.data.frame(bbb))
-dt[, pxid := .I] #probably uncessary
-
-#drop rows now in cellIdx
-dt = dt[pixel_id,]
-
-dt = melt(dt, id.vars = 'pxid', variable.factor = F)
-dt = dt[,.(value)]
-return(dt)
-}
-
-dt <- brick_to_dt(bbb = out, pixel_id = pixel_id) %>% 
-  setnames(., names(the_raster))
-
-# Add pixel_id, but make sure that its recycled explicitly as per data.table 1.12.2 guidelines
-dt[, pixel_id := rep(pixel_id, times = nrow(dt) / length(pixel_id))]
-
-#add year to covdt
-yyy = as.vector(unlist(lapply(min(year_list):max(year_list), function(x) rep.int(x, times = length(pixel_id)))))
-dt[,year := yyy]
-
-return(dt)
 }

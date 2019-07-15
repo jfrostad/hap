@@ -11,6 +11,27 @@
 ## clear environment
 rm(list=ls())
 
+# runtime configuration
+if (Sys.info()["sysname"] == "Linux") {
+  j_root <- "/home/j/"
+  h_root <- file.path("/ihme/homes", Sys.info()["user"])
+  
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
+  ## Load libraries and  MBG project functions.
+  .libPaths(package_lib)
+  
+  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
+  Sys.setlocale(category = "LC_ALL", locale = "C")
+  
+} else {
+  j_root <- "J:"
+  h_root <- "H:"
+}
+
+#load external packages
+#TODO request adds to lbd singularity
+pacman::p_load(magrittr, mgsub)
+
 #running interactively?
 debug <- T
 debug.args <- c('simulate',
@@ -22,39 +43,23 @@ debug.args <- c('simulate',
                 'cooking_fuel_solid',
                 'config_ort_best',
                 'cooking/model/configs/',
-                'covs_ort_standard',
+                'covs_cooking_dia_sssa',
                 'cooking/model/configs/',
-                '2019_03_04_15_42_42',
-                FALSE,
-                FALSE,
-                FALSE,
+                '2019_07_11_08_39_30',
                 'total')
 
-## Set repo location, indicator group, and some arguments
-if (debug!=T) {
-  
-  ## Set repo location, indicator group, and some arguments
-  user            <- commandArgs()[4]
-  core_repo       <- commandArgs()[5]
-  indicator_group <- commandArgs()[6]
-  indicator       <- commandArgs()[7]
-  config_par      <- commandArgs()[8]
-  config_file     <- commandArgs()[9]
-  cov_par         <- commandArgs()[10]
-  cov_file        <- commandArgs()[11]
+#pull args from the job submission if !interactive
+args <- ifelse(debug %>% rep(., length(debug.args)), debug.args, commandArgs()) 
 
-} else {
-  
-  user            <- debug.args[4]
-  core_repo       <- debug.args[5]
-  indicator_group <- debug.args[6]
-  indicator       <- debug.args[7]
-  config_par      <- debug.args[8]
-  config_file     <- debug.args[9]
-  cov_par         <- debug.args[10]
-  cov_file        <- debug.args[11]
-  
-}
+## Set repo location, indicator group, and some arguments
+user            <- args[4]
+core_repo       <- args[5]
+indicator_group <- args[6]
+indicator       <- args[7]
+config_par      <- args[8]
+config_file     <- args[9]
+cov_par         <- args[10]
+cov_file        <- args[11]
 
 message(indicator)
 
@@ -63,19 +68,42 @@ package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.c
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
+#use your own diacritics fx, due to inscrutable error
+#note: requires mgsub pkg
+#TODO submit PR
+fix_diacritics <<- function(x) {
+  
+  #first define replacement patterns as a named list
+  defs <-
+    list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', 
+         '??'='C', '??'='E', '??'='E','??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', 
+         '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U','??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', 
+         '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c','??'='e', '??'='e', '??'='e', 
+         '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
+         '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y', '??'='Ss')
+  
+  #then force conversion to UTF-8 and replace with non-diacritic character
+  enc2utf8(x) %>% 
+    mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
+    return
+  
+}
+
 ## Throw a check for things that are going to be needed later
 message('Looking for things in the config that will be needed for this script to run properly')
 
 ## Read config file and save all parameters in memory
-config <- load_config(repo            = core_repo,
-                      indicator_group = '',
-                      indicator       = '',
-                      config_name     = paste0(config_file, config_par),
-                      covs_name       = paste0(cov_file, cov_par))
+config <- set_up_config(repo            = core_repo,
+                        indicator_group = '',
+                        indicator       = '',
+                        config_name     = paste0(config_file, config_par),
+                        covs_name       = paste0(cov_file, cov_par))
 
 ## Set run date(s)
-run_date <- ifelse(!debug, commandArgs()[12], debug.args[12])
-multi_run_dates <- ifelse(!debug, commandArgs()[13], debug.args[13])
+run_date <- args[12]
+
+## Set measure
+measure <- args[13]
 
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
@@ -83,27 +111,16 @@ outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'ou
 ## Create proper year list object
 if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
 
-## Ensure you have defined all necessary settings in your config
-check_config()
+## Get regions that have successfully completed through aggregation step
+Regions <- list.files(outputdir, pattern = paste0(ifelse(indicator == 'had_diarrhea', measure, 'unraked'),'*_admin_draws'))
+Regions <- gsub('.*eb_bin0_', '', Regions)
+for (r in 1:length(Regions)) Regions[[r]] <- substr(Regions[[r]], start = 1, stop = nchar(Regions)[[r]]-8)
+Regions <- unique(Regions)
+Regions <- Regions[Regions != '']
+message(paste0(Regions, '\n'))
 
-## If running individual countries make sure all country FEs and REs off
-individual_countries <- ifelse(!debug, commandArgs()[14], debug.args[14])
-if (individual_countries) {
-  use_child_country_fes <- FALSE
-  use_inla_country_fes  <- FALSE
-  use_inla_country_res  <- FALSE
-}
-
-## Get regions
-makeholdouts <- ifelse(!debug, commandArgs()[15], debug.args[15])
-holdouts <- ifelse(makeholdouts == TRUE, 1, 0)
-Regions <- list.files(outputdir, pattern = 'unraked*_admin_draws')
-Regions <- gsub(paste0(indicator, '_unraked_admin_draws_eb_bin0_'), '', Regions)
-Regions <- gsub(paste0('_', holdouts, '.RData'), '', Regions)
-Regions = Regions[!(Regions %in% paste0(holdouts, '.RData'))]
-
-## Set measure
-measure <- ifelse(!debug, commandArgs()[16], debug.args[16])
+## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
+holdouts <- 0
 
 ## Combine and summarize aggregated results --------------------------
 
@@ -116,6 +133,7 @@ combine_aggregation(rd       = run_date,
                     regions  = Regions,
                     holdouts = holdouts,
                     raked    = F,
+                    metrics = 'rates', #TODO do rates apply to HAP?
                     delete_region_files = F)
 
 # summarize admins

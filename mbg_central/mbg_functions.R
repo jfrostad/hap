@@ -144,6 +144,8 @@ build_mbg_formula_with_priors <- function(fixed_effects,
                                           nugget_prior = "list(prior = 'loggamma', param = c(2, 1))",
                                           add_ctry_res = FALSE,
                                           ctry_re_prior = "list(prior = 'loggamma', param = c(2, 1))",
+                                          ctry_re_sum0 = FALSE,
+                                          spde_integrate0 = FALSE,
                                           temporal_model_type="'ar1'",
                                           temporal_model_theta_prior = "list(prior = 'loggamma', param = c(1, 0.00005))",
                                           temporal_model_theta1_prior = "list(prior = 'normal', param = c(0, 1/(2.58^2)))",
@@ -151,17 +153,19 @@ build_mbg_formula_with_priors <- function(fixed_effects,
                                           stacker_names = child_model_names,
                                           coefs.sum1 = FALSE,
                                           subnat_RE = FALSE,
-                                          subnat_re_prior = "list(prior = 'loggamma', param = c(1, 5e-5))") {
-
+                                          subnat_re_prior = "list(prior = 'loggamma', param = c(1, 5e-5))",
+                                          nid_RE = as.logical(use_nid_res)
+){
+  
   if(nchar(stacker_names[1]) == 0 & coefs.sum1 == TRUE){
     message("WARNING! You've chosen sum-to-1 but don't appear to be using any stackers. Unless you have a very good reason to do this, it probably doesn't make sense. As such, we're setting coefs.sum1 <- FALSE")
     coefs.sum1 <- FALSE
   }
-
+  
   # Set up model equation
   if(int==TRUE) intercept='+int' else intercept =''
   f_null  <- formula(paste0('covered~-1',intercept))
-
+  
   if(!is.null(interact_with_year)){
     for(iwy in interact_with_year){
       fixed_effects <- gsub(iwy,paste0(iwy,'* factor(period)'),fixed_effects)
@@ -169,8 +173,8 @@ build_mbg_formula_with_priors <- function(fixed_effects,
     if(!is.null(positive_constrained_variables))
       stop("Cannot Both Constrain and Interact, one must be NULL.")
   }
-
-
+  
+  
   if(!is.null(positive_constrained_variables)){
     if(!all(positive_constrained_variables %in% strsplit(fixed_effects,' \\+ ')[[1]]))
       stop('Not all your positive_constrained_variables match fixed_effects')
@@ -179,49 +183,52 @@ build_mbg_formula_with_priors <- function(fixed_effects,
       fixed_effects <- gsub(pcv,v,fixed_effects)
     }
   }
-
-  f_nugget <- as.formula(paste0('~f(IID.ID, model = "iid", hyper = list(theta=', nugget_prior, '))'))
-  f_res <- as.formula(paste0('~f(CTRY.ID, model = "iid", hyper = list(theta=', ctry_re_prior, '))'))
-  f_subnat <- as.formula(paste0('~f(SUBNAT.ID, model = "iid", constr=TRUE, hyper = list(theta=', subnat_re_prior, "))"))
+  
+  f_nugget <- as.formula(paste0('~f(IID.ID, model = "iid", hyper = list(theta=', nugget_prior, '), constr = TRUE)'))
+  f_nid_res <- as.formula(paste0('~f(NID, model = "iid", hyper = list(theta=', nugget_prior, '), constr = TRUE)'))
+  f_res <- as.formula(paste0('~f(CTRY.ID, model = "iid", hyper = list(theta=', ctry_re_prior, '), constr = ', as.logical(ctry_re_sum0), ')'))
+  f_subnat <- as.formula(paste0('~f(SUBNAT.ID, model = "iid", hyper = list(theta=', subnat_re_prior, '), constr = TRUE)'))
   
   test_rho_priors(temporal_model_theta1_prior) ## Report how priors for theta1 (Rho) are being used in Rho space.
   f_space <- as.formula(paste0('~f(space,
                                    model = spde,
                                    group = space.group,
+                                   constr = ', as.logical(spde_integrate0), ',
                                    control.group = list(model = ', temporal_model_type, ", ",
-                                                       "hyper = list(theta = ", temporal_model_theta_prior, ", theta1 = ", temporal_model_theta1_prior, ")))"))
-
+                               "hyper = list(theta = ", temporal_model_theta_prior, ", theta1 = ", temporal_model_theta1_prior, ")))"))
+  
   f.e.v <- base::strsplit(all_fixed_effects, ' + ', fixed=T)[[1]] ## fixed effect vector
   f_sum1 <- as.formula(paste0('~f(covar,
                                   model = \'iid\',
                                   extraconstr = list(A = matrix(1, 1, ', length(f.e.v), '), e = 1),
                                     hyper=list(theta=list(initial=log(inla.set.control.fixed.default()$prec),
                                                fixed=TRUE)))'))
-
+  
   if(nchar(fixed_effects) <= 1){ ## then we don't have any fixed effects, so run the nullmodel
     nullmodel <- TRUE
   }
-
+  
   ## build formula starting with f_null
-
+  
   f_mbg <- f_null
-
+  
   if(!nullmodel){
     if(coefs.sum1){
       f_lin <- f_sum1 ## use the sum1 formula instead of fixed effects.
-                                        # the'fixed' effects may now be
-                                        # found @ inla$fit$summary.random
+      # the'fixed' effects may now be
+      # found @ inla$fit$summary.random
     } else{
       f_lin <- reformulate(fixed_effects)
     }
-
+    
     f_mbg <- f_mbg + f_lin
   }
-
+  
   if(!no_gp) f_mbg <- f_mbg + f_space
   if(add_nugget==TRUE) f_mbg <- f_mbg + f_nugget
+  if(nid_RE == TRUE) f_mbg <- f_mbg + f_nid_res
   if(add_ctry_res == TRUE) f_mbg <- f_mbg + f_res
-  if (subnat_RE == TRUE) f_mbg <- f_mbg + f_subnat
+  if(subnat_RE == TRUE) f_mbg <- f_mbg + f_subnat
   
   message(f_mbg)
   return(f_mbg)
@@ -389,13 +396,14 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
                                  zcol = zcol,
                                  scale_gaussian_variance_N = TRUE,
                                  tmb  = FALSE,
-                                 shapefile_version = 'current') {
-
+                                 shapefile_version = 'current',
+                                 nid_RE = as.logical(use_nid_res)) {
+  
   if(nchar(stacker_names[1]) == 0 & coefs.sum1 == TRUE){
     message("WARNING! You've chosen sum-to-1 but don't appear to be using any stackers. Unless you have a very good reason to do this, it probably doesn't make sense. As such, we're setting coefs.sum1 <- FALSE")
     coefs.sum1 <- FALSE
   }
-
+  
   # if fitting with tmb, punt this over to
   if(tmb == TRUE){
     message('Returning a TMB model stack.')
@@ -413,11 +421,11 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
                                shapefile_version = shapefile_version, 
                                scale_gaussian_variance_N = scale_gaussian_variance_N,
                                mesh       = mesh_s))            # spatial mesh
-
-  # else do the inla version
+    
+    # else do the inla version
   } else {
-
-
+    
+    
     # construct an SPDE model with a Matern kernel
     message('Building SPDE...')
     if(usematernnew){
@@ -429,7 +437,7 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
     } else {
       spde <- inla.spde2.matern(mesh = mesh_s,  alpha = 2)
     }
-
+    
     ## Build projector matrix between data locs and spatial mesh
     data.locs <- as.matrix(df[, c('longitude', 'latitude'),with=F])
     if(mesh_s$manifold == "S2"){
@@ -449,42 +457,42 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
       f.e.v <- stacker_names ## fixed eff. vec.
       A.covar <- as.matrix(df[, f.e.v, with = FALSE])
     }
-
+    
     if (is.null(mesh_t)){
       space = inla.spde.make.index("space",
                                    n.spde = spde$n.spde)
     } else {
-    space = inla.spde.make.index("space",
-                                 n.spde = spde$n.spde,
-                                 n.group = mesh_t$m)
+      space = inla.spde.make.index("space",
+                                   n.spde = spde$n.spde,
+                                   n.group = mesh_t$m)
     }
-
+    
     
     #find cov indices
     if(fixed_effects!="NONE" & nchar(fixed_effects) > 0){
       f_lin <- reformulate(fixed_effects)
       message('Indexing covariates...')
       covs_indices <- unique(c(match(all.vars(f_lin), colnames(df))))
-
+      
       # make design matrix, center the scaling
       design_matrix <- data.frame(int = 1,
                                   df[,covs_indices,with=F])
-
-
+      
+      
       cs_df <- getCentreScale(design_matrix, exclude = c('int',exclude_cs))
-
-
+      
+      
       design_matrix <- centreScale(design_matrix,
                                    df = cs_df)
     } else{
       design_matrix <- data.frame(int = rep(1,nrow(df)))
       cs_df <- getCentreScale(design_matrix, exclude = c('int','rates'))
     }
-
+    
     # construct a 'stack' object for observed data
     cov=df[[indicator]] # N+_i
     N=df$N                 # N_i
-
+    
     if(use_ctry_res){
       ## add an numeric gaul code to use in random effects
       design_matrix$CTRY.ID <- gaul_convert(df$country, shapefile_version = shapefile_version)
@@ -499,11 +507,15 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
         design_matrix$SUBNAT.ID[design_matrix$SUBNAT.ID == 0] <- NA
       }
     }
-
+    
     if(use_nugget){
       design_matrix$IID.ID <- 1:nrow(design_matrix)
     }
-
+    
+    if (nid_RE) {
+      design_matrix$NID <- (df$nid)     
+    }
+    
     message('Stacking data...')
     if(coefs.sum1 == TRUE & nchar(fixed_effects) > 1){
       ## build in covar effect to be used in sum1 constraint
@@ -524,13 +536,12 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
         tag = 'est'
       )
     }
-
+    
     return_list <- list(stack.obs, spde, cs_df)
-
+    
     return(return_list)
   }
 }
-
 
 #' @title Fit MBG model in INLA
 #' @description Fit MBG model in INLA
@@ -621,7 +632,7 @@ fit_mbg <- function(indicator_family,
   # roughly as flat as possible on logit scale without >1 inflection
   
   # code just to fit the model (not predict)
-  inla_working_dir <- paste0("/share/scratch/tmp/geos_inla_intermediate/inla_", run_date)
+  inla_working_dir <- paste0("/snfs1/temp/geospatial/inla_intermediate/inla_", run_date)
   dir.create(inla_working_dir, showWarnings = FALSE)
   if (indicator_family == "binomial") {
     system.time(
@@ -951,7 +962,7 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
   if(!is.null(simple_raster_subnats)) {
     template_subnat <- simple_raster_subnats
     subnat_cell_idx <- seegSDM:::notMissingIdx(template_subnat)
-    subnat_coords <- raster::xyFromCell(template_subnat, notMissingIdx(template_subnat))
+    subnat_coords <- raster::xyFromCell(template_subnat, seegSDM:::notMissingIdx(template_subnat))
   }
   
   

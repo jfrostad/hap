@@ -193,7 +193,7 @@ if (new.extracts==T) {
 } else strings <- file.path(doc.dir, 'cooking_string_match_tabulations.csv') %>% fread
 
 #cleanup
-strings[var=='cooking_fuel' & var_mapped == 'biomass', var_mapped := 'crop'] #TODO fix biomass in the original coding
+#strings[var=='cooking_fuel' & var_mapped == 'biomass', var_mapped := 'crop'] #TODO fix biomass in the original coding
 strings[var=='cooking_fuel' & var_mapped == '', var_mapped := 'missing'] #TODO fix biomass in the original coding
 
 #examine these tabulations to see if any strings are unmapped

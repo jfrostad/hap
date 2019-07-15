@@ -533,5 +533,5 @@ SINGULARITYENV_OMP_NUM_THREADS=${SET_OMP_THREADS}                 \
 SINGULARITYENV_MKL_NUM_THREADS=${SET_MKL_THREADS}                 \
 SINGULARITYENV_OMP_NESTED=true                                    \
 SINGULARITYENV_MKL_DYNAMIC=false                                  \
-singularity exec  "${sing_image}" /bin/sh -c                      \
-                 'umask "${UMASK_ORIG}" && eval ${R_EXEC}'
+singularity exec --bind /tmp:/tmp "${sing_image}" /bin/sh -c      \
+    'umask "${UMASK_ORIG}" && eval ${R_EXEC}'

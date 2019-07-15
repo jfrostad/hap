@@ -23,7 +23,7 @@ stacking_cores,5
 test,FALSE
 test_pct,5
 transform,inverse-logit
-stacked_fixed_effects,gam + enet + gbm + xgboost
+stacked_fixed_effects,gam + enet + xgboost
 other_weight,
 use_child_country_fes,FALSE
 gbm_tc,3
@@ -63,11 +63,19 @@ summstats,"c('mean','cirange')"
 z_list,0
 zcol,z_column_default_blank
 scale_gaussian_variance_N,TRUE
-xg_model_tune,FALSE
-modeling_shapefile_version,2018_12_04
-raking_shapefile_version,2018_12_04
+xg_model_tune,TRUE
+modeling_shapefile_version,2019_05_06
+raking_shapefile_version,2019_05_06
 subnational_raking,TRUE
 gam_knots,6
 ctry_re_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
 nugget_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
 theta_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
+ctry_re_sum0,TRUE
+spde_integrate0,FALSE
+subnat_re_prior,"list(prior = 'loggamma', param = c(4, 4))"
+use_subnat_res,TRUE
+subnat_country_to_get,IND
+use_s2_mesh,TRUE
+s2_mesh_params,"c(50, 500, 1000) "
+use_nid_res,TRUE

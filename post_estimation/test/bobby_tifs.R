@@ -1,8 +1,8 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
 # Author: JF
 # Date: 04/29/2019
-# Purpose: Run correlation for ORS and demo the cell pred formatting fx
-#source('/homes/jfrostad/_code/lbd/hap/post_estimation/correlation_child.R') 
+# Purpose: Run correlation calculations vs various covariates for TIF files that bobby is using
+# source('/homes/jfrostad/_code/lbd/hap/post_estimation/test/bobby_tifs.R') 
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -30,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(ccaPP, fst, mgsub)
+pacman::p_load(ccaPP, fst, mgsub, wCorr)
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -62,20 +62,79 @@ fix_diacritics <<- function(x) {
   
 }
 
+# -------------------------------------------------------------------
+# Helper function to turn a tif raster file into a dt
+raster_to_dt <- function(the_raster,
+                         simple_polygon,
+                         simple_raster,
+                         year_list,
+                         interval_mo,
+                         outputdir,
+                         pixel_id) { #will pull names from raster by default but user can pass in
+  
+  
+  message(paste0("Prepping the ", names(the_raster), " raster for this region"))
+  ## extend and crop pop raster to ensure it matches the simple raster #not convinced this is totally needed
+  out  <- extend(the_raster, simple_raster, values = NA)
+  out  <- crop(out, extent(simple_raster))
+  out  <- setExtent(out, simple_raster)
+  out  <- raster::mask(out, simple_raster)
+  
+  ## check to ensure the pop raster matches the simple raster in extent and resolution
+  if (extent(out) != extent(simple_raster)) {
+    stop("raster extent does not match simple raster")
+  }
+  if (any(res(out) != res(simple_raster))) {
+    stop("raster resolution does not match simple raster")
+  }
+  
+  #ensure the dimensions are the same
+  stopifnot(dim(out)[1:2] == dim(simple_raster)[1:2])
+  
+  message("converting the raster into a data.table")
+  #convert to datables, reshape and stuff
+  brick_to_dt = function(bbb, pixel_id = pixel_id){
+    dt = setDT(as.data.frame(bbb))
+    dt[, pxid := .I] #probably uncessary
+    
+    #drop rows now in cellIdx
+    dt = dt[pixel_id,]
+    
+    dt = melt(dt, id.vars = 'pxid', variable.factor = F)
+    dt = dt[,.(value)]
+    return(dt)
+  }
+  
+  dt <- brick_to_dt(bbb = out, pixel_id = pixel_id) %>% 
+    setnames(., names(the_raster))
+  
+  # Add pixel_id, but make sure that its recycled explicitly as per data.table 1.12.2 guidelines
+  dt[, pixel_id := rep(pixel_id, times = nrow(dt) / length(pixel_id))]
+  
+  #add year to covdt
+  yyy = as.vector(unlist(lapply(min(year_list):max(year_list), function(x) rep.int(x, times = length(pixel_id)))))
+  dt[,year := yyy]
+  
+  return(dt)
+  
+}
+
 #TODO write documentation
-prep_rasters <- function(these_rasters,
-                         reg,
-                         measure,
-                         pop_measure,
-                         year_start,
-                         year_end,
-                         var_names = sapply(these_rasters, names), # name using rasters by default, but can pass custom name
-                         matrix_pred_name = NULL,
-                         skip_cols = NULL,
-                         rk = T,
-                         coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
-                         rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
-                         shapefile_version = 'current') {
+format_rasters <- function(these_rasters,
+                           reg,
+                           measure,
+                           pop_measure,
+                           covs = NULL,
+                           cov_measures = NULL,
+                           year_start,
+                           year_end,
+                           var_names = sapply(these_rasters, names), # name using rasters by default, but can pass custom name
+                           matrix_pred_name = NULL,
+                           skip_cols = NULL,
+                           rk = T,
+                           coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
+                           rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
+                           shapefile_version = 'current') {
   
   message('loading simple raster & populations')
   
@@ -106,15 +165,38 @@ prep_rasters <- function(these_rasters,
   link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version)
   
   #####################################################################
-  #turn the rasters into a data.table and merge them together
-  dt <- lapply(these_rasters, prep_raster, 
+  #turn the rasters into a DT and merge them together
+  dt <- lapply(these_rasters, raster_to_dt, 
                simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
-    Reduce(function(...) merge(..., all = TRUE), .)
+    Reduce(function(...) merge(..., all = TRUE), .) %>% 
+    #force names, auto-extracting from raster can be variable depending on the upload name of the cell pred obj
+    setnames(., c('pixel_id', 'year', var_names))
   
   #also merge on population
-  pop <- load_populations_cov(reg, pop_measure=pop_measure, measure = measure, simple_polygon, 
-                              simple_raster, year_list, interval_mo=12, pixel_id = pixel_id)
-  dt <- merge(pop, dt, by=c('pixel_id', 'year'))
+  dt <- load_populations_cov(reg, pop_measure=pop_measure, measure=measure, simple_polygon, 
+                             simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
+    merge(dt, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing pop values?
+  
+  #also load/merge on any user-provided covariates
+  if (!is.null(covs)) {
+    
+    #load the covariates as a raster
+    dt <- load_and_crop_covariates_annual(covs = covs,
+                                          measures = cov_measures,
+                                          simple_polygon = simple_polygon,
+                                          start_year  = min(year_list),
+                                          end_year    = max(year_list),
+                                          interval_mo = 12,
+                                          agebin = 1) %>% 
+      #convert to DT and combine
+      lapply(., raster_to_dt, simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
+      Reduce(function(...) merge(..., all = TRUE), .) %>% 
+      #force names, auto-extracting from raster can be variable depending on the upload name of the cell pred obj
+      setnames(., c('pixel_id', 'year', covs)) %>% 
+      #merge to the input rasters DT
+      merge(dt, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing covariate values?
+    
+  }
   
   #####################################################################
   # Prepping the cell_pred and link table to be linked by making sure they have the appropriate identifiers.  Also performs a
@@ -155,12 +237,10 @@ prep_rasters <- function(these_rasters,
   # eventually should fix this issue upstream but for now removing it pre-merge is sufficient
   out <- merge(link[, -c('pixel_id')], dt, by.x = "ID", by.y = "cell_id", allow.cartesian = TRUE)
   
-  # space
-  link <- NULL
-  
   #subset to relevant columns and return
+  #note that this is why we needed to force the cov names
   keep_vars <- c('ADM0_CODE', 'ADM1_CODE', 'ADM2_CODE', 
-                 'pixel_id', 'year', 'pop', 'area_fraction', unlist(var_names))
+                 'pixel_id', 'year', 'pop', 'area_fraction', unlist(var_names), covs)
   out[, (keep_vars), with=F] %>% 
     return
   
@@ -177,10 +257,16 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  indicator_groups         <- list('ort', 'ort')
-  indicators               <- list('rhf', 'ors')
-  run_dates                <- list('2019_04_01_full_OOS', '2019_04_01_full_OOS')
-  shapefile               <- '2019_02_27'
+  shapefile                   <- '2019_02_27'
+  modeling_shapefile_version <- shapefile
+  covs                        <- c('access2', 
+                                   'diarrhea_prev',
+                                   'edu_mean_raked',
+                                   'u5m')
+  cov_measures                <- c('mean',
+                                   'mean',
+                                   'median',
+                                   'mean')
 
 
 } else {
@@ -194,79 +280,172 @@ if (interactive) {
 # print out session info so we have it on record
 sessionInfo()
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-PID <- Sys.getpid()
-tic("Entire script") # Start master timer
-
 ## Set seed for reproducibility
 message('Setting seed 98118 for reproducibility')
 set.seed(98118)
+#***********************************************************************************************************************
 
-# Setup -------------------------------------------------------------------------
+# ---IN/OUT-------------------------------------------------------------------------------------------------------------
+#define dirs
+tmp_dir <- '/home/j/temp/jfrostad/'
+data_dir <- file.path(tmp_dir, 'data', 'bobby_tifs')
+out_dir <- file.path(tmp_dir, 'output', 'bobby_tifs')
 
-# create outputdir
-outputdir <- paste0('/share/geospatial/mbg/', indicator_groups[[1]], '/exploratory_analysis/output/correlation_', Sys.Date(), '/')
-dir.create(paste0(outputdir, '/results_maps/'))
-
-# # Make correlation objects ------------------------------------------------------------
-##define share directory
-share_dir <- paste0('/share/geospatial/mbg/', indicator_groups[[1]], '/', indicators[[1]], '/output/', run_dates[[1]], '/')
-
-## load in regions used in this model and run_date
-regions <- get_output_regions(in_dir = share_dir)
+## load in region list
+region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
+  fread %>% 
+  .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+regions <- region_list[Stage %in% c('1', '2a'), mbg_reg] %>% unique
 
 ## load in bobby's tifs and work on them
-these_rasters <- list.files('/homes/jfrostad/temp/lbd', full.names = T) %>% 
+var_names <- c('distance', 'median', 'ratio')
+these_rasters <- list.files(data_dir, full.names = T, pattern='.tif') %>% 
   lapply(., raster)
 
-for (region in regions) {
+## load in the provided country info and merge on the ad0 code
+country_info <- file.path(data_dir, 'country_info.csv') %>% 
+  fread %>% 
+  merge(., region_list[, .(country=location_name, iso3, ADM0_CODE)], by='country', all.y=T) #merge on iso3
+
+#***********************************************************************************************************************
+
+# ---CALCULATE----------------------------------------------------------------------------------------------------------
+tic("Entire script") # Start master time
+
+#function to loop over regions in lapply
+regLoop <- function(region, build=T) {
   
   message('beginning correlation calculations for: ', region)
+  
+  #setup path to read/write
+  fst_path <- sprintf('%s/%s.fst', out_dir, region)
 
-  tic('Make table')
-    dt <- prep_rasters(these_rasters,
-                       reg = region,
-                       measure = 'count',
-                       pop_measure = 'total',
-                       year_start = 2010,
-                       year_end = 2010,
-                       rk = FALSE,
-                       shapefile_version = shapefile,
-                       coastal_fix = F)
-  toc(log = TRUE)
+  if (build) { #set TRUE if need to rebuild the table with new covs (longest part of process)
     
-  #reset key (to take correlation over year for each pixel/draw)
-  # setkey(dt, pixel_id, draw)
-  # toc(log = TRUE)
-  # 
-  # #calculate spearmans correlation over years by cell ID
-  # #note corSpearman from ccaPP, it is vectorized so should be faster and more suitable for DT
-  # tic('Long calculation')
-  # dt <- dt[, cor := corSpearman(a, b), by=key(dt)]
-  # dt[, `:=`(a=NULL, b=NULL)] #remove indicators to save memory, no longer needed
-  # toc(log = TRUE)
-  # 
-  # #reshape wide
-  # tic('Reshaping back to wide')
-  # dt <- dcast(dt, ... ~ draw, value.var= 'cor')
-  # toc(log = TRUE)
-  # 
-  # # finish up and save
-  # tic('Saving')
-  # message(sprintf('TESTING: Percent of NA rows per column is: %f%%', mean(is.na(dt[, V1]))))
-  # 
-  # out.path <- sprintf('%s/%s_%s_%s_corr_cell_draws.fst',
-  #                     share_dir, region, indicators[[1]], indicators[[2]])
-  # 
-  # message('-- finished making correlation across draws. now saving as \n', out.path)
-  # 
-  # write.fst(dt, path = out.path)
-  # toc(log = TRUE)
-  # 
-  # rm(dt) #prepare for next round (save memory)
+    tic('Make table')
+    dt <- format_rasters(these_rasters,
+                         reg = region,
+                         measure = 'count',
+                         pop_measure = 'total',
+                         covs = covs,
+                         cov_measures = cov_measures,
+                         year_start = 2010,
+                         year_end = 2010,
+                         var_names = var_names, #simplify raster names
+                         rk = FALSE,
+                         shapefile_version = shapefile,
+                         coastal_fix = F)
+    
+    #reset key (to take correlation over country for each covariate combination)
+    setkey(dt, ADM0_CODE, year)
+    toc(log = TRUE)
+    
+    # finish up and save
+    tic('Saving raw table as fst')
+    message('-> finished making tables. now saving as \n...', fst_path)
+    write.fst(dt, path = fst_path)
+    toc(log = TRUE)
+    
+  } else dt <- read.fst(fst_path, as.data.table = T) #else, read from disk
+
+  # aggregate to ad2
+  tic('Aggregation - AD2')
+  agg_cols <- c(var_names, covs)
+  agg_dt <- copy(dt) %>% 
+    setkey(., ADM0_CODE, ADM2_CODE, year) %>% 
+    #fractional aggregation
+    .[, (agg_cols) := lapply(.SD, weighted.mean, w=pop*area_fraction, na.rm=T), .SDcols=agg_cols, by=key(.)] %>% 
+    .[, pop := sum(pop*area_fraction), by=key(.)] %>% #aggregate pop as well
+    unique(., by=key(.))
+  toc()
+  
+  #internal function to calculate weighted Spearman correlations between a given cov y and a list of x vars
+  wCorrCovs <- function(input_dt, cov, var_list, by_vars, wt_var, collapse) {
+    
+    #copy to avoid global assignments
+    dt <- copy(input_dt) %>% 
+      na.omit(., cols=cov) #remove any rows that are missing the cov (see above limitation of weightedCorr)
+    
+    if (nrow(dt)==0) {
+      
+      message('no data available for ', cov, '!\n|~>skipping')
+      return(NULL)
+      
+    } else {
+      
+      #create the new column names
+      new_cols <- paste0('corr_', cov, '_X_', var_list) 
+      setnames(dt, c(cov, wt_var), c('y_var', 'wt')) #rename to simplify function
+      
+      #we will drop inputs if collapsing as they are no longer meaningful
+      if (collapse) keep_cols <- c(key(dt), new_cols)
+      else keep_cols <- c(key(dt), new_cols, cov, var_list)
+      
+      message('calculating correlation for ', new_cols %>% list)
+      message('|~>calculation is at the level of...', by_vars %>% list) 
+
+      #calculate correlation
+      out <- dt[, (new_cols) := lapply(.SD, weightedCorr, y=y_var, weights=wt, method='Spearman'), #note: cov is x
+                by=by_vars, .SDcols=var_list] %>% 
+        unique(., by=key(.)) %>% 
+        { if (collapse) . else .[, (cov) := y_var] } %>%  #rename y_var if you want to keep it
+        .[,  ..keep_cols] %>% #cleanup
+        return
+      
+    }
+    
+  }
+  
+  #internal function to apply wCorrCovs on dt with given level of aggregation and compile results
+  #note that the key needs to be SET to specify level of aggregation
+  calcCorrs <- function(dt, by_vars, wt_var, collapse) {
+
+    tmp <-
+    na.omit(dt, cols=var_names) %>% #remove NA values as it causes weightedCorr to fail (na.rm not implemented)
+      lapply(covs, wCorrCovs, input_dt=., var_list=var_names, #calculate for each covariate
+             by_vars=by_vars, wt_var=wt_var, collapse=collapse) %>%  #grab opts from external fx
+      .[!sapply(., is.null)] %>% #remove the null tables (missing covariate values)
+      { if (collapse) . else lapply(., function(x) setkeyv(x, cols=c(key(x), var_names))) } %>% #req to avoid dupes in next step
+      Reduce(function(...) merge(..., all = TRUE), .) %>%  #merge output
+      merge(country_info, ., by='ADM0_CODE', all.y=T) %>% #add on the country info
+      return
+
+  }
+  
+  #calculate spearmans correlation over years by country using pixel level and ad2 level results
+  tic('Correlation calculations')
+  message('Calculating by pixel')
+  out <- calcCorrs(dt, by_vars=c('ADM0_CODE', 'year'), wt_var='pop', collapse=T)
+  message('Calculating by ad2')
+  agg_out <- calcCorrs(agg_dt, by_vars=c('ADM0_CODE', 'year'), wt_var='pop', collapse=F)
+  toc(log = TRUE)
+
+  #export named list
+  list('ad0'=out, 'ad2'=agg_out) %>% 
+    return
   
 }
+
+#loop over all regions
+out <- lapply(regions, regLoop, build=F) 
+
+#bind results
+out_ad0 <- lapply(out, function(x) x[['ad0']]) %>% rbindlist(use.names=T, fill=T)
+out_ad2 <- lapply(out, function(x) x[['ad2']]) %>% rbindlist(use.names=T, fill=T)
+
+# finish up and save
+tic('Saving ad0')
+out_path <- file.path(out_dir, 'ad0_covariate_correlations.csv')
+message('-> finished calculating all correlations. now saving as \n...', out_path)
+write.csv(out_ad0, file = out_path, row.names = F)
+toc(log = TRUE)
+
+tic('Saving ad2')
+out_path <- file.path(out_dir, 'ad2_covariate_correlations.csv')
+message('-> finished calculating all correlations. now saving as \n...', out_path)
+write.csv(out_ad2, file = out_path, row.names = F)
+toc(log = TRUE)
+
+toc() # End master timer
  
 #*********************************************************************************************************************** 

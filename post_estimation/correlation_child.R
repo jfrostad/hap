@@ -231,10 +231,13 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  indicator_groups         <- list('ort', 'ort')
-  indicators               <- list('rhf', 'ors')
-  run_dates                <- list('2019_04_01_full_OOS', '2019_04_01_full_OOS')
-  shapefile               <- '2019_02_27'
+  indicator_groups         <- list('ort', 'ort', 'ort')
+  indicators               <- list('rhf', 'ors', 'had_diarrhea')
+  run_dates                <- list('2019_04_01_full_OOS', '2019_04_01_full_OOS', '2019_04_01_full_OOS')
+  measures                 <- list('', '', '_deaths')
+  suffixes                 <- list('_eb_bin0_0', '_eb_bin0_0', '_eb_bin0_0')
+  rks                      <- list(F, F, T)
+  shapefile                <- '2019_02_27'
 
 
 } else {
@@ -319,5 +322,17 @@ for (region in regions %>% rev) {
   rm(dt) #prepare for next round (save memory)
   
 }
+
+
+message('beginning correlation calculations for: ', region)
+
+tic('Make table')
+dt <- format_admin_results(ind_gp = indicator_groups,
+                           ind = indicators,
+                           var_names = list('a', 'b', 'c'), #by default use ind name, but will pass a/b to simplify cor calc
+                           rd = run_dates,
+                           measure = measures,
+                           suffix = suffixes,
+                           rk = FALSE)
  
 #*********************************************************************************************************************** 

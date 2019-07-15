@@ -16,12 +16,12 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'dia_s_america'
+  reg                      <- 'dia_sssa'
   age                      <- 0
-  run_date                 <- "2018_12_19_05_51_31"
+  run_date                 <- "2019_07_09_09_12_17"
   test                     <- 0
   holdout                  <- 0
-  indicator                <- 'cooking_dirty'
+  indicator                <- 'cooking_fuel_solid'
   indicator_group          <- 'cooking'
   
   ## make a pathaddin that gets used widely
@@ -100,7 +100,7 @@ record_git_status(core_repo = core_repo, check_core_repo = TRUE)
 #if(grepl("geos", Sys.info()[4])) INLA:::inla.dynload.workaround()
 
 ## cores to use
-cores_to_use <- round(as.numeric(slots)*.5)
+cores_to_use <- 6
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -154,6 +154,55 @@ if(as.logical(skiptoinla) == FALSE){
                           datatag     = datatag,
                           use_share   = as.logical(use_share),
                           yl          = year_list)
+  }
+  
+  ## Remove any data outside of region
+  reg_list <- fread('/share/geospatial/kewiens/custom_regions/dia_region_iso.csv')
+  reg_list[, gadm_adm0_code := get_adm0_codes(iso3, shapefile_version = modeling_shapefile_version), by = iso3]
+  iso3_list <- filter(reg_list, gadm_adm0_code %in% gaul_list)
+  iso3_list <- unique(iso3_list$iso3)
+  df <- filter(df, country %in% iso3_list)
+  df <- as.data.table(df)
+  
+  ## Adding selective subnationals for state random effects
+  if(as.logical(use_subnat_res)) {
+    message('Prepping for subnational REs')
+    
+    ## Prep subnat location info
+    # subnat_country_to_get <- "IND"
+    gaul_list_a1        <- get_adm_codes_subnat(gaul_convert(subnat_country_to_get), 
+                                                admin_level = 1, shapefile_version = modeling_shapefile_version)
+    location_names <- get_location_code_mapping(modeling_shapefile_version)
+    
+    ## Get India subnational polygon
+    subnat_gaul        <- get_adm_codes_subnat(get_adm0_codes(subnat_country_to_get), admin_level = 1, shapefile_version = modeling_shapefile_version)
+    subnat_full_shp    <- readRDS(get_admin_shapefile( admin_level = 1, raking = F, suffix = '.rds', version = modeling_shapefile_version ))
+    
+    subnat_shapefile <- raster::subset(subnat_full_shp, 
+                                       ADM0_NAME == location_names[ihme_lc_id %in% subnat_country_to_get, loc_name])
+    simple_polygon_list2 <- load_simple_polygon(gaul_list = subnat_gaul, 
+                                                buffer = 1, tolerance = 0.4, 
+                                                custom_shapefile = subnat_shapefile)
+    subset_shape2        <- simple_polygon_list2[[1]]
+    simple_polygon2      <- simple_polygon_list2[[2]]
+    
+    ## Load list of raster inputs (pop and simple)
+    raster_list2        <- build_simple_raster_pop(subset_shape2, field = "ADM1_CODE")
+    simple_raster2      <- raster_list2[['simple_raster']]
+    
+    ## Merge ADM1 names to df
+    adm1_subset_lox <- over(SpatialPoints(df[,.(long = longitude, lat = latitude)], 
+                                          CRS(proj4string(subnat_shapefile))), subnat_shapefile)
+    df[, ADM1_CODE:= as.numeric(adm1_subset_lox$ADM1_CODE)]
+    
+    ## Assign same names to all missings
+    df[is.na(ADM1_CODE), ADM1_CODE:= 0]
+    
+  }  else {
+    subset_shape2        <- NULL
+    simple_polygon2      <- NULL
+    raster_list2        <- NULL
+    simple_raster2      <- NULL
   }
   
   ## if testing, we only keep 1000 or so observations
@@ -293,10 +342,11 @@ if(as.logical(skiptoinla) == FALSE){
   tic("Stacking - all") ## Start stacking master timer
   
   ## Figure out which models we're going to use
-  child_model_names <- stacked_fixed_effects        %>%
-    gsub(" ", "", .)          %>%
+  child_model_names <- stacked_fixed_effects %>%
+    gsub(" ", "", .) %>%
     strsplit(., "+", fixed=T) %>%
     unlist
+  
   message(paste0('Child stackers included are: ',paste(child_model_names,collapse=' // ')))
   
   the_covs <- format_covariates(all_fixed_effects)
@@ -306,7 +356,7 @@ if(as.logical(skiptoinla) == FALSE){
   
   ## shuffle the data into six folds
   the_data <- the_data[sample(nrow(the_data)),]
-  the_data[,fold_id := cut(seq(1,nrow(the_data)),breaks=as.numeric(n_stack_folds),labels=FALSE)]
+  the_data[, fold_id := cut(seq(1,nrow(the_data)),breaks=as.numeric(n_stack_folds),labels=FALSE)]
   
   ## add a row id column
   the_data[, a_rowid := seq(1:nrow(the_data))]
@@ -354,19 +404,11 @@ if(as.logical(skiptoinla) == FALSE){
     the_data  <- cbind(the_data, do.call(cbind, lapply(lapply(child_model_names, 'get'), function(x) x[[1]])))
     child_model_objs <- setNames(lapply(lapply(child_model_names, 'get'), function(x) x[[2]]), child_model_names)
     
-    ## fit GAM stacker -- SOON TO BE DEPRECIATED, right Daniel?
-    stacked_results <- gam_stacker(the_data,
-                                   model_names      = child_model_names,
-                                   indicator        = indicator,
-                                   indicator_family = indicator_family)
-    
     ## return the stacked rasters
     stacked_rasters <- make_stack_rasters(covariate_layers = all_cov_layers, #raster layers and bricks
                                           period           = min(period_map[, period_id]):max(period_map[, period_id]),
                                           child_models     = child_model_objs,
-                                          stacker_model    = stacked_results[[2]],
                                           indicator_family = indicator_family,
-                                          return_children  = TRUE,
                                           centre_scale_df  = covs_cs_df)
     
     ## plot stackers
@@ -460,10 +502,12 @@ if(as.logical(skiptoinla) == FALSE){
   }
   
   ## Save all inputs for MBG model into correct location on /share
+  cov_list <- lapply(cov_list, readAll)
   save_mbg_input(indicator         = indicator,
                  indicator_group   = indicator_group,
                  df                = df,
                  simple_raster     = simple_raster,
+                 simple_raster2    = simple_raster2,
                  mesh_s            = mesh_s,
                  mesh_t            = mesh_t,
                  cov_list          = cov_list,
@@ -480,6 +524,35 @@ if(as.logical(skiptoinla) == FALSE){
   
   file.copy(from = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', skiptoinla_from_rundate, pathaddin, '.RData'),
             to = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
+  
+  ## also need to load the simple_raster2 for subnational RE models
+  message('Prepping for subnational REs')
+  ## Prep subnat location info
+  if (as.logical(use_subnat_res)) {
+    # subnat_country_to_get <- "IND"
+    gaul_list_a1        <- get_adm_codes_subnat(gaul_convert(subnat_country_to_get), 
+                                                admin_level = 1, shapefile_version = modeling_shapefile_version)
+    location_names <- get_location_code_mapping(modeling_shapefile_version)
+    
+    ## Get India subnational polygon
+    subnat_gaul        <- get_adm_codes_subnat(get_adm0_codes(subnat_country_to_get), admin_level = 1, shapefile_version = modeling_shapefile_version)
+    subnat_full_shp    <- readRDS(get_admin_shapefile( admin_level = 1, raking = F, suffix = '.rds', version = modeling_shapefile_version ))
+    
+    subnat_shapefile <- raster::subset(subnat_full_shp, 
+                                       ADM0_NAME == location_names[ihme_lc_id %in% subnat_country_to_get, loc_name])
+    simple_polygon_list2 <- load_simple_polygon(gaul_list = subnat_gaul, 
+                                                buffer = 1, tolerance = 0.4, 
+                                                custom_shapefile = subnat_shapefile)
+    subset_shape2        <- simple_polygon_list2[[1]]
+    simple_polygon2      <- simple_polygon_list2[[2]]
+    
+    ## Load list of raster inputs (pop and simple)
+    raster_list2        <- build_simple_raster_pop(subset_shape2, field = "ADM1_CODE")
+    simple_raster2      <- raster_list2[['simple_raster']]
+    
+  }  else {
+    simple_raster2      <- NULL
+  }
 }
 
 ## reload data an prepare for MBG
@@ -490,12 +563,22 @@ load(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_i
 ## this is useful for diagnostics and other code that was built expecting the untransformed rasters
 if (as.logical(stackers_in_transform_space) & indicator_family == 'binomial' & as.logical(use_stacking_covs)){
   message('Converting stackers to logit space')
+  if (class(year_list) == "character") year_list <- eval(parse(text=year_list))
   
-  ## transform the rasters
-  for (ii in child_model_names) cov_list[[ii]] <- logit(cov_list[[ii]])
+  ## transform the rasters (and offset extreme values)
+  rclmat <- matrix(c(1,Inf,0.9999999, -Inf,0,0.0000001), ncol = 3, byrow = TRUE)
+  for (i in child_model_names) {
+    cov_list[[i]] <- reclassify(cov_list[[i]], rcl = rclmat, include.lowest = TRUE, right = TRUE)
+    cov_list[[i]] <- logit(cov_list[[i]])
+    names(cov_list[[i]]) <- paste0(i, '.', 1:length(year_list))
+  }
   
-  ## transform the stacker values that are in df
+  ## transform the stacker values that are in df (and offset extreme values)
   stacker_cols <- grep(paste0("(", paste(child_model_names, collapse="|"), ")(.*_pred)"), names(df), value=T)
+  for (i in stacker_cols) {
+    df[get(i) <= 0, (i) := 0.0000001]
+    df[get(i) >= 1, (i) := 0.9999999]
+  }
   df[, (stacker_cols) := lapply(.SD, logit), .SDcols = stacker_cols]
   
 }
@@ -515,12 +598,18 @@ if(as.logical(use_stacking_covs)){
 ## Generate MBG formula for INLA call (will run but not used by TMB)
 mbg_formula <- build_mbg_formula_with_priors(fixed_effects = all_fixed_effects,
                                              add_nugget    = use_inla_nugget,
-                                             nugget_prior  = "list(prior = 'loggamma', param = c(2, 1))",
+                                             nugget_prior  = nugget_prior,
                                              add_ctry_res  = use_inla_country_res,
-                                             ctry_re_prior = "list(prior = 'loggamma', param = c(2, 1))",
+                                             ctry_re_prior = ctry_re_prior,
+                                             ctry_re_sum0  = ctry_re_sum0,
+                                             spde_integrate0 = spde_integrate0,
                                              temporal_model_theta1_prior = rho_prior,
+                                             temporal_model_theta_prior = theta_prior,
                                              no_gp         = !as.logical(use_gp),
-                                             coefs.sum1    = coefs_sum1)
+                                             coefs.sum1    = coefs_sum1,
+                                             subnat_RE     = as.logical(use_subnat_res),
+                                             subnat_re_prior = subnat_re_prior,
+                                             nid_RE        = use_nid_res)
 
 ## If needed, add fake data to make sure INLA estimates all years
 missing_years <- setdiff(year_list, df$year)
@@ -541,13 +630,17 @@ input_data <- build_mbg_data_stack(df            = df, # note that merge (if usi
                                    mesh_s        = mesh_s,
                                    mesh_t        = mesh_t, # not currently implemented with tmb
                                    use_ctry_res  = use_inla_country_res,
+                                   use_subnat_res  = as.logical(use_subnat_res),
+                                   remove_non_subnats = TRUE,
                                    use_nugget    = use_inla_nugget, # implemented with tmb
                                    exclude_cs    = child_model_names, # raw covs will get center scaled here though (see notes above)
                                    coefs.sum1    = coefs_sum1, # not currenlty implemented tmb
                                    tmb           = fit_with_tmb,
                                    scale_gaussian_variance_N = scale_gaussian_variance_N,
+                                   shapefile_version = modeling_shapefile_version, 
                                    zl            = z_list, # if this is not zero and tmb==TRUE, it will trigger 3rd kronecker and fixed effects
-                                   zcol          = zcol)   # must not be null if z_list is present
+                                   zcol          = zcol,   # must not be null if z_list is present
+                                   nid_RE        = use_nid_res)
 
 ## combine all the inputs, other than cs_df these are not used if you are using TMB
 stacked_input  <- input_data[[1]]
@@ -566,6 +659,22 @@ if(is.null(weights)){
 
 tic("MBG - fit model") ## Start MBG - model fit timer
 
+## Set the number of cores to be equal to input;
+## If missing, then revert to cores_to_use value
+if(Sys.getenv("OMP_NUM_THREADS") != "") {
+  setompthreads(Sys.getenv("OMP_NUM_THREADS"))
+} else {
+  print("Threading information not found; setting cores_to_use as the input OpenMP threads.")
+  setompthreads(cores_to_use)
+}
+
+if(Sys.getenv("MKL_NUM_THREADS") != "") {
+  setmklthreads(Sys.getenv("MKL_NUM_THREADS"))
+} else {
+  print("Threading information not found; setting cores_to_use as the input MKL threads.")
+  setmklthreads(cores_to_use)
+}
+
 ## Fit MBG model
 if(!as.logical(skipinla)) {
   if(fit_with_tmb == FALSE) {
@@ -581,9 +690,13 @@ if(!as.logical(skipinla)) {
                          run_date         = run_date,
                          keep_inla_files  = keep_inla_files,
                          cores            = cores_to_use,
+                         blas_cores       = cores_to_use,
                          wgts             = weights,
                          intstrat         = intstrat,
-                         fe_sd_prior      = 1 / 9) ## this actually sets precision!. prec=1/9 -> sd=3
+                         verbose_output   = TRUE,
+                         fe_sd_prior      = 1 / 9, ## this actually sets precision!. prec=1/9 -> sd=3
+                         pardiso_license  = '/ihme/homes/jfrostad/licenses/pardiso.lic',
+                         omp_strat        = 'pardiso.parallel') 
   }
   
   if(fit_with_tmb == TRUE) {
@@ -646,7 +759,10 @@ pm <- lapply(chunks, function(samp) {
                 simple_raster = simple_raster,
                 transform     = transform,
                 coefs.sum1    = coefs_sum1,
-                pred_gp       = as.logical(use_gp)
+                pred_gp       = as.logical(use_gp),
+                shapefile_version = modeling_shapefile_version,
+                simple_raster_subnats = simple_raster2,
+                subnat_country_to_get = subnat_country_to_get
     )[[3]]
   } else {
     predict_mbg_tmb(samples              = samp,
@@ -661,6 +777,7 @@ pm <- lapply(chunks, function(samp) {
                     clamp_covs           = clamp_covs)  # TODO ADD CONFIG
   }
 })
+
 
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -757,6 +874,19 @@ if(length(z_list) > 1){
                  df         = df,
                  pathaddin  = pathaddin)
   
+  # save lower
+  writeRaster(
+    lower_ras,
+    file = paste0(outputdir, '/', indicator,'_lower_eb', pathaddin),
+    overwrite = TRUE
+  )
+  #save upper
+  writeRaster(
+    upper_ras,
+    file = paste0(outputdir, '/', indicator,'_upper_eb', pathaddin),
+    overwrite = TRUE
+  )
+  
   # plot the mean, cirange, and cfb variability rasters in a pdf
   dir.create(paste0(outputdir,'results_maps/'))
   pdf(paste0(outputdir,'results_maps/summary_rastersXX', pathaddin, '.pdf'))
@@ -811,19 +941,28 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 measure         <- 'total'
 jname           <- paste('agg', reg, indicator, sep = '_')
 mycores         <- 1
-proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
+
+# set memory by region
+individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
+mymem <- 120
+if (as.logical(individual_countries) & reg != 'IND') mymem <- 50
+if(r == 'dia_malay' | r == 'dia_name') mymem <- 150
+if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') mymem <- 180
+if(r == 'dia_s_america') mymem <- 240
 
 # set up qsub
-sys.sub <- paste0('qsub -e /share/geospatial/', user,'/temp/logs -o /share/geospatial/', user, '/temp/logs ', 
-                  '-pe multi_slot ', mycores, proj, 
-                  '-v sing_image=default -v SET_OMP_THREADS=1 -v SET_MKL_THREADS=1 -N ', jname, ' ')
-r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
+sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
+                  '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                  '-l fthread=2 -l h_rt=00:12:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
 script <- file.path(repo, indicator_group, 'model/aggregate_hap.R')
+
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 
-              use_geos_nodes, run_date, measure)
+              use_geos_nodes, run_date, measure, holdout)
 
 # submit qsub
-system(paste(sys.sub, r_shell, script, args))
+paste(sys.sub, r_shell, script, args) %>% 
+  system
 
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
