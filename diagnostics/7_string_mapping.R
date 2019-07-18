@@ -55,7 +55,7 @@ today <- "2019_03_26" #date of current post-extraction
 #options
 cores <- 10
 new.gbd.results <- F #set T if GBD results have been updated and need to redownload
-new.extracts <- T
+new.extracts <- F
 topic <- "hap"
 this.family <- 'cooking'
 indicators <- c('cooking_fuel', 'cooking_type', 'cooking_type_chimney', 'cooking_location', 

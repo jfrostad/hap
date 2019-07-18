@@ -66,6 +66,7 @@ def.file <- file.path(doc.dir, 'definitions.xlsx')
 collapse.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
 share.dir <- file.path('/share/geospatial/jfrostad')
+custom.regs <- '/share/geospatial/kewiens/custom_regions/dia_region_iso.csv' %>% fread
 
 ###Output###
 graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs')
@@ -101,94 +102,6 @@ normData <- function(x) {
   (x - min(x))/(max(x)-min(x))
 }
 
-#find values %like% helper
-getLikeMe <- function(obj, val, invert=F) {
-  
-  message('finding values that ', ifelse(invert, 'are NOT', 'are') ,' like: ', val, '\n|', 
-          '\no~~> from: ', deparse(match.call()$obj))
-  
-  #add option to invert
-  if (invert) { 
-    
-    out <- names(obj)[!(names(obj) %like% val)]
-  
-  } else out <- names(obj)[names(obj) %like% val]
-  
-  return(out)
-  
-}
-
-#helper function in order to pull all relevant files for a given problem NID
-vetAssistant <- function(this.nid,
-                         var.fam='cooking',
-                         dirs=list (
-                         'raw'=raw.dir, #by default these dirs can be pulled from global namespace
-                         'collapse'=collapse.dir,
-                         'model'=model.dir,
-                         'doc'=doc.dir
-                         )) {
-  
-  message('pulling relevant files for problem survey, nid = ', this.nid)
-
-  #pull the codebook
-  message(' -> codebook')
-  cb <-
-    file.path(dirs[['raw']], 'hap.xlsx') %>% 
-    read_xlsx(., sheet='codebook') %>% 
-    as.data.table
-  
-  #pull the raw data
-  message(' --> raw data') 
-  raw <- 
-    file.path(dirs[['raw']]) %>% 
-    list.files(full.names = T, pattern='.csv') %>% 
-    .[. %like% this.nid] %>% 
-    fread
-  
-  #pull the collapsed data
-  message(' ---> collapsed data')
-  col <- 
-    file.path(dirs[['collapse']]) %>% 
-    list.files(full.names = T, pattern='.fst') %>% 
-    sort(., decreasing=T) %>% 
-    .[1] %>% #pull most recent collapsed data 
-    read.fst(., as.data.table=T) 
-  
-  #pull the model input data
-  message(' ----> mbg input data') 
-  mod <- 
-    list.files(dirs[['model']], full.names = T) %>% 
-    sort(., decreasing=T) %>% 
-    .[1] %>% #pull most recent collapsed data
-    read_feather %>% 
-    as.data.table
-  
-  #pull the string combos
-  message(' -----> string matches')
-  str <- 
-    file.path(dirs[['doc']], 'str_review', paste0(var.fam, '_string_match_tabulations.csv')) %>% 
-    fread
-  
-  #pull the admin level comparisons to gbd and missingness diagnostics
-  #TODO improve file naming here to incorporate housing in future
-  message(' ------> adm level comparisons') 
-  adm <- 
-    file.path(dirs[['doc']], 'gbd_solid_fuel_comparison.csv') %>% 
-    fread
-  
-  #subset to the nid and then output info list
-  out <- list (
-    'cb'=cb,
-    'raw'=raw,
-    'col'=col,
-    'mod'=mod,
-    'str'=str,
-    'adm'=adm
-  ) %>% 
-    lapply(., function(x) x[nid==this.nid]) %>% 
-    return
-}
-
 #create function to read in raw data and collapse weighted pct missing
 #default behavior is to calculate by NID
 #TODO add capability to use ad1/ad2?
@@ -216,7 +129,7 @@ calcWtMissing <- function(file, varlist, wtvar='hh_size', lvl='nid') {
       #generate indicators for missing/unknown
       dt[, `:=` (missing=0, unknown=0)] #intialize
       dt[(is.na(var_og) | var_og == ''), missing := 1]
-      dt[(is.na(var_mapped) | var_mapped == '' | var_mapped %in% c('other', 'unknown')), unknown := 1]
+      dt[(missing == 1 | var_mapped %in% c('other', 'unknown')), unknown := 1]
 
       #generate weighted proportions
       dt[, pct_missing := weighted.mean(missing, w=wt), by=key(dt)] 
@@ -377,8 +290,33 @@ lineplotViolins <- function(country, verbose=T) {
     geom_violin(aes(y=solid_pct, group=year %>% as.factor, color=survey_series, weight=N), 
                 position=position_dodge(1), trim=T) +
     geom_jitter(aes(y=solid_pct, size=N, color=survey_series), shape=16, position=position_jitter(0.2), alpha=.2) +
-    scale_x_continuous("Interview Year") +
+    scale_x_continuous("Year") +
     scale_y_continuous("% Using Solid Fuel (GBD 2017)", limits=c(-0.1, 1.1)) +
+    ggtitle(country) +
+    theme_bw()
+  
+  print(plot)
+  
+  return(NA) #no need to return anything
+  
+}
+
+#categorical lineplots
+#generate line plots that show the categorical proportions over time
+catTimePlots <- function(country, verbose=T) {
+  
+  if(verbose) message(country)
+  
+  plot <-
+    ggplot(lineplot.dt[reg_iso3==country], 
+           aes(x=year, y = prop, color=fuel_type, group=fuel_type, shape=survey_series, label=nid_label)) +
+    geom_text_repel(size=3, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
+    geom_point(aes(size=N)) +
+    geom_line(linetype='dashed') +
+    scale_color_manual(values=colors) +
+    scale_size_area(max_size=5) +
+    scale_x_continuous("Year") +
+    scale_y_continuous("% Using Fueltype", limits=c(-0.1, 1.1)) +
     ggtitle(country) +
     theme_bw()
   
@@ -395,12 +333,13 @@ vetSuite <- function(country){
   diffScatters(country, verbose = F)
   missScatters(country, verbose = F)
   
-  message(country, '->violins')
+  message(country, '->lineplots')
+  catTimePlots(country, verbose = F)
   lineplotViolins(country, verbose = F)
   
   message(country, '->ridges')
   solidRidges(country, verbose = F)
-  fueltypeTimeRidges(country)
+  fueltypeTimeRidges(country, verbose = F)
   fueltypeRidges(country, verbose = F)
   
 }
@@ -436,7 +375,7 @@ if (new.gbd.results==T) {
   hap.exp <- merge(hap.exp, 
                    locs[, .(location_id, ihme_loc_id, region_name, region_id, super_region_name)], 
                    by='location_id')
-  hap.exp[, reg_iso3 := paste0(region_id, ': ', ihme_loc_id)]
+  #hap.exp[, reg_iso3 := paste0(region_id, ': ', ihme_loc_id)]
   
   write.csv(hap.exp, file = file.path(graph.dir, 'gbd_hap_results.csv'))
 
@@ -454,8 +393,7 @@ names(colors) <- cat.order
 cooking <- list.files(model.dir, full.names = T) %>% 
   sort(., decreasing=T) %>% 
   .[1] %>% 
-  read_feather %>% 
-  as.data.table
+  read.fst(., as.data.table=T)
 
 #merge on the loc info
 cooking <- merge(cooking, locs[, .(ihme_loc_id, region_name, super_region_name, region_id)], by='ihme_loc_id')
@@ -464,7 +402,9 @@ cooking <- merge(cooking, locs[, .(ihme_loc_id, region_name, super_region_name, 
 cooking[, facet := paste0(year, ': ', survey_series, '[', nid, ']')]
 
 #also build a region-iso3 var in order to sort plots better
-cooking[, reg_iso3 := paste0(region_id, ': ', ihme_loc_id)]
+#use the custom dia regions for this so it matches with your model better
+cooking <- merge(cooking, custom.regs[, .(iso3, dia_reg)], by='iso3')
+cooking[, reg_iso3 := paste0(dia_reg, ': ', ihme_loc_id)]
 cooking <- cooking[order(-rank(reg_iso3))] #sort by this var
 
 #recalculate % missing by NID from raw data
@@ -504,6 +444,20 @@ fuel.dt[count==0, log_count := NA]
 fuel.dt[, fuel_type := str_remove_all(fuel_type, 'cat_cooking_fuel_')]
 fuel.dt[, fuel_type := factor(fuel_type, levels=cat.order)]
 
+#CATEGORICAL LINEPLOT PREP#
+#calculate the proportions for every survey-year
+lineplot.dt <- fuel.dt[, .(iso3, year, nid, survey_series, fuel_type, count, N, reg_iso3)] %>% 
+  setkey(nid, fuel_type) %>% 
+  .[, `:=` (prop=weighted.mean(count/N, wt=N), N=sum(N)), by=key(.)] %>% 
+  unique(., by=key(.)) %>% 
+  .[, count := NULL] %>% #no longer meaningful
+  #use absolute residuals of a loess regression to label outliers
+  .[, svy_count := uniqueN(nid), by=iso3] %>% #cannot run loess with less than 3 surveys
+  .[svy_count>3, pred := loess(prop~year) %>% predict(.), by=.(iso3, fuel_type)] %>% 
+  .[!is.na(pred), resid := abs(prop - pred)] %>% 
+  .[resid>.1, nid_label := nid] %>% 
+  .[fuel_type=='wood', nid_label := nid] #label all surveys for wood regardless
+
 ##SOLID FUEL COMPARISONS#
 #subset to just solid fuel
 nonsolid.vars <- names(cooking) %>% .[. %like% 'cooking'] %>% .[!grepl('solid', .)]
@@ -512,10 +466,10 @@ solid.dt <- cooking[, -c(nonsolid.vars), with=F]
 #merge on the gbd values for comparison
 hap.exp[, year := year_id]
 hap.comparison <- merge(hap.exp[ihme_loc_id %in% unique(solid.dt$ihme_loc_id),
-                                .(gbd_lower, gbd_mean, gbd_upper, ihme_loc_id, year, reg_iso3)], 
+                                .(gbd_lower, gbd_mean, gbd_upper, ihme_loc_id, year)], 
                         solid.dt, all=TRUE,
-                        by=c('ihme_loc_id', 'year', 'reg_iso3')) %>% 
-  setkeyv(., c('ihme_loc_id', 'year', 'reg_iso3'))
+                        by=c('ihme_loc_id', 'year')) %>% 
+  setkeyv(., c('ihme_loc_id', 'year'))
 
 #merge on the missingness indicators
 hap.comparison <- unique(miss.dt[var=='cooking_fuel'], by='nid') %>% #TODO fix duplication issue in extracts
@@ -534,7 +488,7 @@ hap.comparison[pct_unknown>.05, nid_label_miss := paste0(nid, ' - [', round_any(
 #can set to unique to speed up plotting of scatters
 hap.comparison.ad0 <- unique(hap.comparison, by=key(hap.comparison))
 #output comparison stats for data vetting sheet
-hap.comparison.ad0[!is.na(solid_natl), .(nid, survey_series, ihme_loc_id, int_year, gbd_lower, gbd_mean, gbd_upper,
+hap.comparison.ad0[!is.na(solid_natl), .(nid, survey_series, ihme_loc_id, year, gbd_lower, gbd_mean, gbd_upper,
                        solid_natl, N_natl, diff_ratio, diff_abs, pct_missing, pct_unknown)] %>% 
   write.csv(., file = file.path(doc.dir, 'gbd_solid_fuel_comparison.csv'))
 #***********************************************************************************************************************
@@ -542,8 +496,9 @@ hap.comparison.ad0[!is.na(solid_natl), .(nid, survey_series, ihme_loc_id, int_ye
 # ---GRAPHS-------------------------------------------------------------------------------------------------------------
 #generate graphs for data vetting
 #first generate each graph type as a separate pdf series
-this.reg <- 'Southern Sub'
-countries <- cooking[region_name %like% this.reg, reg_iso3] %>% unique
+this.reg <- c('dia_sssa')
+countries <- unique(cooking$reg_iso3)
+countries <- cooking[dia_reg %in% this.reg, reg_iso3] %>% unique
 
 #country ridges over fueltype
 pdf(file=file.path(graph.dir, 'country_ridges_fueltype.pdf'),
@@ -582,6 +537,14 @@ pdf(file=file.path(graph.dir, 'gbd_comparison_lineplots.pdf'),
     height=8, width=12)
 
 lapply(countries, lineplotViolins)
+
+dev.off()
+
+#lineplots to compare categorical proportions over time
+pdf(file=file.path(graph.dir, 'category_lineplots.pdf'),
+    height=8, width=12)
+
+lapply(countries, catTimePlots)
 
 dev.off()
 

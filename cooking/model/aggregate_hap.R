@@ -12,6 +12,7 @@ rm(list=ls())
 
 #running interactively?
 debug <- T
+if (debug) warning('debug is set to TRUE - if you did not mean to run interactively then kill job and turn off debug')
 debug.args <- c('simulate',
                 'command',
                 'args',
@@ -19,12 +20,12 @@ debug.args <- c('simulate',
                 "/homes/jfrostad/_code/lbd/hap",
                 'cooking',
                 'cooking_fuel_solid',
-                'ort_best',
+                'hap_best',
                 'covs_cooking_dia_sssa',
-                'dia_sssa',
+                'dia_essa',
                 'proj_geo_nodes',
                 TRUE,
-                '2019_07_11_08_39_30',
+                '2019_07_15_12_05_42',
                 'total',
                 0)
 #pull args from the job submission if !interactive
@@ -112,3 +113,4 @@ submit_aggregation_script(indicator       = indicator,
                           measure         = measure,
                           modeling_shapefile_version = modeling_shapefile_version,
                           raking_shapefile_version = raking_shapefile_version)
+#***********************************************************************************************************************

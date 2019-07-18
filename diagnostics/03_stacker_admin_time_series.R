@@ -100,6 +100,9 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     
     draw_cols = grep('V[0-9]*', names(admin), value = T)
     
+    # subset by region
+    admin <- admin[region == reg]
+    
     #create counts
     #get rates
     admin[, paste0('mean_rate') := rowMeans(.SD, na.rm = T), .SDcols = draw_cols]
@@ -141,23 +144,37 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
   # ------------------------------------------------------------------------------------------------------------------------
   # Load and clean data and model information
   
-  # load and aggregate data if it is not given
-  if (is.null(admin_data)) {
-    message(paste0('You have not provided admin data. Aggregating data from /share/geospatial/mbg/input_data/', indicator, '.csv'))
-    input_data <- fread(paste0('/share/geospatial/mbg/input_data/', indicator, '.csv'))
-    admin_data <- input_aggregate_admin(indicator = indicator, 
-                                        indicator_group = indicator_group, 
-                                        reg = regions, 
-                                        run_date = run_date,
-                                        input_data = input_data,
-                                        sample_column = 'sum_of_sample_weights')
-    rm(input_data)
-  }
-  
   # set model output directories
   message('Loading and cleaning model information')
   outputdir = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
   imagedir = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/')
+  
+  # load and aggregate data if it is not given
+  if (is.null(admin_data)) {
+    message(paste0('You have not provided admin data. Aggregating data from /share/geospatial/mbg/input_data/', indicator, '.csv'))
+    input_data <- fread(paste0('/share/geospatial/mbg/input_data/', indicator, '.csv'))
+    if (regions %like% 'south_asia|IND|PAK') {
+      data_reg <- 'dia_south_asia'
+    } else if (regions %like% 'essa|KEN|ZWE') {
+      data_reg <- 'dia_essa'
+    } else if (regions %like% 'wssa|NGA') {
+      data_reg <- 'dia_wssa'
+    } else if (regions %like% 'chn_mng|MNG') {
+      data_reg <- 'dia_chn_mng'
+    } else if (regions %like% 'cssa|COD') {
+      data_reg <- 'dia_cssa'
+    } else {
+      data_reg <- regions
+    }
+    admin_data <- input_aggregate_admin(indicator = indicator, 
+                                        indicator_group = indicator_group, 
+                                        reg = data_reg,
+                                        run_date = run_date,
+                                        input_data = input_data,
+                                        sample_column = 'sum_of_sample_weights',
+                                        shapefile_version = modeling_shapefile_version)
+    rm(input_data)
+  }
   
   # loop over regions
   for (reg in regions) {
@@ -221,7 +238,6 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
       
       # add to data
       mbg = rbindlist(list(mbg, mbg_raked), use.names = TRUE)
-      rm(mbg_raked)
     }
     
     # get unraked admin0 results
@@ -235,6 +251,7 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     if (raked) {
       # get raked admin0 results
       adm0_raked = summarize_admin(outputdir, measure, 0, admin_data, draws, raked = T, credible_interval)
+      adm0_raked = adm0_raked[region == reg]
       
       # reshape adm0_raked long
       adm0_raked = adm0_raked[, c('ADM0_CODE', 'ADM0_NAME', 'year', 'mean_rate', 'lower_rate', 'upper_rate', submodels), with = F]
@@ -272,13 +289,13 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     
     # for each country in the region
     for(admin_id in intersect(get_adm0_codes(reg), unique(mbg[,ADM0_CODE]))){
-      
+
       adname = unique(mbg[ADM0_CODE == admin_id, ADM0_NAME])
       message(adname)
       
-      if (adname == 'Maldives') {
+      if (nrow(adm0[ADM0_CODE == admin_id & !is.na(value)]) == 0) {
         
-        message('Skipping Maldives plot')
+        message(paste0('Skipping ', adname, ' plot because there are not estimates here'))
         
       } else {
         
@@ -354,11 +371,11 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
           }
           
         }
-        
+      
       }
       
     }
-    
+  
     dev.off()
     message(paste0('Plots saved at ', outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, '.pdf'))
     # ------------------------------------------------------------------------------------------------------------------------

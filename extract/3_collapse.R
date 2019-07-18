@@ -91,24 +91,6 @@ file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
 mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
-  
-#TODO move to misc fx
-#find values %like% helper
-getLikeMe <- function(obj, val, invert=F) {
-  
-  message('finding values that ', ifelse(invert, 'are NOT', 'are') ,' like: ', val, '\n|', 
-          '\no~~> from: ', deparse(match.call()$obj))
-  
-  #add option to invert
-  if (invert) { 
-    
-    out <- names(obj)[!(names(obj) %like% val)]
-    
-  } else out <- names(obj)[names(obj) %like% val]
-  
-  return(out)
-  
-}
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
@@ -125,7 +107,8 @@ if (latest_date) {
   
   #pull latest points filename
   file_date <- list.files(data.dir, pattern = '*points') %>% 
-    sort(., decreasing=T)[1] %>% 
+    sort(., decreasing=T) %>% 
+    .[1] %>% 
     gsub('.fst|points_|poly_',  '', .)
   
 } else file_date <- manual_date
@@ -241,7 +224,7 @@ collapseData <- function(this.family,
     
     # Crosswalk missing/invalid household size data
     #TODO discuss this part with ani after learning more, for now just impute as 1
-    dt[(is.na(hh_size) | hh_size=0), hh_size := 1]
+    dt[(is.na(hh_size) | hh_size==0), hh_size := 1]
     
     # message("Crosswalking HH Sizes...")
     # if (!ipums) {
@@ -323,7 +306,7 @@ collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel', 'hh_
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
 #prep for resampling
-vars <- names(cooking) %>% .[. %like% 'cooking'] %>% .[!(. %like% 'cat_')]
+vars <- names(cooking) %>% .[. %like% 'cooking']
 
 #convert to count space
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
@@ -343,7 +326,7 @@ cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
 #cooking <-cooking[!(shapefile %like% "#N/A")]
 #cooking <-cooking[!(shapefile=='stats_mng_adm3_mics_2013')] #TODO double check this one w brandon
 
-#resampel the polygons using internal fx
+#resample the polygons using internal fx
 pt <- cooking[polygon==T] %>% #only pass the poly rows to the fx, pts are dropping
   resample_polygons(data = .,
                     cores = 20,
@@ -362,8 +345,8 @@ dt[, row_id := .I]
 setkey(dt, row_id)
 
 #save resampled data
-paste0(model.dir, "/", "data_", this.family, '_', today, ".feather") %>%
-  write_feather(dt, path=.)
+paste0(model.dir, "/", "data_", this.family, '_', today, ".fst") %>%
+  write.fst(dt, path=.)
 
 #prep for MDG
 setnames(dt,
@@ -436,5 +419,4 @@ problem_surveys <- problem_surveys[, year_start > 1999]
 
 #output
 write.csv(problem_surveys, paste0(j_root, '/WORK/11_geospatial/hap/documentation/all_problematic_surveys.csv'), row.names=F)
-
-
+#***********************************************************************************************************************************

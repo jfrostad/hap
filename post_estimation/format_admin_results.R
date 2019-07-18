@@ -31,6 +31,9 @@ if (Sys.info()["sysname"] == "Linux") {
 #load external packages
 #TODO request adds to lbd singularity
 pacman::p_load(ccaPP, fst, mgsub)
+
+#options
+options(scipen=999) #not a fan
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -75,7 +78,7 @@ format_admin_results <- function(ind_gp,
   load_admins <- function(i) { 
     
     message('~>loading results for: ', ind[[i]])
-    
+
     # def directory, then read in all the admin objects from a single RData file
     combined_file <- file.path('/share/geospatial/mbg', ind_gp[[i]], ind[[i]], 'output', rd[[i]]) %>% 
       paste0(., '/', ind[[i]], 
@@ -86,7 +89,7 @@ format_admin_results <- function(ind_gp,
     create_combined_results <- function(file, sfx='_0.RData') {
       
       message('combined file not present...building')
-      
+
       #find all relevant files
       files <- list.files(gsub(basename(file), '', file), pattern = 'admin_draws', full.names = T) %>% 
         .[grep(sfx, .)]
@@ -111,16 +114,23 @@ format_admin_results <- function(ind_gp,
       
       #return objects in a named list (we can assign this to the parent env using list2env)
       list('admin_0'=admin_0, 'admin_1'=admin_1, 'admin_2'=admin_2, 'sp_hierarchy_list'=sp_hierarchy_list) %>% 
-        return()
+        return
       
     }
     
     #load the combined file (create from all files if has not already been created)
-    if(combined_file %>% file.exists) load(combined_file, verbose=T)
-    else combined_file %>% create_combined_results %>% list2env(., .GlobalEnv) 
+    if (combined_file %>% file.exists) load(combined_file, verbose=T)
+    else { 
+      l <- create_combined_results(combined_file)
+      list2env(l, envir = environment()) #TODO cannot pipe using list2env?
+      rm(l) #cleanup
+    }
     
+    if (i==4) browser()
+
     # harmonize the hierarchy lists (some are using factor variables which don't merge well)
-    factor_vars <- names(sp_hierarchy_list)[vapply(sp_hierarchy_list, is.factor, c(is.factor=FALSE))]
+    factor_vars <- names(sp_hierarchy_list) %>% .[vapply(., is.factor, c(is.factor=FALSE))]
+    
     if (length(factor_vars) > 0) {
       
       message('formatting spatial hierarchy table to num/chr - input table uses factor variables')
@@ -161,7 +171,7 @@ format_admin_results <- function(ind_gp,
       dt <- copy(input_dt)
       
       #pull out the level of aggregation, rename the variable to harmonize and record the value for later
-      lvl_str <- names(dt)[names(dt) %like% 'CODE']
+      lvl_str <- names(dt) %>% .[. %like% 'CODE']
       lvl <- substr(lvl_str, start=1, stop=4) #extract level value
       setnames(dt, lvl_str, 'code') # rename
       dt[, agg_level := lvl] #record the level
@@ -283,28 +293,33 @@ setkey(dt, code, year, agg_level, draw)
 toc(log = TRUE)
 
 #calculations?
-#TODO 
+#made up calculation
+tic('Calculations')
+dt[, d := a/c * b^2]
+dt[, `:=` (a = NULL, b = NULL, c = NULL)] #no longer needed
+toc(log = TRUE)
 
-#return mean/CI
-# dt <- dt[, `:=`(mean=apply(.SD, 1, mean),
-#                 lci=apply(.SD, 1, quantile, 0.025),
-#                 uci=apply(.SD, 1, quantile, 0.975)),
-#          .SDcols=]
+#return uncertainty
+tic('Summarize CI')
+setkey(dt, code, year, agg_level)
+summary <- dt %>% 
+  copy %>% #do not modify in place for the purposes of this demo
+  .[, mean := lapply(.SD, mean, na.rm=T), by=key(.), .SDcols='d'] %>% 
+  .[, lower := lapply(.SD, quantile, 0.025, na.rm=T), by=key(.), .SDcols='d'] %>% 
+  .[, upper := lapply(.SD, quantile, 0.975, na.rm=T), by=key(.), .SDcols='d'] %>% 
+  .[, `:=` (d = NULL, draw = NULL)] %>%  #no longer needed
+  unique(., by=key(.))
+toc(log=TRUE)
 
 #reshape wide
-# tic('Reshaping back to wide')
-# dt <- dcast(dt, ... ~ draw, value.var= 'xxx') #TODO
-# toc(log = TRUE)
+tic('Reshaping back to wide')
+out <- dcast(dt, ... ~ draw, value.var= 'd')
+toc(log = TRUE)
 
 # finish up and save
 #TODO
 tic('Saving')
-# message(sprintf('TESTING: Percent of NA rows per column is: %f%%', mean(is.na(dt[, V1]))))
-# 
 share_dir <- '/home/j/temp/jfrostad/output/admin_draws'
-# 
-# message('-- finished making correlation across draws. now saving as \n', out.path)
-# 
 write.fst(dt, path = file.path(share_dir, 'ort_wash_cgf_admin_draws.fst'))
 write.csv(dt, file = file.path(share_dir, 'ort_wash_cgf_admin_draws.csv'), row.names=F)
 toc(log = TRUE)

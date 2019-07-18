@@ -41,11 +41,11 @@ debug.args <- c('simulate',
                 "/homes/jfrostad/_code/lbd/hap",
                 'cooking',
                 'cooking_fuel_solid',
-                'config_ort_best',
+                'config_hap_best',
                 'cooking/model/configs/',
-                'covs_cooking_dia_sssa',
+                'covs_cooking_dia_essa',
                 'cooking/model/configs/',
-                '2019_07_11_08_39_30',
+                '2019_07_15_12_05_42',
                 'total')
 
 #pull args from the job submission if !interactive

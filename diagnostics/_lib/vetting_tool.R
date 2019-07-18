@@ -13,7 +13,7 @@ rm(list=ls())
 if (Sys.info()["sysname"] == "Linux") {
   j_root <- "/home/j/"
   h_root <- file.path("/ihme/homes", Sys.info()["user"])
-
+  
   package_lib    <- file.path(h_root, '_code/_lib/pkg')
   ## Load libraries and  MBG project functions.
   #.libPaths(c( .libPaths(), package_lib))
@@ -30,13 +30,16 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, ggwordcloud, readxl, stringr, viridis) 
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, ggwordcloud, googledrive, readxl, stringr, viridis) 
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-problem.nid <- 111488 #set the NID you want to vet
+options(scipen=999) #not a fan
+problem.nid <- 20417 #set the NID you want to vet
+redownload.hap <- T #set T if new codebooking activity for HAP
+redownload.wash <- T #set T if new data vetting activity for WASH
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -54,38 +57,26 @@ share.dir <- file.path('/share/geospatial/jfrostad')
 
 ###Output###
 graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs')
+
+##Refresh google sheets##
+setwd(doc.dir)
+if(redownload.hap==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+if(redownload.wash==T) drive_download(as_id('1xn91Y3_lIr0G0Z_BBn-HMO9B9vFFzvCf_PQYpIV4AM8'), overwrite=T)
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
-#find values %like% helper
-getLikeMe <- function(obj, val, invert=F) {
-  
-  message('finding values that ', ifelse(invert, 'are NOT', 'are') ,' like: ', val, '\n|', 
-          '\no~~> from: ', deparse(match.call()$obj))
-  
-  #add option to invert
-  if (invert) { 
-    
-    out <- names(obj)[!(names(obj) %like% val)]
-  
-  } else out <- names(obj)[names(obj) %like% val]
-  
-  return(out)
-  
-}
-
 #helper function in order to pull all relevant files for a given problem NID
 vetAssistant <- function(this.nid,
                          var.fam='cooking',
                          dirs=list (
-                         'raw'=raw.dir, #by default these dirs can be pulled from global namespace
-                         'collapse'=collapse.dir,
-                         'model'=model.dir,
-                         'doc'=doc.dir
+                           'raw'=raw.dir, #by default these dirs can be pulled from global namespace
+                           'collapse'=collapse.dir,
+                           'model'=model.dir,
+                           'doc'=doc.dir
                          )) {
   
   message('pulling relevant files for problem survey, nid = ', this.nid)
-
+  
   #pull the codebook
   message(' -> codebook')
   cb <-
@@ -115,9 +106,8 @@ vetAssistant <- function(this.nid,
   mod <- 
     list.files(dirs[['model']], full.names = T) %>% 
     sort(., decreasing=T) %>% 
-    .[1] %>% #pull most recent collapsed data
-    read_feather %>% 
-    as.data.table
+    .[1] %>% #pull most recent collapsed data 
+    read.fst(., as.data.table=T) 
   
   #pull the string combos
   message(' -----> string matches')
@@ -152,7 +142,7 @@ wordCloud <- function(str.dt, this.var, order, colors) {
   #subset data
   dt <- copy(str.dt)
   dt[, factor_mapped := factor(var_mapped, levels=order)]
-
+  
   plot <- 
     ggplot(data=dt) +
     aes(x = 1, y = 1, size = prop, label = var_og,
@@ -184,6 +174,7 @@ info <- vetAssistant(problem.nid)
 
 #display available files
 str(info)
+names(info)
 
 #example of how to look at one (codebook)
 info[['cb']]
@@ -210,4 +201,4 @@ names(type.colors) <- type.order
 wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
 #look at raw data too
-info[['str']]
+info[['str']][var=='cooking_fuel']
