@@ -30,16 +30,19 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, ggwordcloud, googledrive, readxl, stringr, viridis) 
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, readxl, sf, stringr, viridis) 
+package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 options(scipen=999) #not a fan
-problem.nid <- 20417 #set the NID you want to vet
-redownload.hap <- T #set T if new codebooking activity for HAP
-redownload.wash <- T #set T if new data vetting activity for WASH
+problem.nid <- 294235 #set the NID you want to vet
+redownload.hap <- F #set T if new codebooking activity for HAP
+redownload.wash <- F #set T if new data vetting activity for WASH
+build.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
+plot.pts <- T #set T if you want to print a map of the model input by SFU%
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -55,7 +58,10 @@ collapse.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collaps
 model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
 share.dir <- file.path('/share/geospatial/jfrostad')
 
-###Output###
+#borders file for plotting admin2 borders
+ad2.borders <- read_sf('/snfs1/WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_2_simplified.shp')
+
+###output###
 graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs')
 
 ##Refresh google sheets##
@@ -65,6 +71,10 @@ if(redownload.wash==T) drive_download(as_id('1xn91Y3_lIr0G0Z_BBn-HMO9B9vFFzvCf_P
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
+lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
+file.path(lbd.shared.function.dir, 'setup.R') %>% source
+mbg_setup(repo=lbd.shared.function.dir, package_list = package_list)
+
 #helper function in order to pull all relevant files for a given problem NID
 vetAssistant <- function(this.nid,
                          var.fam='cooking',
@@ -139,6 +149,9 @@ vetAssistant <- function(this.nid,
 #plot word cloud
 wordCloud <- function(str.dt, this.var, order, colors) {
   
+  #TODO move back to p_load when versioning issues are resolved (new singularity?)
+  require(ggwordcloud)
+  
   #subset data
   dt <- copy(str.dt)
   dt[, factor_mapped := factor(var_mapped, levels=order)]
@@ -178,9 +191,13 @@ names(info)
 
 #example of how to look at one (codebook)
 info[['cb']]
+
+#look at raw string data too
+info[['str']][var=='cooking_fuel']
 #***********************************************************************************************************************
 
-# ---WORD CLOUDS FUELTYPE-----------------------------------------------------------------------------------------------
+# ---GRAPHING-----------------------------------------------------------------------------------------------------------
+#build color scales#
 #set up order of fuel types then produce color scales
 fuel.order <- c('none', 'electricity', 'gas', 'kerosene', 'coal', 'wood', 'crop', 'dung', 'other', 'unknown', 'missing')
 fuel.colors <- c(plasma(8, direction=-1), "#C0C0C0", "#C0C0C0", "#C0C0C0") #use gray for other and unknown
@@ -196,9 +213,25 @@ type.order <- c('open_chimney', 'closed', 'open', 'other')
 type.colors <- c(plasma(3, direction=-1), "#C0C0C0") #use gray for other 
 names(type.colors) <- type.order
 
-#create wordcloud using internal function based on ggwordcloud
+#create wordcloud using internal function based on ggwordcloud#
 #TODO setup scale for all vars
-wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
+if (build.wordcloud) wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
-#look at raw data too
-info[['str']][var=='cooking_fuel']
+#check out spatial patterns#
+if (plot.pts) {
+  
+  #build plot data
+  plot.dt <- info[['mod']] %>% 
+    .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+  borders <- ad2.borders[ad2.borders$ADM0_CODE %in% plot.dt$ADM0_CODE,]
+  borders <- merge(borders, plot.dt, by="ADM0_CODE", allow.cartesian=T)
+  
+  ggplot(data=borders) +
+    geom_sf(color='gray4') +
+    geom_point(data=info[['mod']], aes(x=longitude, y=latitude, color=cooking_fuel_solid/N, size=N)) +
+    scale_color_viridis_c('SFU%', option='plasma') +
+    ggtitle(paste0('Final MBG Input Dataset, for NID #', problem.nid), 
+            paste0(plot.dt[1, survey_series], '...[N=', sum(plot.dt$N), ']')) +
+    theme_bw()
+}
+

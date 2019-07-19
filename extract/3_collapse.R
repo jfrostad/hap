@@ -39,11 +39,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load packages
 pacman::p_load(data.table, dplyr, feather, fst, readxl, tidyverse) 
-#TODO verify which of these are actually necessary, took from a random image in Ani's wash dir
-#/share/geospatial/mbg/wash/s_imp/model_image_history
-pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign', 'gbm', 'ggplot2', 'glmnet', 
-              'grid', 'gridExtra', 'gtools', 'magrittr', 'pacman', 'parallel', 'plyr', 'raster', 'rgdal', 'rgeos',
-              'seegMBG', 'seegSDM', 'tictoc') #will be loaded by MBG setup
+package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)

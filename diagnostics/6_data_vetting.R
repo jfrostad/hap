@@ -483,7 +483,8 @@ hap.comparison[, N_natl := sum(N), by=key(hap.comparison)]
 hap.comparison[, diff_ratio := solid_natl/gbd_mean]
 hap.comparison[, diff_abs := abs(solid_natl-gbd_mean)]
 hap.comparison[diff_abs>.025, nid_label_diff := nid] #label any points that are more than 2.5% apart
-hap.comparison[pct_unknown>.05, nid_label_miss := paste0(nid, ' - [', round_any(pct_missing, .02)*100, '% missing]')] #label any points that have more than 5% unknown
+#also label any points that have more than 5% unknown
+hap.comparison[pct_unknown>.05, nid_label_miss := paste0(nid, ' - [', round_any(pct_missing, .02)*100, '% missing]')] 
 
 #can set to unique to speed up plotting of scatters
 hap.comparison.ad0 <- unique(hap.comparison, by=key(hap.comparison))
@@ -496,7 +497,7 @@ hap.comparison.ad0[!is.na(solid_natl), .(nid, survey_series, ihme_loc_id, year, 
 # ---GRAPHS-------------------------------------------------------------------------------------------------------------
 #generate graphs for data vetting
 #first generate each graph type as a separate pdf series
-this.reg <- c('dia_sssa')
+this.reg <- c('dia_sssa', 'dia_essa', 'dia_cssa', 'dia_wsssa')
 countries <- unique(cooking$reg_iso3)
 countries <- cooking[dia_reg %in% this.reg, reg_iso3] %>% unique
 
@@ -563,3 +564,4 @@ pdf(file=file.path(graph.dir, 'vetting_suite.pdf'),
 lapply(countries, vetSuite)
 
 dev.off()
+#***********************************************************************************************************************

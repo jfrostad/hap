@@ -30,10 +30,13 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(ccaPP, fst, mgsub)
+pacman::p_load(ccaPP, fst, magrittr, mgsub)
 
 #options
+interactive <- T #set T if you want to run interactively, F if providing args from a launcher
+make.table <- T #set T if you want to recompile the table
 options(scipen=999) #not a fan
+share_dir <- '/share/scratch/tmp/jfrostad/output/admin_draws'
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -78,6 +81,10 @@ format_admin_results <- function(ind_gp,
   load_admins <- function(i) { 
     
     message('~>loading results for: ', ind[[i]])
+    
+    #explicitly define environment, to use in pipes
+    #https://stackoverflow.com/questions/57085553/using-list2env-in-chained-operation-to-assign-objects-from-named-list-in
+    env <- environment()
 
     # def directory, then read in all the admin objects from a single RData file
     combined_file <- file.path('/share/geospatial/mbg', ind_gp[[i]], ind[[i]], 'output', rd[[i]]) %>% 
@@ -86,12 +93,12 @@ format_admin_results <- function(ind_gp,
              measure[[i]], '_admin_draws', suffix[[i]], '.RData')
     
     #helper function to create the combined file if it is not present
-    create_combined_results <- function(file, sfx='_0.RData') {
+    create_combined_results <- function(filepath, sfx='_0.RData') {
       
       message('combined file not present...building')
 
       #find all relevant files
-      files <- list.files(gsub(basename(file), '', file), pattern = 'admin_draws', full.names = T) %>% 
+      files <- list.files(gsub(basename(filepath), '', filepath), pattern = 'admin_draws', full.names = T) %>% 
         .[grep(sfx, .)]
       
       load_specific_obj <- function(file, obj) {
@@ -111,25 +118,21 @@ format_admin_results <- function(ind_gp,
       admin_1 <- lapply(files, load_specific_obj, obj='admin_1') %>% rbindlist
       admin_2 <- lapply(files, load_specific_obj, obj='admin_2') %>% rbindlist
       sp_hierarchy_list <- lapply(files, load_specific_obj, obj='sp_hierarchy_list') %>% rbindlist
-      
+  
       #return objects in a named list (we can assign this to the parent env using list2env)
       list('admin_0'=admin_0, 'admin_1'=admin_1, 'admin_2'=admin_2, 'sp_hierarchy_list'=sp_hierarchy_list) %>% 
+        #TODO permission is denied when trying to save the combined file to other peoples dirs (any another solution?)
+        #save(file=filepath, list=names(.)) %T>% #also save the combined file for later runs
         return
       
     }
     
     #load the combined file (create from all files if has not already been created)
     if (combined_file %>% file.exists) load(combined_file, verbose=T)
-    else { 
-      l <- create_combined_results(combined_file)
-      list2env(l, envir = environment()) #TODO cannot pipe using list2env?
-      rm(l) #cleanup
-    }
-    
-    if (i==4) browser()
+    else create_combined_results(combined_file) %>% list2env(., envir=env)
 
     # harmonize the hierarchy lists (some are using factor variables which don't merge well)
-    factor_vars <- names(sp_hierarchy_list) %>% .[vapply(., is.factor, c(is.factor=FALSE))]
+    factor_vars <- names(sp_hierarchy_list)[vapply(sp_hierarchy_list, is.factor, c(is.factor=FALSE))]
     
     if (length(factor_vars) > 0) {
       
@@ -210,9 +213,6 @@ format_admin_results <- function(ind_gp,
 #***********************************************************************************************************************
 
 # ---OPTIONS------------------------------------------------------------------------------------------------------------
-## indicate whether running interactively
-interactive <- TRUE
-
 ## if running interactively, set arguments
 if (interactive) {
 
@@ -278,25 +278,33 @@ message('Setting seed 98118 for reproducibility')
 set.seed(98118)
 
 # Make the admin results tables ------------------------------------------------------------
-tic('Make table')
-dt <- format_admin_results(ind_gp = indicator_groups,
-                           ind = indicators,
-                           #var_names = list('a', 'b', 'c'), #by default use ind name, but can use to simplify formula
-                           rd = run_dates,
-                           measure = measures,
-                           suffix = suffixes,
-                           rk = rks)
+if (make.table) {
+  
+  tic('Make table')
+  dt <- format_admin_results(ind_gp = indicator_groups,
+                             ind = indicators,
+                             #var_names = list('a', 'b', 'c'), #by default use ind name, but can use to simplify formula
+                             rd = run_dates,
+                             measure = measures,
+                             suffix = suffixes,
+                             rk = rks)
+  
+  #reset key 
+  #TODO made need to redefine depending on desired calculations
+  setkey(dt, code, year, agg_level, draw)
+  toc(log = TRUE)
+  
+  write.fst(dt, path = file.path(share_dir, 'ort_wash_cgf_admin_draws_raw.fst'))
+  
+} else dt <- file.path(share_dir, 'ort_wash_cgf_admin_draws_raw.fst') %>% read.fst(as.data.table=T)
 
-#reset key 
-#TODO made need to redefine depending on desired calculations
-setkey(dt, code, year, agg_level, draw)
-toc(log = TRUE)
+#subset for speed testing
+dt <- dt[draw %in% c('V1', 'V2', 'V3')]
 
 #calculations?
 #made up calculation
 tic('Calculations')
-dt[, d := a/c * b^2]
-dt[, `:=` (a = NULL, b = NULL, c = NULL)] #no longer needed
+dt[, d := rhf/(1-ors) * had_diarrhea + stunting_mod_c]
 toc(log = TRUE)
 
 #return uncertainty
@@ -307,23 +315,23 @@ summary <- dt %>%
   .[, mean := lapply(.SD, mean, na.rm=T), by=key(.), .SDcols='d'] %>% 
   .[, lower := lapply(.SD, quantile, 0.025, na.rm=T), by=key(.), .SDcols='d'] %>% 
   .[, upper := lapply(.SD, quantile, 0.975, na.rm=T), by=key(.), .SDcols='d'] %>% 
-  .[, `:=` (d = NULL, draw = NULL)] %>%  #no longer needed
+  .[, c(indicators %>% unlist, 'd', 'draw') := NULL] %>%  #no longer meaningful
   unique(., by=key(.))
 toc(log=TRUE)
 
 #reshape wide
 tic('Reshaping back to wide')
-out <- dcast(dt, ... ~ draw, value.var= 'd')
+out <- dt %>% 
+  copy %>% #do not modify in place for the purposes of this demo
+  .[, (indicators %>% unlist) := NULL] %>% #no longer needed
+  dcast(., ... ~ draw, value.var= 'd')
 toc(log = TRUE)
 
 # finish up and save
 #TODO
 tic('Saving')
-share_dir <- '/home/j/temp/jfrostad/output/admin_draws'
-write.fst(dt, path = file.path(share_dir, 'ort_wash_cgf_admin_draws.fst'))
-write.csv(dt, file = file.path(share_dir, 'ort_wash_cgf_admin_draws.csv'), row.names=F)
+write.fst(out, path = file.path(share_dir, 'd_draws.fst'))
+write.csv(summary, file = file.path(share_dir, 'd_summary.csv'), row.names=F)
 toc(log = TRUE)
 
-
- 
 #*********************************************************************************************************************** 
