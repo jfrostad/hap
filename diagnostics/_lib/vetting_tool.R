@@ -51,7 +51,7 @@ plot.pts <- T #set T if you want to print a map of the model input by SFU%
 data.dir <- file.path('/share/geospatial/mbg/input_data/')
 raw.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/')
 geomatched.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
-geog.dir <- file.path(j_root, 'WORK/11_geospatial/05_survey shapefile library/codebooks"')
+geog.dir <- file.path(j_root, 'WORK/11_geospatial/05_survey shapefile library/codebooks')
 census.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
@@ -72,7 +72,7 @@ if(redownload.wash==T) drive_download(as_id('1xn91Y3_lIr0G0Z_BBn-HMO9B9vFFzvCf_P
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
-lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
+lbd.shared.function.dir <- file.path(h_root, "_code/lbd/hap/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
 mbg_setup(repo=lbd.shared.function.dir, package_list = package_list)
 
@@ -83,7 +83,8 @@ vetAssistant <- function(this.nid,
                            'raw'=raw.dir, #by default these dirs can be pulled from global namespace
                            'collapse'=collapse.dir,
                            'model'=model.dir,
-                           'doc'=doc.dir
+                           'doc'=doc.dir,
+                           'geog'=geog.dir
                          )) {
   
   message('pulling relevant files for problem survey, nid = ', this.nid)
@@ -94,7 +95,7 @@ vetAssistant <- function(this.nid,
     file.path(dirs[['raw']], 'hap.xlsx') %>% 
     read_xlsx(., sheet='codebook') %>% 
     as.data.table
-  
+
   #pull the raw data
   message(' --> raw data') 
   raw <- 
@@ -132,6 +133,13 @@ vetAssistant <- function(this.nid,
   adm <- 
     file.path(dirs[['doc']], 'gbd_solid_fuel_comparison.csv') %>% 
     fread
+  
+  #pull the geographies info
+  message(' -------> geographies info')
+  geog <-
+    file.path(dirs[['geog']]) %>% 
+    #get survey series from the collapsed data
+    list.files(full.names = T, pattern=col[nid==this.nid, survey_series][1]) %>% 
   
   #subset to the nid and then output info list
   out <- list (
