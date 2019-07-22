@@ -86,7 +86,7 @@ file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 
 lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
-mbg_setup(repo=lbd.shared.function.dir, package_list=pkg.list) #load mbg functions
+mbg_setup(repo=lbd.shared.function.dir, package_list=package_list) #load mbg functions
 #***********************************************************************************************************************
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
@@ -170,10 +170,10 @@ collapseData <- function(this.family,
     paste0("saved intermediate files to:", out.temp) %>% return #end process here if saving int files
     
   } else {  
-  
+
     #define the indicators based on the intermediate variables youve extracted  
     dt <- defIndicator(dt, var.fam=this.family, definitions=def.file, debug=F)
-  
+
     #### Address Missingness ####
     message("\nBegin Addressing Missingness...")
 

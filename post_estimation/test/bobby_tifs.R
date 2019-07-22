@@ -295,7 +295,9 @@ out_dir <- file.path(tmp_dir, 'output', 'bobby_tifs')
 region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
   fread %>% 
   .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
-regions <- region_list[Stage %in% c('1', '2a'), mbg_reg] %>% unique
+regions <- region_list[Stage %in% c('1', '2a'), unique(mbg_reg)]  #if only using LMICs
+regions <- NULL
+regions <- c(regions, region_list[mbg_reg=='', unique(iso3)]) #if using all
 
 ## load in bobby's tifs and work on them
 var_names <- c('distance', 'median', 'ratio')
@@ -335,6 +337,8 @@ regLoop <- function(region, build=T) {
                          rk = FALSE,
                          shapefile_version = shapefile,
                          coastal_fix = F)
+    
+    browser()
     
     #reset key (to take correlation over country for each covariate combination)
     setkey(dt, ADM0_CODE, year)
@@ -427,7 +431,7 @@ regLoop <- function(region, build=T) {
 }
 
 #loop over all regions
-out <- lapply(regions, regLoop, build=F) 
+out <- lapply(regions, regLoop, build=T) 
 
 #bind results
 out_ad0 <- lapply(out, function(x) x[['ad0']]) %>% rbindlist(use.names=T, fill=T)

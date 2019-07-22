@@ -60,7 +60,7 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa',
              'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
              'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
 #regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa')
-regions <- c('dia_sssa')  
+regions <- c('dia_cssa')  
   
 # list indicators
 indics <- 'cooking_fuel_solid'
@@ -85,7 +85,7 @@ for (i in indics) {
     
     # set region specific covariates, if desired
     if (covar_par == 'region_specific') {
-      cov_par <- paste0('cooking_', Regions)
+      cov_par <- paste0('covs_cooking_', Regions)
     } else {
       cov_par <- covar_par
     }

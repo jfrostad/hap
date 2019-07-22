@@ -38,7 +38,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 options(scipen=999) #not a fan
-problem.nid <- 294235 #set the NID you want to vet
+problem.nid <- 26683 #set the NID you want to vet
 redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
 build.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
@@ -51,6 +51,7 @@ plot.pts <- T #set T if you want to print a map of the model input by SFU%
 data.dir <- file.path('/share/geospatial/mbg/input_data/')
 raw.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/')
 geomatched.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
+geog.dir <- file.path(j_root, 'WORK/11_geospatial/05_survey shapefile library/codebooks"')
 census.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
@@ -223,15 +224,17 @@ if (plot.pts) {
   #build plot data
   plot.dt <- info[['mod']] %>% 
     .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+  #subset borders file
   borders <- ad2.borders[ad2.borders$ADM0_CODE %in% plot.dt$ADM0_CODE,]
-  borders <- merge(borders, plot.dt, by="ADM0_CODE", allow.cartesian=T)
   
+  #make plot
   ggplot(data=borders) +
     geom_sf(color='gray4') +
     geom_point(data=info[['mod']], aes(x=longitude, y=latitude, color=cooking_fuel_solid/N, size=N)) +
     scale_color_viridis_c('SFU%', option='plasma') +
     ggtitle(paste0('Final MBG Input Dataset, for NID #', problem.nid), 
-            paste0(plot.dt[1, survey_series], '...[N=', sum(plot.dt$N), ']')) +
+            paste0(info[['cb']]$survey_name, '...[N=', sum(plot.dt$N), ']')) +
     theme_bw()
+  
 }
 

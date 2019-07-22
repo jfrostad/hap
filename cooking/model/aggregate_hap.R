@@ -11,7 +11,7 @@
 rm(list=ls())
 
 #running interactively?
-debug <- F
+debug <- T
 if (debug) warning('debug is set to TRUE - if you did not mean to run interactively then kill job and turn off debug')
 debug.args <- c('simulate',
                 'command',
@@ -21,11 +21,11 @@ debug.args <- c('simulate',
                 'cooking',
                 'cooking_fuel_solid',
                 'hap_best',
-                'covs_cooking_dia_sssa',
+                'covs_cooking_dia_cssa',
                 'dia_cssa',
                 'proj_geo_nodes',
                 TRUE,
-                '2019_07_17_09_37_38',
+                '2019_07_19_17_36_52',
                 'total',
                 0)
 #pull args from the job submission if !interactive
