@@ -176,7 +176,7 @@ format_rasters <- function(these_rasters,
   dt <- load_populations_cov(reg, pop_measure=pop_measure, measure=measure, simple_polygon, 
                              simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
     merge(dt, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing pop values?
-  
+
   #also load/merge on any user-provided covariates
   if (!is.null(covs)) {
     
@@ -296,7 +296,7 @@ region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.cs
   fread %>% 
   .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
 regions <- region_list[Stage %in% c('1', '2a'), unique(mbg_reg)]  #if only using LMICs
-regions <- NULL
+regions <- NULL #TODO remove
 regions <- c(regions, region_list[mbg_reg=='', unique(iso3)]) #if using all
 
 ## load in bobby's tifs and work on them
@@ -337,9 +337,7 @@ regLoop <- function(region, build=T) {
                          rk = FALSE,
                          shapefile_version = shapefile,
                          coastal_fix = F)
-    
-    browser()
-    
+
     #reset key (to take correlation over country for each covariate combination)
     setkey(dt, ADM0_CODE, year)
     toc(log = TRUE)

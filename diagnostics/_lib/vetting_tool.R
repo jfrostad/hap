@@ -139,7 +139,8 @@ vetAssistant <- function(this.nid,
   geog <-
     file.path(dirs[['geog']]) %>% 
     #get survey series from the collapsed data
-    list.files(full.names = T, pattern=col[nid==this.nid, survey_series][1]) %>% 
+    list.files(full.names = T, pattern=col[nid==this.nid, survey_series %>% unique]) %>% 
+    fread
   
   #subset to the nid and then output info list
   out <- list (
@@ -148,7 +149,8 @@ vetAssistant <- function(this.nid,
     'col'=col,
     'mod'=mod,
     'str'=str,
-    'adm'=adm
+    'adm'=adm,
+    'geog'=geog
   ) %>% 
     lapply(., function(x) x[nid==this.nid]) %>% 
     return

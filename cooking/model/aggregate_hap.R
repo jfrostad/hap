@@ -11,7 +11,7 @@
 rm(list=ls())
 
 #running interactively?
-debug <- T
+debug <- F
 if (debug) warning('debug is set to TRUE - if you did not mean to run interactively then kill job and turn off debug')
 debug.args <- c('simulate',
                 'command',
@@ -56,7 +56,7 @@ config <- set_up_config(repo            = core_repo,
                         indicator_group = '',
                         indicator       = '',
                         config_name     = paste0('cooking/model/configs/config_', config_par),
-                        covs_name       = paste0('cooking/model/configs/', cov_par))
+                        covs_name       = paste0('cooking/model/configs/covs_', cov_par))
 
 ## Set to prod or geos nodes
 proj <- args[11]
