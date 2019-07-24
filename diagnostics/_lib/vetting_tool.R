@@ -64,6 +64,7 @@ model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
 share.dir <- file.path('/share/geospatial/jfrostad')
 
 #borders file for plotting admin2 borders
+ad1.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_1_simplified.shp') %>% read_sf
 ad2.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_2_simplified.shp') %>% read_sf
 
 ###output###
@@ -285,7 +286,7 @@ if (remote) pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'),
 if (build.wordcloud) wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
 #check out spatial patterns#
-if (plot.pts) mapPoints(info_list=info, borders_file=ad2.borders)
+if (plot.pts) mapPoints(info_list=info, borders_file=ad1.borders)
 
 #check out missingness patterns
 if (plot.miss) plotMiss(info_list=info, by_var = 'admin_1')
