@@ -43,9 +43,9 @@ debug.args <- c('simulate',
                 'cooking_fuel_solid',
                 'config_hap_best',
                 'cooking/model/configs/',
-                'covs_cooking_dia_essa',
+                'covs_cooking_dia_sssa',
                 'cooking/model/configs/',
-                '2019_07_19_17_35_40',
+                '2019_07_23_10_23_49',
                 'total')
 
 #pull args from the job submission if !interactive
@@ -223,7 +223,7 @@ if (length(Regions) == 14) {
   library('gridExtra')
   
   message('Plotting global maps')
-  source(paste0(core_repo, 'diagnostics/06_plot_global_map.R'))
+  file.path(core_repo, 'diagnostics/06_plot_global_map.R') %>% source
   
   # set arguments
   raked_map <- ifelse(indicator == 'had_diarrhea', T, F)

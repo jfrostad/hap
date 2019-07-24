@@ -191,7 +191,7 @@ collapseData <- function(this.family,
     invalid.sizes <- idMissing(dt, this.var="hh_size", criteria=.1, wt.var=NA, check.threshold = T, threshold=0)
     
     #ID missing hh sizes, then crosswalk values
-    missing.sizes <- idMissing(dt, this.var="hh_size", criteria=.05, wt.var=NA)
+    missing.sizes <- idMissing(dt, this.var="hh_size", criteria=.2, wt.var=NA)
     
     #also print the # of hh sizes that are missing (rowwise):
     message('There are #', nrow(dt[is.na(hh_size)]), '(',
@@ -213,10 +213,12 @@ collapseData <- function(this.family,
     #remove invalid rows that were insufficient in number to trigger criteria thresholds
     message('dropping additional ', dt[(hhweight<=0)] %>% nrow, 
             ' rows based on hhweight missingness/invalidity below cluster-level criteria thresholds')
-    dt <- dt[!(hhweight<=0)] #drop invalid rows as well
+    dt <- dt[hhweight>0] #drop invalid rows as well
     message('dropping additional ', dt[(hhweight<=0)] %>% nrow, 
             ' rows based on hhsize invalidity below cluster-level criteria thresholds')
-    dt <- dt[!(hh_size=0)] #drop invalid rows as well
+    dt <- dt[hh_size>0] #drop invalid rows as well
+    
+    #TODO recode HH sizes that have values like 98, etc which represent unknown or other?
     
     # Crosswalk missing/invalid household size data
     #TODO discuss this part with ani after learning more, for now just impute as 1

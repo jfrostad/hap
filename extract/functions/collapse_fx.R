@@ -32,9 +32,8 @@ initialClean <- function(input.dt, var.fam, is.point) {
   ### Standardize years
   message('-->Create a unique cluster id')
 
-  if (is.point) {
-    dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, year_start)]
-  } else dt[, cluster_id := .GRP, by=.(iso3, shapefile, location_code, nid, year_start)]
+  if (is.point) dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, year_start)]
+  else dt[, cluster_id := .GRP, by=.(iso3, shapefile, location_code, nid, year_start)]
 
   #Standardize year
   #TODO currently moving this step to after HH size cw because it is creating missingness in year_median
@@ -82,9 +81,7 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
   
   #impute cooking vars
   #TODO use a more sophisticated imputation process
-  if (var.fam == 'cooking') { 
-    impute.vars <- c('cooking_location_mapped', 'cooking_type_mapped', 'cooking_type_chimney_mapped')
-  }
+  if (var.fam == 'cooking') impute.vars <- c('cooking_location_mapped', 'cooking_type_mapped', 'cooking_type_chimney_mapped')
   
   #define a function to merge on definitions for each variable
   mergeDef <- function(data, defs, this.var, impute.vars=NULL) {
@@ -107,11 +104,8 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
     out <- merge(data, defs, by.x=this.var, by.y='value', all.x=T) #merge onto data using original values
     
     #assert that merge was successful
-    if (nrow(out) != og.count){ 
-      
-      stop(this.var, ': remap is causing data loss, investigate!!')
-      
-    } else out[, c('row_id', new.cols), with=F] %>% setkey(., row_id) %>% return #keep only the new vars and ID
+    if (nrow(out) != og.count) stop(this.var, ': remap is causing data loss, investigate!!')
+    else out[, c('row_id', new.cols), with=F] %>% setkey(., row_id) %>% return #keep only the new vars and ID
 
   }
   
@@ -154,7 +148,7 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
  
     #cleanup intermediate vars
     remove.vars <- names(out)[names(out) %like% "row_id|mapped"]
-    if(clean_up==T) out <- out[, (remove.vars) := NULL]
+    if (clean_up==T) out <- out[, (remove.vars) := NULL]
     
   }
   
@@ -180,15 +174,14 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, check.threshol
   og.count <- nrow(dt)
   
   #define the weight variable 
-  if (is.na(wt.var)) {
-    dt[, wt := 1]
-  } else dt[, wt := get(wt.var)]
+  #make sure that rows where the wtvar is NA are accounted for in this process
+  if (wt.var %>% is.na) dt[, wt := 1]
+  else dt[, wt := get(wt.var)] %>% .[is.na(wt), wt := 1]
 
   # Calculate data missingness by cluster for given variable
   # Alternatively check for validity against a minimum threshold (usually 0)
-  if (!check.threshold) {
-    dt[, miss := lapply(.SD, is.na), .SDcols=this.var]
-  } else dt[, miss := lapply(.SD, function(x) x <= threshold), .SDcols=this.var]
+  if (!check.threshold) dt[, miss := lapply(.SD, is.na), .SDcols=this.var]
+  else dt[, miss := lapply(.SD, function(x) x <= threshold), .SDcols=this.var]
 
   #calc pct miss, weight by selected variable (typically hh_size)
   dt[, pct_miss := sum(miss*wt, na.rm=T)/sum(wt, na.rm=T), by=cluster_id] 
@@ -231,7 +224,7 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, check.threshol
 #crosswalk households with missing size
 cw <- function(dt, this.var, debug = F) {
   
-  if (debug) {browser()}
+  if (debug) browser()
 
   # Remove all missing/invalid hh_size obs
   data <- copy(dt[!(is.na(hh_size) | hh_size <=0)])
@@ -308,7 +301,7 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   dt[, sum_of_sample_weights := sum(hhweight), by=key(dt)]
   
   #for polygon data, urbanicity status is no longer meaningful
-  if(!is.point) dt[, urban := NA] #TODO what did urbanicity status for poly data originally mean?
+  if (!is.point) dt[, urban := NA] #TODO what did urbanicity status for poly data originally mean?
 
   dt %>%  #collapse the dt to unique values based on the key and output
     unique(., by=key(dt)) %>% 
@@ -335,9 +328,8 @@ collapseCleanup <- function(var.fam, codebook, test.vars, cleanup=F) {
     dt <- copy(full.dt[var==this.var]) #subset to comparison var
     
     #must account for differences in var specification in final model dt
-    if (this.var=='cooking_fuel_solid') {
-      cb.var <- 'cooking_fuel' #TODO janky..
-    } else cb.var <- this.var
+    if (this.var=='cooking_fuel_solid') cb.var <- 'cooking_fuel' #TODO janky..
+    else cb.var <- this.var
     
     #extract blank nids (NIDs in which the var has never been codebooked)
     blank.nids <- codebook[is.na(get(cb.var)), unique(nid)] 

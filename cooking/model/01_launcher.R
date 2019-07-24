@@ -84,11 +84,8 @@ for (i in indics) {
     mymem           <- '20G'
     
     # set region specific covariates, if desired
-    if (covar_par == 'region_specific') {
-      cov_par <- paste0('cooking_', Regions)
-    } else {
-      cov_par <- covar_par
-    }
+    if (covar_par == 'region_specific') cov_par <- paste0('cooking_', Regions)
+    else cov_par <- covar_par
     
     # some quick checks for the arguments
     if(use_old_run_date == TRUE & old_run_date_input == '') stop('You indicated using an old run date; please provide an old run date')

@@ -38,7 +38,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 options(scipen=999) #not a fan
-problem.nid <- 26683 #set the NID you want to vet
+problem.nid <- 30325 #set the NID you want to vet
 redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
 build.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
@@ -134,12 +134,15 @@ vetAssistant <- function(this.nid,
     file.path(dirs[['doc']], 'gbd_solid_fuel_comparison.csv') %>% 
     fread
   
+  browser()
+
   #pull the geographies info
   message(' -------> geographies info')
   geog <-
     file.path(dirs[['geog']]) %>% 
     #get survey series from the collapsed data
-    list.files(full.names = T, pattern=col[nid==this.nid, survey_series %>% unique]) %>% 
+    list.files(full.names = T, 
+               pattern=paste0(col[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
     fread
   
   #subset to the nid and then output info list

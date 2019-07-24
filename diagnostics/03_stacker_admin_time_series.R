@@ -281,10 +281,16 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     minn = min(c(ad0_dat$N,ad1_dat$N))
     maxn = max(c(ad0_dat$N,ad1_dat$N))
     
+    # plot the sample size
     ad0_dat[, Ncut := cut(N, N_breaks)]
     ad1_dat[, Ncut := cut(N, N_breaks)]
     ad0_dat[, Nrd := round(N, 2)]
     ad1_dat[, Nrd := round(N,2)]
+
+    # add NID label to sample size plots
+    ad0_dat[, N_label := paste0(nid, ' [', Nrd, ']')]
+    ad1_dat[, N_label := paste0(nid, ' [', Nrd, ']')]
+
     if(nrow(ad0_dat) != nrow(unique(ad1_dat[,.(svy_id,ADM0_CODE, year)]))) warning('The number of years of admin 0 data does not match number of years of admin 1 data.')
     
     # for each country in the region
@@ -315,7 +321,8 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
           theme_bw() + ggtitle(paste(toupper(indicator), " Model Results for", adname, 'in', reg)) + ylim(0, maxval)
         
         if(nrow(ad0_dat[ADM0_CODE == admin_id,])>0){
-          adplot = adplot + geom_text(data = ad0_dat[ADM0_CODE == admin_id,], mapping = aes(x = year, y = outcome, label = Nrd))
+          adplot = adplot + 
+          geom_text(data = ad0_dat[ADM0_CODE == admin_id,], mapping = aes(x = year, y = outcome, label = N_label))
         }
         
         plot(adplot)
@@ -364,7 +371,8 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
               theme_bw() + ggtitle(paste(toupper(indicator), ' Model Results for:',ad1name,'|',adname, '|', a1)) + ylim(0, maxval)
             
             if(nrow(ad1_dat[ADM1_CODE == a1,])>0){
-              a1_plot = a1_plot + geom_text(data = ad1_dat[ADM1_CODE == a1,], mapping = aes(x = year, y = outcome, label = Nrd))
+              a1_plot = a1_plot + 
+              geom_text(data = ad1_dat[ADM1_CODE == a1,], mapping = aes(x = year, y = outcome, label = N_label))
             }
             
             plot(a1_plot)
