@@ -1,14 +1,45 @@
-jobnum <- commandArgs()[6]
-opt_type <- commandArgs()[7]
-lrnr_type <- commandArgs()[8]
-bounds_version <- commandArgs()[9]
-experiment_version <- commandArgs()[10]
-indicator <- commandArgs()[11]
-cv_fold <- as.numeric(commandArgs()[12])
-bag_fraction <- as.numeric(commandArgs()[13])
-file_addin <- commandArgs()[14]
+## Setup -------------------------------------------------------------------------
+
+## clear environment
+rm(list=ls())
+
+#running interactively?
+debug <- T
+if (debug) warning('debug is set to TRUE - if you did not mean to run interactively then kill job and turn off debug')
+debug.args <- c('simulate',
+                'command',
+                'args',
+                'weird',
+                'shell?',
+                'cooking_fuel_solid_dia_sssa',
+                'gp',
+                'brt',
+                7,
+                'test7_2019-07-24',
+                'cooking_Fuel_solid',
+                3,
+                0.5,
+                F)
+
+#pull args from the job submission if !interactive
+args <- ifelse(rep(debug, length(debug.args)), 
+               debug.args, 
+               commandArgs()) 
+
+
+jobnum <- args[6]
+opt_type <- args[7]
+lrnr_type <- args[8]
+bounds_version <- args[9]
+experiment_version <- args[10]
+indicator <- args[11]
+cv_fold <- as.numeric(args[12])
+bag_fraction <- as.numeric(args[13])
+file_addin <- args[14]
 train_fraction <- 1-(1/cv_fold)
 experiment_num <- 1
+
+message(commandArgs())
 
 #get pkgs
 library(seegSDM, lib.loc = '/share/code/geospatial/adesh/r_packages_hf_sing/')

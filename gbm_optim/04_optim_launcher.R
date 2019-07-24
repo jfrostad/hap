@@ -5,17 +5,18 @@
 
 
 ## Setup -------------------------------------------------------------------------
+user <- Sys.info()['user']
 
 # set repo
-repo  <- file.path('/homes', Sys.info()['user'], '_code/lbd/hap')
+repo  <- file.path('/homes', user, '_code/lbd/hap')
 
 # set node preference
 use_geos_nodes <- TRUE
 if (use_geos_nodes) {
-  proj <- '-P proj_geo_nodes'
+  proj <- 'proj_geo_nodes'
   r_shell <- 'shell_geos.sh'
 } else {
-  proj <- '-P proj_geospatial'
+  proj <- 'proj_geospatial'
   r_shell <- 'shell_prod.sh'
 }
 
@@ -40,7 +41,7 @@ if (indis[[1]] == 'had_diarrhea') {
                'dia_essa-zwe-ken', 'dia_wssa-nga', 'dia_cssa-cod', 'dia_south_asia-ind-pak')
 }
 
-regions <- c('dia_sssa', 'dia_essa', 'dia_cssa')
+regions <- c('dia_sssa')
 
 
 # set cov version for diarrhea (doesn't matter for ORT)
@@ -68,7 +69,7 @@ for (bv in bounds_versions) {
       jname <- paste0(ind, '_', r, '_optim')
       mymem <- '75G'
       sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
-                        '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' '),
+                        '-l m_mem_free=', mymem, ' -P ', proj, ifelse(use_geos_nodes, ' -q geospatial.q ', ' '),
                         '-l fthread=1 -l h_rt=00:06:00:00 -v sing_image=default -N ', jname, ' ')
       # launch script name to qsub
       script <- file.path(repo, 'gbm_optim/runGBM.R')

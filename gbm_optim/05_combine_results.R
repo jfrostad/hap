@@ -16,7 +16,7 @@ indicators <- c('cooking_fuel_solid')
 
 # space bounds version
 lrnr_type <- 'brt'
-experiment_version <- 'test6_2019-02-21'
+experiment_version <- 'test6_2019-07-23'
 
 # set directories
 repo  <- file.path('/homes', Sys.info()['user'], '_code/lbd/hap')

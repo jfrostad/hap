@@ -11,8 +11,10 @@ rm(list=ls())
 
 # runtime configuration
 if (Sys.info()["sysname"] == "Linux") {
+  
   j_root <- "/home/j/"
   h_root <- file.path("/ihme/homes", Sys.info()["user"])
+  l_root <- "/share/limited_use/"
   
   package_lib    <- file.path(h_root, '_code/_lib/pkg')
   ## Load libraries and  MBG project functions.
@@ -26,13 +28,12 @@ if (Sys.info()["sysname"] == "Linux") {
   
   j_root <- "J:"
   h_root <- "H:"
+  l_root <- 'L:'
   
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, readxl, sf, stringr, viridis) 
-package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
-
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, readxl, sf, stringr, viridis) 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
@@ -43,27 +44,30 @@ redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
 build.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
 plot.pts <- T #set T if you want to print a map of the model input by SFU%
+plot.miss <- T 
+remote <- T
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #raw data
 data.dir <- file.path('/share/geospatial/mbg/input_data/')
-raw.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/')
+raw.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/')
 geomatched.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
 geog.dir <- file.path(j_root, 'WORK/11_geospatial/05_survey shapefile library/codebooks')
-census.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
+census.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
+  package_list <- file.path(doc.dir, 'package_list.csv') %>% fread %>% t %>% c
 def.file <- file.path(doc.dir, 'definitions.xlsx')
-collapse.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
+collapse.dir  <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
 share.dir <- file.path('/share/geospatial/jfrostad')
 
 #borders file for plotting admin2 borders
-ad2.borders <- read_sf('/snfs1/WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_2_simplified.shp')
+ad2.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_2_simplified.shp') %>% read_sf
 
 ###output###
-graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs')
+graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs/vetting')
 
 ##Refresh google sheets##
 setwd(doc.dir)
@@ -95,7 +99,7 @@ vetAssistant <- function(this.nid,
     file.path(dirs[['raw']], 'hap.xlsx') %>% 
     read_xlsx(., sheet='codebook') %>% 
     as.data.table
-
+  
   #pull the raw data
   message(' --> raw data') 
   raw <- 
@@ -133,8 +137,6 @@ vetAssistant <- function(this.nid,
   adm <- 
     file.path(dirs[['doc']], 'gbd_solid_fuel_comparison.csv') %>% 
     fread
-  
-  browser()
 
   #pull the geographies info
   message(' -------> geographies info')
@@ -159,6 +161,8 @@ vetAssistant <- function(this.nid,
     return
 }
 
+
+##GRAPHS##
 
 #plot word cloud
 wordCloud <- function(str.dt, this.var, order, colors) {
@@ -191,6 +195,52 @@ wordCloud <- function(str.dt, this.var, order, colors) {
   print(plot)
   
   return(NULL)
+  
+}
+
+#create a map of the SFU% by lat/long to show spatial distribution of model dataset
+mapPoints <- function(info_list, borders_file) {
+
+  #build plot data
+  dt <- info_list[['mod']] %>% 
+    copy %>% 
+    .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+  #subset borders file
+  borders <- borders_file[borders_file$ADM0_CODE %in% dt$ADM0_CODE,]
+  
+  #pull out survey name from codebook
+  svy_name <- info_list[['cb']]$survey_name
+  
+  #make plot
+  plot <- 
+  ggplot(data=borders) +
+    geom_sf(color='gray4') +
+    geom_point(data=dt, aes(x=longitude, y=latitude, color=cooking_fuel_solid/N, size=N)) +
+    scale_color_viridis_c('SFU%', option='plasma') +
+    ggtitle(paste0('Final MBG Input Dataset, for NID #', problem.nid), 
+            paste0(svy_name, '...[N=', sum(dt$N), ']')) +
+    theme_bw()
+  
+  print(plot) #display
+  
+  return(NA)
+  
+}
+
+#create a map of missingness over a given variable
+plotMiss <- function(info_list, by_var) {
+  
+  dt <- copy(info_list[['raw']]) %>% 
+    .[, byvar := get(by_var)]
+  
+  #examine missingess by geospatial_id
+  plot <-
+    gg_miss_fct(x = dt, fct = byvar) + 
+    labs(title = "Missingness vs space")
+  
+  print(plot) #display
+  
+  return(NA)
   
 }
 #***********************************************************************************************************************
@@ -227,27 +277,19 @@ type.order <- c('open_chimney', 'closed', 'open', 'other')
 type.colors <- c(plasma(3, direction=-1), "#C0C0C0") #use gray for other 
 names(type.colors) <- type.order
 
+#save plots
+if (remote) pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'), height=8, width=11)
+
 #create wordcloud using internal function based on ggwordcloud#
 #TODO setup scale for all vars
 if (build.wordcloud) wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
 #check out spatial patterns#
-if (plot.pts) {
-  
-  #build plot data
-  plot.dt <- info[['mod']] %>% 
-    .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
-  #subset borders file
-  borders <- ad2.borders[ad2.borders$ADM0_CODE %in% plot.dt$ADM0_CODE,]
-  
-  #make plot
-  ggplot(data=borders) +
-    geom_sf(color='gray4') +
-    geom_point(data=info[['mod']], aes(x=longitude, y=latitude, color=cooking_fuel_solid/N, size=N)) +
-    scale_color_viridis_c('SFU%', option='plasma') +
-    ggtitle(paste0('Final MBG Input Dataset, for NID #', problem.nid), 
-            paste0(info[['cb']]$survey_name, '...[N=', sum(plot.dt$N), ']')) +
-    theme_bw()
-  
-}
+if (plot.pts) mapPoints(info_list=info, borders_file=ad2.borders)
 
+#check out missingness patterns
+if (plot.miss) plotMiss(info_list=info, by_var = 'admin_1')
+
+#save plots
+if (remote) dev.off()
+#***********************************************************************************************************************
