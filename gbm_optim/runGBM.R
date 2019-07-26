@@ -1,6 +1,12 @@
-## Setup -------------------------------------------------------------------------
+# ----HEADER------------------------------------------------------------------------------------------------------------
+# Author: JF
+# Date: 07/25/2019
+# Purpose: Optimize BRT
+# source("/homes/jfrostad/_code/lbd/hap/gbm_optim/runGBM.R", echo=T)
+#***********************************************************************************************************************
 
-## clear environment
+# ----CONFIG------------------------------------------------------------------------------------------------------------
+# clear memory
 rm(list=ls())
 
 #running interactively?
@@ -14,9 +20,9 @@ debug.args <- c('simulate',
                 'cooking_fuel_solid_dia_sssa',
                 'gp',
                 'brt',
-                7,
+                6,
                 'test7_2019-07-24',
-                'cooking_Fuel_solid',
+                'cooking_fuel_solid',
                 3,
                 0.5,
                 F)
@@ -43,7 +49,7 @@ message(commandArgs())
 
 #get pkgs
 library(seegSDM, lib.loc = '/share/code/geospatial/adesh/r_packages_hf_sing/')
-pacman::p_load(data.table, gbm, magrittr)
+pacman::p_load(data.table, gbm, magrittr, tictoc)
 
 
 #setup dirs
@@ -114,7 +120,7 @@ run_optimizerPy <- function(funcs.file_path,
   )
 }
 #################################################################
-
+tic('starting master timer')
 # save bounds file for a record
 bnds_file <- read.csv(paste0(code_dir, '/space_bounds', bounds_version, '.csv'))
 write.csv(bnds_file, paste0(out_dir, '/space_bounds_settings.csv'))
@@ -137,6 +143,7 @@ response_col <- toString(which(names(dat_all) == 'rate'))
 n_col <- toString(which(names(dat_all) == 'N'))
 
 # run optimization in python via system
+tic('running optimizer')
 run_optimizerPy(funcs.file_path <- code_dir,
                 funcs.file <- '/optimizers.py ',
                 bounds.file_path <- code_dir,
@@ -153,6 +160,7 @@ run_optimizerPy(funcs.file_path <- code_dir,
                 col_n <- paste0(n_col, ' '),
                 bag_frac <- paste0(bag_fraction, ' '), 
                 exp_num <- experiment_num)
+toc(log=TRUE)
 
 # delete data file
 jobnum <- gsub(' ', '', jobnum)
@@ -160,7 +168,7 @@ file.remove(paste0(out_dir, '/data_train_', jobnum, '_exp', experiment_num, '.cs
 
 
 ## FORMAT DATA FOR RUNNING BRT MODEL
-
+tic('Formatting data for BRT')
 # load optimized hyperparameter values
 par <- read.csv(paste0(out_dir, '/best_pars_', jobnum, '_exp', experiment_num, '.csv'))
 
@@ -184,9 +192,11 @@ dat_all[, response := round(get(indicator), 0)]
 dat_all[, log_n := log(N)]
 dt_all <- dat_all[,first_cov:ncol(dat_all)]
 dat_all[, weights := weight*N]
+toc(log=TRUE)
+
 
 ## RUN BRT MODEL
-
+tic('Running BRT on TRAIN data')
 # set up the general formula to be used in gbm
 cov_names <- paste(names(dt_train[, -c('response', 'log_n')]), collapse = ' + ')
 gbm_formula <- formula(paste0('response ~ offset(log_n) + ', cov_names))
@@ -213,9 +223,10 @@ stats_train <- calcStats(data.frame(data_train$rate, train.pred))
 
 stats_train <- data.frame(as.list(stats_train))
 write.csv(stats_train, file = paste0(out_dir,'/stats_train_output/stats_train_', jobnum, '_exp', experiment_num, '.csv'))
-
+toc(log=TRUE)
 
 # run model fit on the testing data
+tic('Running BRT on TEST data')
 model_test <- gbm(gbm_formula,
                   distribution = 'poisson',
                   data = dt_test, 
@@ -227,9 +238,10 @@ model_test <- gbm(gbm_formula,
                   bag.fraction = bag_fraction,
                   train.fraction = train_fraction,
                   verbose = F)
-
+toc(log=TRUE)
 
 # get fit statistics for the test data
+tic('TEST fit statistics')
 test.pred <- predict.gbm(model_test,
                          dt_test, 
                          n.trees = model_test$n.trees, 
@@ -238,8 +250,10 @@ stats_test <- calcStats(data.frame(data_test$rate, test.pred))
 
 stats_test <- data.frame(as.list(stats_test))
 write.csv(stats_test, file = paste0(out_dir,'/stats_test_output/stats_test_', jobnum, '_exp', experiment_num,'.csv'))
+toc(log=TRUE)
 
 # run final model
+tic('Running final BRT')
 model <- gbm(gbm_formula,
              distribution = 'poisson',
              data = dt_all, 
@@ -251,9 +265,11 @@ model <- gbm(gbm_formula,
              bag.fraction = bag_fraction,
              train.fraction = train_fraction,
              verbose = F)
+toc(log=TRUE)
 
 ## final model results:
 # effect curves
+tic('Final BRT Results')
 effects <- lapply(1:(ncol(dt_all)-2),
                   function(i) {
                     plot(model, i, return.grid = TRUE)
@@ -282,3 +298,5 @@ stats <- data.frame(as.list(stats))
 
 # save fit statistics and prediction raster
 write.csv(stats, file = paste0(out_dir,'/stats_output/stats_', jobnum, '_exp', experiment_num, '.csv'))
+toc(log=TRUE)
+toc(log=TRUE)

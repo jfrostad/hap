@@ -33,19 +33,24 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, readxl, sf, stringr, viridis) 
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, readxl, stringr, viridis) 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
-#options
+#R options
 options(scipen=999) #not a fan
+
+#which nid are we vetting?
 problem.nid <- 30325 #set the NID you want to vet
+
+#script options
 redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
 build.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
 plot.pts <- T #set T if you want to print a map of the model input by SFU%
-plot.miss <- T 
-remote <- T
+plot.miss <- T #set T to create plots of missingness over different factors
+remote <- F #set T to save plots, if working in a remote or qlogin situation
+use.sf <-F #set T if you are not having issues with the sf package
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -200,22 +205,26 @@ wordCloud <- function(str.dt, this.var, order, colors) {
 }
 
 #create a map of the SFU% by lat/long to show spatial distribution of model dataset
-mapPoints <- function(info_list, borders_file) {
+mapPoints <- function(info_list, borders_file=NULL, plot_borders=use.sf) {
 
   #build plot data
   dt <- info_list[['mod']] %>% 
     copy %>% 
     .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+  
   #subset borders file
-  borders <- borders_file[borders_file$ADM0_CODE %in% dt$ADM0_CODE,]
+  if (plot_borders) borders <- borders_file[borders_file$ADM0_CODE %in% dt$ADM0_CODE,]
   
   #pull out survey name from codebook
   svy_name <- info_list[['cb']]$survey_name
   
-  #make plot
+  #create plot canvas
+  if (plot_borders) canvas <- ggplot(data=borders) + geom_sf(color='gray4')
+  else canvas <- ggplot(data=dt)
+  
+  #finish plot
   plot <- 
-  ggplot(data=borders) +
-    geom_sf(color='gray4') +
+  canvas +
     geom_point(data=dt, aes(x=longitude, y=latitude, color=cooking_fuel_solid/N, size=N)) +
     scale_color_viridis_c('SFU%', option='plasma') +
     ggtitle(paste0('Final MBG Input Dataset, for NID #', problem.nid), 
@@ -237,7 +246,7 @@ plotMiss <- function(info_list, by_var) {
   #examine missingess by geospatial_id
   plot <-
     gg_miss_fct(x = dt, fct = byvar) + 
-    labs(title = "Missingness vs space")
+    labs(title = paste0("Missingness vs ", by_var))
   
   print(plot) #display
   
@@ -286,7 +295,7 @@ if (remote) pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'),
 if (build.wordcloud) wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
 #check out spatial patterns#
-if (plot.pts) mapPoints(info_list=info, borders_file=ad1.borders)
+if (plot.pts) mapPoints(info_list=info)
 
 #check out missingness patterns
 if (plot.miss) plotMiss(info_list=info, by_var = 'admin_1')

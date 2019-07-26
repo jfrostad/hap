@@ -31,12 +31,12 @@ for (indicator in indicators) {
   message(indicator)
   
   # get completed regions
-  regions <- list.files(dir_params, pattern = paste0('best_pars_', indicator))
-  regions <- gsub(paste0('best_pars_', indicator, '_'), '', regions)
-  regions <- gsub('_exp1.csv', '', regions)
-  if (indicator == 'ors') regions <- gsub('or_rhf_', '', regions)
-  regions <- unique(regions)
-  
+  regions <- list.files(dir_params, pattern = paste0('best_pars_', indicator)) %>% 
+    gsub(paste0('best_pars_', indicator, '_'), '', .) %>% 
+    gsub('_exp1.csv', '', .) %>% 
+    #if (indicator == 'ors') gsub('or_rhf_', '', .) %>% 
+    unique %T>%
+    print
   
   ## Combine results from BRT optimization runs -------------------------------------------------------------------------
   
