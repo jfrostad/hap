@@ -37,15 +37,17 @@ pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, re
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
+#which nid are we vetting?
+problem.nid <- 35493 #set the NID you want to vet
+
 #R options
 options(scipen=999) #not a fan
 
-#which nid are we vetting?
-problem.nid <- 30325 #set the NID you want to vet
-
-#script options
+#googledrive options
 redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
+
+#plot options
 build.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
 plot.pts <- T #set T if you want to print a map of the model input by SFU%
 plot.miss <- T #set T to create plots of missingness over different factors
@@ -69,14 +71,14 @@ model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
 share.dir <- file.path('/share/geospatial/jfrostad')
 
 #borders file for plotting admin2 borders
-ad1.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_1_simplified.shp') %>% read_sf
-ad2.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_2_simplified.shp') %>% read_sf
+if (use.sf) ad1.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_1_simplified.shp') %>% read_sf
+if (use.sf) ad2.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_2_simplified.shp') %>% read_sf
 
 ###output###
 graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs/vetting')
 
 ##Refresh google sheets##
-setwd(doc.dir)
+file.path(doc.dir, 'vetting') %>% setwd
 if(redownload.hap==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
 if(redownload.wash==T) drive_download(as_id('1xn91Y3_lIr0G0Z_BBn-HMO9B9vFFzvCf_PQYpIV4AM8'), overwrite=T)
 #***********************************************************************************************************************
@@ -153,6 +155,12 @@ vetAssistant <- function(this.nid,
                pattern=paste0(col[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
     fread
   
+  #pull the string combos
+  message(' ------> wash tracking sheet')
+  wash <- 
+    file.path(dirs[['doc']], 'vetting', 'wash_tracking.csv') %>% 
+    fread
+  
   #subset to the nid and then output info list
   out <- list (
     'cb'=cb,
@@ -161,7 +169,8 @@ vetAssistant <- function(this.nid,
     'mod'=mod,
     'str'=str,
     'adm'=adm,
-    'geog'=geog
+    'geog'=geog,
+    'wash'=wash
   ) %>% 
     lapply(., function(x) x[nid==this.nid]) %>% 
     return
@@ -206,6 +215,9 @@ wordCloud <- function(str.dt, this.var, order, colors) {
 
 #create a map of the SFU% by lat/long to show spatial distribution of model dataset
 mapPoints <- function(info_list, borders_file=NULL, plot_borders=use.sf) {
+  
+  #TODO move to p_load when versioning issues are resolved
+  if (plot_borders) require(sf)
 
   #build plot data
   dt <- info_list[['mod']] %>% 
