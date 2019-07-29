@@ -38,7 +38,7 @@ pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, re
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #which nid are we vetting?
-problem.nid <- 30325 #set the NID you want to vet
+problem.nid <- 21163 #set the NID you want to vet
 
 #R options
 options(scipen=999) #not a fan
@@ -158,7 +158,7 @@ vetAssistant <- function(this.nid,
     file.path(dirs[['geog']]) %>% 
     #get survey series from the collapsed data
     list.files(full.names = T, 
-               pattern=paste0(col[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
+               pattern=paste0(mod[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
     fread
   
   #pull the string combos
