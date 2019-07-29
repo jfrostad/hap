@@ -38,7 +38,7 @@ pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, re
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #which nid are we vetting?
-problem.nid <- 35493 #set the NID you want to vet
+problem.nid <- 30325 #set the NID you want to vet
 
 #R options
 options(scipen=999) #not a fan
@@ -145,9 +145,15 @@ vetAssistant <- function(this.nid,
   adm <- 
     file.path(dirs[['doc']], 'gbd_solid_fuel_comparison.csv') %>% 
     fread
+  
+  #pull the problem clusters diagnostic
+  message(' ------> dropped clusters diagnostics') 
+  drop <- 
+    file.path(dirs[['doc']], paste0(var.fam, '/dropped_clusters.csv')) %>% 
+    fread
 
   #pull the geographies info
-  message(' -------> geographies info')
+  message(' --------> geographies info')
   geog <-
     file.path(dirs[['geog']]) %>% 
     #get survey series from the collapsed data
@@ -156,7 +162,7 @@ vetAssistant <- function(this.nid,
     fread
   
   #pull the string combos
-  message(' ------> wash tracking sheet')
+  message(' --------> wash tracking sheet')
   wash <- 
     file.path(dirs[['doc']], 'vetting', 'wash_tracking.csv') %>% 
     fread
@@ -169,6 +175,7 @@ vetAssistant <- function(this.nid,
     'mod'=mod,
     'str'=str,
     'adm'=adm,
+    'drop'=drop,
     'geog'=geog,
     'wash'=wash
   ) %>% 

@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 06/12/2018
 # Purpose: Collapse data for HAP
-# source("/homes/jfrostad/_code/lbd/hap/extract/3_collapse.R", echo=T)
+  # source("/homes/jfrostad/_code/lbd/hap/extract/3_collapse.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -179,7 +179,7 @@ collapseData <- function(this.family,
 
     # ID clusters with more than 20% weighted missingness
     #TODO set this up to loop over all vars -> right now just using cooking_fuel_solid as the gold standard
-    missing.vars <- idMissing(dt, this.var="cooking_fuel_solid", criteria=.2, wt.var='hh_size')
+    missing.vars <- idMissing(dt, this.var="cooking_fuel_dirty", criteria=.2, wt.var='hh_size')
     
     #ID cluster_ids with missing hhweight
     #decided to use 10% unweighted criteria instead of 0 tolerance
@@ -248,7 +248,7 @@ collapseData <- function(this.family,
     agg.dt <- aggIndicator(dt, var.fam=this.family, is.point=point, debug=F) #list of variables to aggregate
     agg.dt[, polygon := !(point)]
     message("->Complete!")
-    
+
     # Standardize the year variable for each survey using the weighted mean of the NID
     # Weight by sum of sample weights
     message("\nStandardizing Year Variable")
@@ -280,7 +280,7 @@ if (save_intermediate == T) {
 }
 
 #Run fx for each point/poly
-cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% 
+cooking <- mapply(collapseData, point=F, this.family='cooking', SIMPLIFY=F) %>% 
   rbindlist
 
 #Run fx for each census file
@@ -299,7 +299,7 @@ paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>%
   write.fst(cooking, path=.)
 
 #combine diagnostics and cleanup intermediate files
-collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel', 'hh_size'))
+collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel_dirty', 'hh_size'), cleanup=T)
 #***********************************************************************************************************************
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
@@ -366,6 +366,8 @@ file.path(share.model.dir, 'cooking_fuel_solid.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_fuel_solid.csv') %>% write.csv(dt, file=., row.names=F)
 file.path(share.model.dir, 'cooking_fuel_kerosene.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_fuel_kerosene.csv') %>% write.csv(dt, file=., row.names=F)
+file.path(share.model.dir, 'cooking_fuel_dirty.RDS') %>% saveRDS(dt, file=.)
+file.path(share.model.dir, 'cooking_fuel_dirty.csv') %>% write.csv(dt, file=., row.names=F)
 file.path(share.model.dir, 'cooking_fuel_clean.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_fuel_clean.csv') %>% write.csv(dt, file=., row.names=F)
 #***********************************************************************************************************************************

@@ -10,7 +10,7 @@
 rm(list=ls())
 
 #running interactively?
-debug <- T
+debug <- F
 if (debug) warning('debug is set to TRUE - if you did not mean to run interactively then kill job and turn off debug')
 debug.args <- c('simulate',
                 'command',

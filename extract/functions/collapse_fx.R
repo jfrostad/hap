@@ -137,13 +137,15 @@ defIndicator <- function(dt, var.fam, definitions, debug=F, clean_up=T) {
     }
     
     #generate binary/ordinal cooking fuel
-    message('defining -> cooking_fuel_solid/kerosene/clean')
+    message('defining -> cooking_fuel_solid/kerosene/dirty/clean')
     out[!(is.na(cooking_fuel_mapped) | cooking_fuel_mapped %in% unk.vals), 
         `:=` (cooking_fuel_solid=0, 
               cooking_fuel_kerosene=0, 
+              cooking_fuel_dirty=0,
               cooking_fuel_clean=0)] #initialize, then fill based on cooking_fuel_mapped
     out[cooking_fuel_mapped %in% c('coal', 'wood', 'crop', 'dung'), cooking_fuel_solid := 1]
     out[cooking_fuel_mapped %in% c('kerosene'), cooking_fuel_kerosene := 1]
+    out[cooking_fuel_mapped %in% c('coal', 'wood', 'crop', 'dung', 'kerosene'), cooking_fuel_dirty := 1]
     out[cooking_fuel_mapped %in% c('none', 'electricity', 'gas'), cooking_fuel_clean := 1]
  
     #cleanup intermediate vars
@@ -198,20 +200,21 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, check.threshol
   
   if (length(clusters>1)) {  
     #save a diagnostic file with the clusters and the type of missingness
-    dt <- dt[cluster_id %in% clusters, .(nid, ihme_loc_id, int_year, cluster_id)] %>%
+    dt[, N := uniqueN(cluster_id), by=nid] %>% # for proportion dropped
+      .[cluster_id %in% clusters, .(nid, ihme_loc_id, int_year, cluster_id, N)] %>%
       setkey(., nid, ihme_loc_id, int_year, cluster_id) %>% 
-      unique(., by=key(.))
-  
-    dt[, count := sum(cluster_id %in% clusters), by=nid]
-    dt[, var := this.var]
-    dt[, type := ifelse(!check.threshold, 'missingness', 'invalidity')]
-  
-    #save using NID/vartype to uniquely ID the file, we will give a meaningful name to the combined diagnostic later
-    unique(dt[, cluster_id := NULL], by='nid') %>% 
+      unique(., by=key(.)) %>% 
+      .[, count := sum(cluster_id %in% clusters), by=nid] %>% 
+      .[, prop := count/N, by=nid] %>% 
+      .[, var := this.var] %>% 
+      .[, type := ifelse(!check.threshold, 'missingness', 'invalidity')] %>% 
+      .[, cluster_id := NULL] %>% 
+      #save using NID/vartype to uniquely ID the file, we will give a meaningful name to the combined diagnostic later
+      unique(., by='nid') %>% 
       write.csv(., file=paste0(doc.dir, '/temp/dropped_clusters_', 
-                               dt[, nid] %>% unique %>% sample(1), #only need 1 nid
+                               dt[, nid] %>% unique %>% sample(2, replace=T) %>% prod, #create a semi-random number
                                '_', this.var, '_', 
-                               ifelse(!check.threshold, 'missingness', 'invalidity'), '.csv'))
+                               ifelse(check.threshold, 'invalidity', 'missingness'), '.csv'))
     return(clusters)
   
   } else return(NULL)
@@ -311,7 +314,10 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
 #***********************************************************************************************************************
 
 # ----Cleanup-----------------------------------------------------------------------------------------------------------
-collapseCleanup <- function(var.fam, codebook, test.vars, cleanup=F) {
+collapseCleanup <- function(var.fam, codebook, test.vars, cleanup=F, debug=F) {
+  
+  #allow for interactive debugs
+  if (debug) browser()
   
   message('creating final diagnostics and cleaning up temp files for\n', var.fam)
   
@@ -325,19 +331,20 @@ collapseCleanup <- function(var.fam, codebook, test.vars, cleanup=F) {
   codebook <- codebook[nid %in% unique(dt$nid)] #subset codebook to relevant rows we have collapsed
   checkCodebook <- function(this.var, full.dt, codebook) {
     
-    dt <- copy(full.dt[var==this.var]) #subset to comparison var
+    dt <- full.dt[var==this.var] %>% copy #subset to comparison var
     
     #must account for differences in var specification in final model dt
-    if (this.var=='cooking_fuel_solid') cb.var <- 'cooking_fuel' #TODO janky..
+    if (this.var %like% 'cooking_fuel') cb.var <- 'cooking_fuel' #TODO janky..
     else cb.var <- this.var
     
     #extract blank nids (NIDs in which the var has never been codebooked)
-    blank.nids <- codebook[is.na(get(cb.var)), unique(nid)] 
-    dt[!(nid %in% blank.nids)] %>% return
+    dt[!(nid %in% codebook[is.na(get(cb.var)), unique(nid)])] %>% return
     
   } 
   
   dt <- lapply(test.vars, checkCodebook, full.dt=dt, codebook=codebook) %>% 
+    rbindlist %>% 
+    list(., dt[!(var %in% test.vars)]) %>% #note that we need to do this to prevent dropping hhweight rows (not in cb)
     rbindlist %>% 
     setkey(., nid, ihme_loc_id, int_year)
   
