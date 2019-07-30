@@ -325,7 +325,8 @@ fit_gam_child_model = function(df, model_name = 'gam', fold_id_col = 'fold_id', 
   return(setNames(list(df[,return_cols,with = F], full_model),c('dataset',paste0(model_name))))
 }
 
-
+# fit_gbm ---------------------------------------------------------------------------------------------------------------------------
+#
 #adapted from Roy's BRT covs function-- took away the year specific bit. GBMs==BRTs
 #df: a data table (post extract covariates)
 #covariates: rhs of formula specifying the covariates/columns to be used to help fit the model
@@ -333,128 +334,74 @@ fit_gam_child_model = function(df, model_name = 'gam', fold_id_col = 'fold_id', 
 #tc: tree complexity
 #lr: learning rate
 #bf: bag fraction
+#cv: cross-validation folds
 #indicator: dependant variable.
 #indicator_family: Binomial models assume N as the # of trials and are actually modelled with poission with N as the offset
-fit_gbm= function(df, covariates = all_fixed_effects, additional_terms = NULL, weight_column = NULL, tc = 4, lr = .005, bf = .75, indicator, indicator_family = 'binomial',
-                  plot.main = F){
 
-
+fit_gbm= function(df, covariates = all_fixed_effects, additional_terms = NULL, weight_column = NULL, tc = gbm_tc, lr = gbm_lr, bf = gbm_bf, cv = gbm_cv, nminobs = gbm_nminobs, ntrees = gbm_ntrees,
+                  indicator, indicator_family = 'binomial', plot.main = F){
+  
   library(dismo)
-
-  #check to see if its a vector of characters or a psudo-formula
+  
+  # check to see if its a vector of characters or a psudo-formula
   covariates = format_covariates(add_additional_terms(covariates,additional_terms))
-
+  
   df = copy(df)
-
-  #format weights
+  
+  # format weights
   if(!is.null(weight_column)){
     df[,data_weight := get(weight_column)]
   } else{
     df[,data_weight := 1]
   }
   weight_column = 'data_weight' #specify the column
-
-
-  # BRT function we use has no binomial. Use emperical logistic or poisson
-
-  #set up poisson outcome structure for binomial and poisson data
-  if(indicator_family %in% c('binomial','poisson'))  {
-    indicator_family = 'poisson'
-    offset=log(df[,N])
-    df[,pre_round := get(indicator)]
-    #message('WARNING: For Poisson to work, need to round decimals in the response')
-    df[,paste0(indicator) := round(pre_round,0)] #round indicator to 0
-  } else offset = NULL
-
-  #run the brts. The logic is similiar to the BRT covs (e.g. copy pasted). NOTE, this will run a model for all periods at once. Brt_covs runs each year independantly.
-  # learning brt
-
-  message(paste('Fitting GBM/BRT with tc:',tc,'lr:',lr,'bf:',bf))
-
-  # TODO: throw a try-catch so if some years work it at least will return that, if it doesnt it will try different things (like changing the learning rate. )
-  mod <- try(
-    gbm.step(data             = as.data.frame(df),
-             gbm.y            = indicator,
-             gbm.x            = covariates,
-             offset           = offset,
-             family           = indicator_family,
-             site.weights     = df[,get(weight_column)],
-             tree.complexity  = tc,
-             learning.rate    = lr,
-             bag.fraction     = bf,
-             silent           = T,
-             plot.main = F,
-             plot.folds = F),silent=TRUE)
-
-  if(is.null(mod)){
-    message('First BRT attempt failed. Lowering Learning Rate by 1/10')
-    mod <- try(
-      gbm.step(data             = as.data.frame(df),
-               gbm.y            = indicator,
-               gbm.x            = covariates,
-               offset           = offset,
-               family           = indicator_family,
-               site.weights     = df[,get(weight_column)],
-               tree.complexity  = tc,
-               learning.rate    = lr*.1,
-               bag.fraction     = bf,
-               silent           = T,
-               plot.main = F,
-               plot.folds = F))
-  }
-  if(is.null(mod)){
-    message('Second BRT attempt failed. Lowering Original Learning rate by 1/1000 AGAIN')
-    mod <- try(
-      gbm.step(data             = as.data.frame(df),
-               gbm.y            = indicator,
-               gbm.x            = covariates,
-               offset           = offset,
-               family           = indicator_family,
-               site.weights     = df[,get(weight_column)],
-               tree.complexity  = tc,
-               learning.rate    = lr*.001,
-               bag.fraction     = bf,
-               silent           = T,
-               plot.main = F,
-               plot.folds = F))
-  }
-  if(is.null(mod)){
-    message('Third BRT attempt failed. Slow learn plus low tree complexity')
-    mod <- try(
-      gbm.step(data             = as.data.frame(df),
-               gbm.y            = indicator,
-               gbm.x            = covariates,
-               offset           = offset,
-               family           = indicator_family,
-               site.weights     = df[,get(weight_column)],
-               tree.complexity  = 2,
-               learning.rate    = lr*.001,
-               bag.fraction     = bf,
-               silent           = T,
-               plot.main = F,
-               plot.folds = F))
-  }
-
-  if(is.null(mod)) stop('ALL BRT ATTEMPTS FAILED')
-
+  
+  # BRT
+  message(paste('Fitting GBM/BRT with tc:',tc,'lr:',lr,'bf:',bf,'cv:',cv))
+  
+  # create gbm formula
+  df <- as.data.table(df)
+  df[, response := round(get(indicator), 0)]
+  df[, log_n  := log(N)]
+  cov_names <- paste(covariates, collapse = ' + ')
+  gbm_formula <- formula(paste0('response ~ offset(log_n) + ', cov_names))
+  
+  # run gbm model a la Josh Osborne
+  mod <- gbm(gbm_formula,
+             distribution      = 'poisson',
+             data              = df, 
+             n.trees           = ntrees, 
+             interaction.depth = tc,
+             shrinkage         = lr,
+             n.minobsinnode    = nminobs,
+             weights           = df[,get(weight_column)],
+             bag.fraction      = bf,
+             train.fraction    = 1-(1/cv),
+             verbose           = F)
+  
+  if(is.null(mod)) stop('BRT ATTEMPT FAILED')
+  
   return(mod)
 }
 
+# fit_gbm_child_model ---------------------------------------------------------------------------------------------------
+#
 #a function to fit the GBMs for stacking
 #basically a wrapper function for the fit_gam function (which is its own wrapper function-- hooray for rabbit holes)
 #model_name = what do you want the full fit model to be called upon the return. Must sync with subsquent functions
-fit_gbm_child_model = function(df, model_name = 'gbm', fold_id_col = 'fold_id', covariates = all_fixed_effects, additional_terms = NULL, weight_column = NULL,
-                               tc = 4, lr = 0.005, bf = 0.75, indicator = indicator, indicator_family = indicator_family, cores = 'auto'){
 
+fit_gbm_child_model = function(df, model_name = 'gbm', fold_id_col = 'fold_id', covariates = all_fixed_effects, additional_terms = NULL, weight_column = NULL,
+                               tc = gbm_tc, lr = gbm_lr, bf = gbm_bf, cv = gbm_cv, nminobs = gbm_nminobs, ntrees = gbm_ntrees, indicator = indicator, indicator_family = indicator_family, cores = 'auto'){
+  
   #######The function#######
   library(parallel)
-
+  
   #prevent df scoping
   df = copy(df)
-
+  
   #fit the baby trees in parallel
   folds = unique(df[,get(fold_id_col)])
-
+  
   message('Fitting baby gbm models in parallel')
   # Set multithreading to serial for `mclapply()`:
   set_serial_threads()
@@ -468,18 +415,21 @@ fit_gbm_child_model = function(df, model_name = 'gbm', fold_id_col = 'fold_id', 
             tc                 = tc,
             lr                 = lr,
             bf                 = bf,
+            cv                 = cv,
+            nminobs            = nminobs,
+            ntrees             = ntrees,
             indicator          = indicator,
             indicator_family   = indicator_family,
             plot.main = F), mc.cores = cores)
   # Return to multithreading (if any):
   set_original_threads()
-
+  
   for(fff in folds){
     #use the data fit on K-1 of the folds to fit on the help out fold
-    df[get(fold_id_col)==fff, paste0(model_name,'_cv_pred') := predict(baby_models[[fff]], df[get(fold_id_col)==fff,], n.trees=baby_models[[fff]]$gbm.call$best.trees,type='response')]
+    df[get(fold_id_col)==fff, paste0(model_name,'_cv_pred') := predict(baby_models[[fff]], df[get(fold_id_col)==fff,], n.trees=baby_models[[fff]]$n.trees, type='response')]
   }
-
-
+  
+  
   #fit GBM
   message('Fitting Full GBM')
   full_model = fit_gbm(df = df,
@@ -489,22 +439,28 @@ fit_gbm_child_model = function(df, model_name = 'gbm', fold_id_col = 'fold_id', 
                        tc                 = tc,
                        lr                 = lr,
                        bf                 = bf,
+                       cv                 = cv,
+                       nminobs            = nminobs,
+                       ntrees             = ntrees,
                        indicator          = indicator,
                        indicator_family   = indicator_family)
-
-
+  
+  
   #add a model name slot
   full_model$model_name = model_name
-
+  
   #predict the main BRT
-  df[,paste0(model_name,'_full_pred') := predict(full_model,df,n.trees=full_model$gbm.call$best.trees,type = 'response')]
-
+  print(summary(full_model))
+  print(str(full_model))
+  print(full_model)
+  df[,paste0(model_name,'_full_pred') := predict(full_model, df, n.trees = full_model$n.trees, type = 'response')]
+  
   suffixes = c('_full_pred', '_cv_pred')
   return_cols = paste0(model_name, suffixes)
   #print(return_cols)
   #set up with for the return call
   return(setNames(list(df[,return_cols,with = F], full_model),c('dataset',paste0(model_name))))
-
+  
 }
 
 ## fit xgboost child model function ###################################################
@@ -874,7 +830,7 @@ predict_model_raster = function(model_call,
 
   } else if(inherits(model_call, 'gbm')){
 
-    ret_obj = predict(model_call, newdata=dm, n.trees = model_call$gbm.call$best.trees, type = 'response')
+        ret_obj = predict(model_call, newdata=dm, n.trees = model_call$n.trees, type = 'response')
 
   } else if(inherits(model_call, 'glmnet')){
     #glmnet is dumb and wants a matrix for new data

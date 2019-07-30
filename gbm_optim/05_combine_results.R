@@ -2,6 +2,7 @@
 ## Combine results from BRT optimization
 ## Written by Kirsten Wiens
 ## Originally written to take in results of bag/train fraction testing
+# source("/homes/jfrostad/_code/lbd/hap/gbm_optim/05_combine_results.R", echo=T)
 ##############################################################################
 
 
@@ -9,14 +10,14 @@
 
 # clear workspace
 rm(list=ls())
-library(data.table)
+pacman::p_load(data.table, magrittr)
 
 # indicator tested
 indicators <- c('cooking_fuel_solid')
 
 # space bounds version
 lrnr_type <- 'brt'
-experiment_version <- 'test7_2019-07-26'
+experiment_version <- 'test8_2019-07-29'
 
 # set directories
 repo  <- file.path('/homes', Sys.info()['user'], '_code/lbd/hap')
@@ -60,7 +61,7 @@ for (indicator in indicators) {
     }
       
     # save, if desired
-    if (save == T) write.csv(all_results, paste0(dir, 'summary_', indicator, '.csv'))
+    if (save) write.csv(all_results, paste0(dir, 'summary_', indicator, '.csv'))
   }
   
   # combine parameter files

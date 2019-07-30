@@ -45,7 +45,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_dia_sssa',
                 'cooking/model/configs/',
-                '2019_07_23_10_23_49',
+                '2019_07_29_19_17_55',
                 'total')
 
 #pull args from the job submission if !interactive

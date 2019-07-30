@@ -77,25 +77,26 @@ if (Regions != 'dia_south_asia' & Regions != 'IND') {
   use_subnat_res <- FALSE
 }
 
-# TODO
-# ## Set BRT parameters from optimizer sheet
-# if (stacked_fixed_effects %like% 'gbm') {
-#   
-#   gbm_params <- fread(paste0(core_repo, '/ors/3_modeling/gbm_params_ors.csv'), stringsAsFactors = F)
-#   gbm_tc <- gbm_params[indi == indicator & region == Regions, gbm_tc]
-#   gbm_lr <- gbm_params[indi == indicator & region == Regions, gbm_lr]
-#   gbm_bf <- gbm_params[indi == indicator & region == Regions, gbm_bf]
-#   gbm_nminobs <- gbm_params[indi == indicator & region == Regions, gbm_nminobs]
-#   gbm_ntrees <- gbm_params[indi == indicator & region == Regions, gbm_ntrees]
-#   gbm_cv <- gbm_params[indi == indicator & region == Regions, gbm_cv]
-#   
-# } else {
-#   
-#   gbm_cv <- NA
-#   gbm_tc <- NA
-#   gbm_bf <- NA
-# }
-# 
+## Set BRT parameters from optimizer sheet
+if (stacked_fixed_effects %like% 'gbm') {
+  
+  gbm_params <- paste0(core_repo, indicator_group, '/model/configs/gbm_params.csv') %>% 
+    fread(stringsAsFactors=F)
+  gbm_tc <- gbm_params[indi == indicator & region == Regions, gbm_tc]
+  gbm_lr <- gbm_params[indi == indicator & region == Regions, gbm_lr]
+  gbm_bf <- gbm_params[indi == indicator & region == Regions, gbm_bf]
+  gbm_nminobs <- gbm_params[indi == indicator & region == Regions, gbm_nminobs]
+  gbm_ntrees <- gbm_params[indi == indicator & region == Regions, gbm_ntrees]
+  gbm_cv <- gbm_params[indi == indicator & region == Regions, gbm_cv]
+  
+} else {
+  
+  gbm_cv <- NA
+  gbm_tc <- NA
+  gbm_bf <- NA
+  
+}
+
 # ## Record model parameters in google sheet ORZ Model Tracker
 # library('googlesheets')
 # model_params <- c(indicator_group, indicator, run_date, outputdir,

@@ -46,7 +46,7 @@ if (indis[[1]] == 'had_diarrhea') {
                'dia_essa-zwe-ken', 'dia_wssa-nga', 'dia_cssa-cod', 'dia_south_asia-ind-pak')
 }
 
-regions <- c('dia_sssa')
+regions <- c('dia_sssa', 'dia_essa', 'dia_wssa', 'dia_cssa')
 
 
 # set cov version for diarrhea (doesn't matter for ORT)
@@ -55,7 +55,7 @@ regions <- c('dia_sssa')
 file_addin <- FALSE
 
 # bounds versions to test
-bounds_versions <- c(5,6,7)
+bounds_versions <- c(6, 7, 8)
 
 # train and bag fractions to test
 cv_fold <- 3
@@ -72,7 +72,7 @@ for (bv in bounds_versions) {
       
       # get arguments
       jname <- paste0(ind, '_', r, '_optim')
-      mymem <- '200G'
+      mymem <- '300G'
       sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
                         '-l m_mem_free=', mymem, ' -P ', proj, ifelse(use_geos_nodes, ' -q geospatial.q ', ' '),
                         '-l fthread=1 -l h_rt=00:09:00:00 -v sing_image=default -N ', jname, ' ')

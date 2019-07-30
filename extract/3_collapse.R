@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 06/12/2018
 # Purpose: Collapse data for HAP
-  # source("/homes/jfrostad/_code/lbd/hap/extract/3_collapse.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/extract/3_collapse.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -50,6 +50,9 @@ modeling_shapefile_version <- "current"
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
+run_collapse <- T #set to TRUE if you have new data and want to recollapse
+run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
+save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -267,7 +270,8 @@ collapseData <- function(this.family,
 ipums.files = list.files(census.dir, pattern='*.feather', full.names = T)
 
 #run all fx to generate intermediate input data for exploration plotting
-if (save_intermediate == T) {
+if (save_intermediate) {
+  
   cooking <- mcmapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, mc.cores=1,
                       out.temp='/share/geospatial/jfrostad')
   cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
@@ -277,29 +281,33 @@ if (save_intermediate == T) {
   housing.census <- mcmapply(collapseData, census.file=ipums.files, this.family='housing', SIMPLIFY=F, mc.cores=cores,
                              out.temp='/share/geospatial/jfrostad')
   stop()
+
 }
 
-#Run fx for each point/poly
-cooking <- mapply(collapseData, point=F, this.family='cooking', SIMPLIFY=F) %>% 
-  rbindlist
 
-#Run fx for each census file
-cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
-  rbindlist
+if (run_collapse) {
+  
+  #Run fx for each point/poly
+  cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+  
+  #Run fx for each census file
+  cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
+    rbindlist %>% 
+    list(cooking, .) %>% #combine all and redefine the row ID
+    rbindlist %>% 
+    cooking[, row_id := .I] %>% 
+    setkey(cooking, row_id)
 
-#Combine and redefine the row_id
-cooking <- list(cooking, cooking.census) %>% rbindlist
-cooking[, row_id := .I]
-setkey(cooking, row_id)
+  #save poly and point collapses
+  #TODO loop over all fams in fx
+  this.family='cooking'
+  paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>%
+    write.fst(cooking, path=.)
 
-#save poly and point collapses
-#TODO loop over all fams in fx
-this.family='cooking'
-paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>%
-  write.fst(cooking, path=.)
-
-#combine diagnostics and cleanup intermediate files
-collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel_dirty', 'hh_size'), cleanup=T)
+  #combine diagnostics and cleanup intermediate files
+  collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel_dirty', 'hh_size'), cleanup=T)
+  
+} else cooking <- paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>% read.fst(as.data.table=T)
 #***********************************************************************************************************************
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
@@ -310,28 +318,23 @@ vars <- names(cooking) %>% .[. %like% 'cooking']
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
 
 #TODO, current only able to resample stage1/2 countries
-cooking <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])]
-
-#mbg formatting requirement
-setnames(cooking,  c('lat', 'long'), c('latitude', 'longitude'))
-
-#drop weird shapefiles for now
-#TODO investigate these issues
-#cooking <- cooking[!(shapefile %like% "2021")]
-cooking <-cooking[!(shapefile %like% "PRY_central_wo_asuncion")]
-#cooking <-cooking[!(shapefile %like% "geo2_br1991_Y2014M06D09")]
-#cooking <-cooking[!(shapefile %like% "geo2015_2014_1")]
-#cooking <-cooking[!(shapefile %like% "#N/A")]
-#cooking <-cooking[!(shapefile=='stats_mng_adm3_mics_2013')] #TODO double check this one w brandon
+cooking <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])] %>% 
+  setnames(.,  c('lat', 'long'), c('latitude', 'longitude')) %>% #mbg formatting requirement
+  .[!(shapefile %like% "PRY_central_wo_asuncion")] #TODO investigate this shapefile issue
 
 #resample the polygons using internal fx
-pt <- cooking[polygon==T] %>% #only pass the poly rows to the fx, pts are dropping
-  resample_polygons(data = .,
-                    cores = 20,
-                    indic = vars,
-                    density = 0.001,
-                    gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique) %>% 
-  .[, pseudocluster := NULL] #redundant
+#TODO potentially worth parallelizing by region?
+if (run_resample) {
+  
+  pt <- cooking[polygon==T] %>% #only pass the poly rows to the fx, pts are dropping
+    resample_polygons(data = .,
+                      cores = 20,
+                      indic = vars,
+                      density = 0.001,
+                      gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique) %>% 
+    .[, pseudocluster := NULL] #redundant
+
+} else stop('run_resample=FALSE, cannot save model data')
 
 #combine all points
 dt <- list(cooking[polygon==F], pt) %>% 
@@ -375,48 +378,51 @@ file.path(share.model.dir, 'cooking_fuel_clean.csv') %>% write.csv(dt, file=., r
 #merging: new geographies to match, cooking fuel missing strings, dropped clusters 
 
 #TODO continue cleaning up and converting to DT code
+if (save_diagnostic) {
+  
+  #read in csv's
+  geographies <- fread('/ihme/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/new_geographies_to_match.csv')
+  missing_strings <- fread(paste0(j_root, '/WORK/11_geospatial/hap/documentation/str_review/cooking_fuel_missing_strings.csv'))
+  dropped_clusters <- fread(paste0(j_root, '/WORK/11_geospatial/hap/documentation/cooking/dropped_clusters.csv'))
+  
+  
+  #prep geographies_to_match csv
+  geographies<- geographies[Stage!=3, .(iso3, nid, year_start, survey_name)] %>% .[, geomatch := 'X']
+  # geographies <- subset(geographies, !Stage %in% '3')
+  # geographies <- select(geographies, iso3, nid, year_start, survey_name)
+  # geographies$geomatch <- 'X'
+  
+  #prep missing_strings csv
+  missing_strings[, unmapped_percent := (prop*100) %>% round(., digits=1) %>% paste0(., '%')]
+  missing_strings <- missing_strings[, .(missing_strings, nid, ihme_loc_id, int_year, survey_name, 
+                                         var, var_mapped, var_og, unmapped_percent)]
+  
+  # missing_strings$unmapped_var <- paste(missing_strings$var, missing_strings$var_mapped) 
+  # missing_strings$unmapped_string <- missing_strings$var_og 
+  # percent <- missing_strings$prop * 100
+  # percent <- round(percent, digits = 1)
+  # missing_strings$unmapped_percent <- paste0(percent, "%") 
+  # missing_strings <- select(missing_strings, nid, ihme_loc_id, int_year, survey_name, 
+  #                           unmapped_var, unmapped_string, unmapped_percent)
+  
+  #prep dropped_clusters csv
+  dropped_clusters$dropped_var <- paste(dropped_clusters$var, dropped_clusters$type)
+  percent <- dropped_clusters$count / dropped_clusters$total * 100 
+  percent <- round(percent, digits = 1) 
+  dropped_clusters$dropped_percent <- paste0(percent, "%  -  (", dropped_clusters$count, "/", 
+                                             dropped_clusters$total, ")")  
+  dropped_clusters <- select(dropped_clusters, nid, ihme_loc_id, int_year, dropped_var, 
+                             dropped_percent) %>% distinct
+  
+  #merge
+  problem_surveys <- merge(geographies, missing_strings, by.x = c('nid', 'iso3', 'year_start', 'survey_name'), 
+                           by.y = c('nid', 'ihme_loc_id', 'int_year', 'survey_name'), all.x = TRUE, all.y = TRUE)
+  problem_surveys <- merge(problem_surveys, dropped_clusters, by.x = c('nid', 'iso3', 'year_start'), 
+                           by.y = c('nid', 'ihme_loc_id', 'int_year'), all.x = TRUE, all.y = TRUE)
+  problem_surveys <- problem_surveys[, year_start > 1999]
+  
+  #output
+  write.csv(problem_surveys, paste0(j_root, '/WORK/11_geospatial/hap/documentation/all_problematic_surveys.csv'), row.names=F)
 
-#read in csv's
-geographies <- fread('/ihme/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/new_geographies_to_match.csv')
-missing_strings <- fread(paste0(j_root, '/WORK/11_geospatial/hap/documentation/str_review/cooking_fuel_missing_strings.csv'))
-dropped_clusters <- fread(paste0(j_root, '/WORK/11_geospatial/hap/documentation/cooking/dropped_clusters.csv'))
-
-
-#prep geographies_to_match csv
-geographies<- geographies[Stage!=3, .(iso3, nid, year_start, survey_name)] %>% .[, geomatch := 'X']
-# geographies <- subset(geographies, !Stage %in% '3')
-# geographies <- select(geographies, iso3, nid, year_start, survey_name)
-# geographies$geomatch <- 'X'
-
-#prep missing_strings csv
-missing_strings[, unmapped_percent := (prop*100) %>% round(., digits=1) %>% paste0(., '%')]
-missing_strings <- missing_strings[, .(missing_strings, nid, ihme_loc_id, int_year, survey_name, 
-                                       var, var_mapped, var_og, unmapped_percent)]
-
-# missing_strings$unmapped_var <- paste(missing_strings$var, missing_strings$var_mapped) 
-# missing_strings$unmapped_string <- missing_strings$var_og 
-# percent <- missing_strings$prop * 100
-# percent <- round(percent, digits = 1)
-# missing_strings$unmapped_percent <- paste0(percent, "%") 
-# missing_strings <- select(missing_strings, nid, ihme_loc_id, int_year, survey_name, 
-#                           unmapped_var, unmapped_string, unmapped_percent)
-
-#prep dropped_clusters csv
-dropped_clusters$dropped_var <- paste(dropped_clusters$var, dropped_clusters$type)
-percent <- dropped_clusters$count / dropped_clusters$total * 100 
-percent <- round(percent, digits = 1) 
-dropped_clusters$dropped_percent <- paste0(percent, "%  -  (", dropped_clusters$count, "/", 
-                                           dropped_clusters$total, ")")  
-dropped_clusters <- select(dropped_clusters, nid, ihme_loc_id, int_year, dropped_var, 
-                           dropped_percent) %>% distinct
-
-#merge
-problem_surveys <- merge(geographies, missing_strings, by.x = c('nid', 'iso3', 'year_start', 'survey_name'), 
-                         by.y = c('nid', 'ihme_loc_id', 'int_year', 'survey_name'), all.x = TRUE, all.y = TRUE)
-problem_surveys <- merge(problem_surveys, dropped_clusters, by.x = c('nid', 'iso3', 'year_start'), 
-                         by.y = c('nid', 'ihme_loc_id', 'int_year'), all.x = TRUE, all.y = TRUE)
-problem_surveys <- problem_surveys[, year_start > 1999]
-
-#output
-write.csv(problem_surveys, paste0(j_root, '/WORK/11_geospatial/hap/documentation/all_problematic_surveys.csv'), row.names=F)
+}
 #***********************************************************************************************************************************

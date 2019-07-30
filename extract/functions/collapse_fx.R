@@ -189,7 +189,8 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, check.threshol
   dt[, pct_miss := sum(miss*wt, na.rm=T)/sum(wt, na.rm=T), by=cluster_id] 
 
   # Return the IDs of any clusters with > specified criteria weighted missingnesss or invalidity
-  message("\nidentified #", dt[pct_miss>criteria, cluster_id] %>% uniqueN, " clusters...or ~", 
+  message("\nidentified #", dt[pct_miss>criteria, cluster_id] %>% uniqueN, " clusters", ' [',
+          dt[pct_miss>criteria, nid] %>% uniqueN, ' nids]...or ~', 
           round((nrow(dt[pct_miss>criteria])/og.count)*100), 
           "% of rows \n based on criteria of >", criteria*100, "% ",
           ifelse(!check.threshold, 'missingness', 'invalidity'),
