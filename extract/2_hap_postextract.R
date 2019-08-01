@@ -22,7 +22,7 @@ topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- T #update the codebook from google drive
 cluster <- T #running on cluster true/false
-geos <- F #running on geos nodes true/false
+geos <- T #running on geos nodes true/false
 cores <- 15
 
 #Setup
@@ -44,8 +44,7 @@ pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, fst, parall
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
 
-#TODO update to a new stage csv??
-stages <- file.path(j, "/temp/gmanny/geospatial_stages_priority.csv") %>% fread
+stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread #read info about stages
 #####################################################################
 ######################## DEFINE FUNCTIONS ###########################
 #####################################################################
@@ -67,7 +66,7 @@ read_add_name_col <- function(file){
 ######################## BIND UBCOV EXTRACTS ########################
 #####################################################################
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+if (redownload) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
 codebook <- read_xlsx('hap.xlsx', sheet='codebook') %>% as.data.table
 
 #subset codebook based on outliers, or files that are too large to handle here
@@ -98,7 +97,8 @@ extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case
 extractions <- grep(new.files, extractions, invert=F, value=T)
 
 #append all ubcov extracts together
-if(cluster == TRUE) {
+if (cluster) {
+  
   message("Make cluster")
   cl <- makeCluster(cores)
   message("Register cluster")
@@ -106,19 +106,13 @@ if(cluster == TRUE) {
   registerDoParallel(cl)
   message("Start foreach")
   #Read in each .dta file in parallel - returns a list of data frames
-  top <- foreach(i=1:length(extractions), .packages="data.table") %dopar% {
-    dt <- fread(extractions[i])
-  }
+  top <- foreach(i=1:length(extractions), .packages="data.table") %dopar% fread(extractions[i])
   message("Foreach finished")
   message("Closing cluster")
   stopCluster(cl)
-} else if(cluster == FALSE) {
-  top <- foreach(i=1:length(extractions)) %do% {
-    message(paste0("Reading in: ", extractions[i]))
-    dt <- fread(extractions[i])
-    return(dt)
-  }
-}
+  
+} else top <- foreach(i=1:length(extractions)) %do% {message("Reading in: ", extractions[i]); fread(extractions[i])} 
+
 
 message("rbindlist all extractions together")
 topics <- rbindlist(top, fill=T, use.names=T)
@@ -139,7 +133,7 @@ write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feat
 #also return a list of all the NIDs that are present in the codebook but not in the extracted topics
 #subset to make sure they are not stage3 or <2000
 message('writing csv of broken extractions')
-codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, alpha.3]), nid] %>% unique
+codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, iso3]), nid] %>% unique
 broken_extractions <- codebook.nids[!(codebook.nids %in% unique(topics$nid))]
 write.csv(broken_extractions, paste0(folder_out, "/broken_extractions.csv"), na="", row.names=F)
 
@@ -235,7 +229,7 @@ missing_nids <- topic_nids[(topic_nids %in% geo_nids) & !(topic_nids %in% merged
 if (length(missing_nids) > 0){
   message(paste("Writing csv of the", length(missing_nids), "surveys that are not properly merging"))
   merge_issues <- all[nid %in% missing_nids, .(nid, iso3, survey_name)] %>% distinct
-  merge_issues <- merge(merge_issues, stages, by.x="iso3", by.y="alpha.3", all.x=T)
+  merge_issues <- merge(merge_issues, stages, by="iso3", all.x=T)
   write.csv(merge_issues, paste0(folder_out, "/merge_issues.csv"), na="", row.names=F)
 } else{
   message("All nids merged correctly. You are so thorough.")
@@ -274,11 +268,8 @@ if (topic == "hap"){
   message("HAP-specific Fixes")
   #accomodating my file structure
   #TODO make more flexible
-  if (h %like% 'jfrostad') {
-    
-    file.path(h, "_code/lbd", "hap/extract/2a_hap_custom_postextract.R") %>% source
-    
-  } else file.path(h, "hap/extract/2a_hap_custom_postextract.R") %>% source
+  if (h %like% 'jfrostad') file.path(h, "_code/lbd", "hap/extract/2a_hap_custom_postextract.R") %>% source
+  else file.path(h, "hap/extract/2a_hap_custom_postextract.R") %>% source
 }
 #File path where this is located in your repo.
 
@@ -301,6 +292,6 @@ message("Exporting a list of surveys that need to be geo matched")
 gnid <- unique(geo$nid)
 fix <- subset(all, !(all$nid %in% gnid))
 fix_collapse <- distinct(fix[,c("nid", "iso3", "year_start", "survey_name"), with=T])
-fix_collapse <- merge(fix_collapse, stages, by.x="iso3", by.y="alpha.3", all.x=T)
+fix_collapse <- merge(fix_collapse, stages, by="iso3", all.x=T)
 fix_outpath <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/new_geographies_to_match.csv")
 write.csv(fix_collapse, fix_outpath, row.names=F, na="")

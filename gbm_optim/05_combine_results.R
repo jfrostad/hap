@@ -17,7 +17,7 @@ indicators <- c('cooking_fuel_solid')
 
 # space bounds version
 lrnr_type <- 'brt'
-experiment_version <- 'test8_2019-07-29'
+experiment_version <- 'test6_2019-07-30'
 
 # set directories
 repo  <- file.path('/homes', Sys.info()['user'], '_code/lbd/hap')
@@ -77,3 +77,4 @@ for (indicator in indicators) {
   combine_outputs(dir_model)
 
 }
+#***********************************************************************************************************************

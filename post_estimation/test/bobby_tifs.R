@@ -62,6 +62,60 @@ fix_diacritics <<- function(x) {
   
 }
 
+#use the custom link table that Tim Whitson built for stage3
+get_link_table <<- function(simple_raster, shapefile_version) {
+  
+  require(raster)
+  
+  #for custom stage3 links
+  global_link_dir <- '/share/scratch/tmp/fwlt/' #TODO make official
+
+  #read in link_table
+  global_link <- file.path(global_link_dir, "link_table_full_world.rds") %>% readRDS %>%  as.data.table
+  #read in id_raster
+  global_raster <- file.path(global_link_dir, 'id_raster_full_world.rds') %>% readRDS
+
+  #extract the pixel IDs using the cropped and masked global ID raster
+  pixel_ids <- 
+    crop(global_raster, simple_raster) %>% #crop id_raster to simple_raster
+    mask(., simple_raster) %>% #mask id_raster with simple_raster
+    raster::extract(., extent(.), na.rm = T) %>% #extract id_raster
+    na.omit
+  
+  #subset link table by pixel ids from extract
+  link_table <- global_link[ID %in% pixel_ids,]
+
+  #TODO remove when working properly
+  #offical link
+  old_global_link <- data.table(readRDS(sprintf("/snfs1/WORK/11_geospatial/admin_shapefiles/%s/lbd_standard_link.rds", shapefile_version)))
+  #read in id_raster
+  old_global_raster <- readRDS(sprintf("/snfs1/WORK/11_geospatial/admin_shapefiles/%s/lbd_standard_id_raster.rds", shapefile_version))
+  
+  browser()
+  
+  #extract the pixel IDs using the cropped and masked global ID raster
+  old_pixel_ids <- 
+    crop(old_global_raster, simple_raster) %>%  #crop id_raster to simple_raster
+    mask(., simple_raster) %>%  #mask id_raster with simple_raster
+    raster::extract(., extent(.), na.rm = T) %>% #extract id_raster
+    na.omit
+  
+  #subset link table by pixel ids from extract
+  old_link_table <- old_global_link[ID %in% old_pixel_ids,]
+  
+  #make sure list of pixel ids is same number of nonna cells in simple raster
+  if (length(pixel_ids) != length(which(!is.na(getValues(simple_raster))))) {
+    stop("The number of pixel_ids does not match the number of non-na values in simple raster. 
+         \nPart of the simple raster may be outside the extent of the global id raster.")
+  }
+  
+  #return subsetted link table and list of pixel ids
+  list("link_table" = link_table, "pixel_ids" = pixel_ids,
+       "old_link" = old_link_table, "old_pixel_ids" = old_pixel_ids) %>% 
+    return
+  
+}
+
 # -------------------------------------------------------------------
 # Helper function to turn a tif raster file into a dt
 raster_to_dt <- function(the_raster,
@@ -163,6 +217,7 @@ format_rasters <- function(these_rasters,
   #####################################################################
   # load the cell id to admin units link
   link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version)
+  browser()
   
   #####################################################################
   #turn the rasters into a DT and merge them together
@@ -207,7 +262,7 @@ format_rasters <- function(these_rasters,
     simple_raster = simple_raster,
     pixel_id = pixel_id
   )
-  
+
   # getting the connector for sub-national or national raking, This connector gets the IHME location_code for our
   # gbd targets and connects that to the ADM0_CODE or ADM1_CODE as nessecary
   connector <- get_gbd_locs(

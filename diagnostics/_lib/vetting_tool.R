@@ -33,7 +33,8 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, readxl, stringr, viridis) 
+pacman::p_load(ggwordcloud, sf)
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, ggwordcloud, naniar, readxl, sf, stringr, viridis) 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
@@ -48,11 +49,11 @@ redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
 
 #plot options
-build.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
+plot.wordcloud <- T #set T if you want to print a wordcloud to examine the string mapping
 plot.pts <- T #set T if you want to print a map of the model input by SFU%
 plot.miss <- T #set T to create plots of missingness over different factors
 remote <- F #set T to save plots, if working in a remote or qlogin situation
-use.sf <-F #set T if you are not having issues with the sf package
+use.sf <- T #set T if you are not having issues with the sf package
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -230,7 +231,7 @@ mapPoints <- function(info_list, borders_file=NULL, plot_borders=use.sf) {
   dt <- info_list[['mod']] %>% 
     copy %>% 
     .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
-  
+
   #subset borders file
   if (plot_borders) borders <- borders_file[borders_file$ADM0_CODE %in% dt$ADM0_CODE,]
   
@@ -311,10 +312,10 @@ if (remote) pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'),
 
 #create wordcloud using internal function based on ggwordcloud#
 #TODO setup scale for all vars
-if (build.wordcloud) wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
+if (plot.wordcloud) wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
 #check out spatial patterns#
-if (plot.pts) mapPoints(info_list=info)
+if (plot.pts) mapPoints(info_list=info, borders_file=ad2.borders)
 
 #check out missingness patterns
 if (plot.miss) plotMiss(info_list=info, by_var = 'admin_1')

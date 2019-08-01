@@ -497,7 +497,7 @@ hap.comparison.ad0[!is.na(solid_natl), .(nid, survey_series, ihme_loc_id, year, 
 # ---GRAPHS-------------------------------------------------------------------------------------------------------------
 #generate graphs for data vetting
 #first generate each graph type as a separate pdf series
-this.reg <- c('dia_sssa', 'dia_essa', 'dia_cssa', 'dia_wsssa')
+this.reg <- c('dia_afr_horn', 'dia_sssa', 'dia_essa', 'dia_cssa', 'dia_wsssa', 'dia_central_asia')
 countries <- unique(cooking$reg_iso3)
 countries <- cooking[dia_reg %in% this.reg, reg_iso3] %>% unique
 

@@ -11,31 +11,18 @@ rm(list=ls())
 
 # runtime configuration
 if (Sys.info()["sysname"] == "Linux") {
+  
   j_root <- "/home/j/"
   h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  arg <- commandArgs()[-(1:3)] # First args are for unix use only
-  
-  if (length(arg)==0) {
-    # arg <- c("IND", #current project iteration
-    #          "8", #output version
-    #          1) #number of cores provided to multicore functions
-  }
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
+
   ## Load libraries and  MBG project functions.
-  #.libPaths(c( .libPaths(), package_lib))
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
   .libPaths(package_lib)
   
   # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
   Sys.setlocale(category = "LC_ALL", locale = "C")
   
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-  # arg <- c("IND", #current project iteration
-  #          "4", #output version
-  #          1) #number of cores provided to multicore functions
-}
+} else {j_root <- "J:"; h_root <- "H:"}
 
 #load packages
 pacman::p_load(data.table, dplyr, feather, fst, readxl, tidyverse) 
@@ -43,14 +30,16 @@ package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
+today <- '2019_07_29' #TODO setup to pull latest date if !run_collapse
 
 #options
 cores <- 10
+this.family='cooking'
 modeling_shapefile_version <- "current"
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- T #set to TRUE if you have new data and want to recollapse
+run_collapse <- F #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 #***********************************************************************************************************************
@@ -116,7 +105,8 @@ if (latest_date) {
 collapseData <- function(this.family,
                          point=NULL,
                          census.file=NULL,
-                         out.temp=NULL) {
+                         out.temp=NULL,
+                         debug=F) {
   
   message("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
 
@@ -125,8 +115,7 @@ collapseData <- function(this.family,
     message("CENSUS FILE=", census.file)
     census <- T
     # Load data
-    raw <- read_feather(census.file) %>% 
-      as.data.table
+    raw <- read.fst(census.file, as.data.table=T)
     # Determine if point or poly
     point <- !all(raw[, lat] %>% unique %>% is.na)
     
@@ -155,6 +144,8 @@ collapseData <- function(this.family,
 
   #### Subset & Shape Data ####
   dt <- initialClean(raw, var.fam=this.family, is.point=point)
+  
+  if (debug) browser()
     
   #output an intermediate file prior to collapse/indicator definition for preliminary analysis
   if (!is.null(out.temp)) {
@@ -176,7 +167,7 @@ collapseData <- function(this.family,
 
     #define the indicators based on the intermediate variables youve extracted  
     dt <- defIndicator(dt, var.fam=this.family, definitions=def.file, debug=F)
-
+    
     #### Address Missingness ####
     message("\nBegin Addressing Missingness...")
 
@@ -258,29 +249,24 @@ collapseData <- function(this.family,
     agg.dt[, year := weighted.mean(year_median, w=sum_of_sample_weights) %>% floor, by=nid]
     
     # Skip the rest of the process if no rows of data are left
-    if (nrow(dt) == 0) { 
-      message('no data left to return!')
-      return(NULL)
-    } else return(agg.dt)
+    if (nrow(dt) == 0) {message('no data left to return!'); return(NULL)}
+    else return(agg.dt)
     
   }
+  
 }
   
 #populate vector of IPUMS filepaths
-ipums.files = list.files(census.dir, pattern='*.feather', full.names = T)
+ipums.files = list.files(census.dir, pattern='*.fst', full.names = T)
 
 #run all fx to generate intermediate input data for exploration plotting
 if (save_intermediate) {
   
-  cooking <- mcmapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, mc.cores=1,
-                      out.temp='/share/geospatial/jfrostad')
-  cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores,
-                             out.temp='/share/geospatial/jfrostad')
-  housing <- mcmapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F, mc.cores=1,
-                      out.temp='/share/geospatial/jfrostad')
-  housing.census <- mcmapply(collapseData, census.file=ipums.files, this.family='housing', SIMPLIFY=F, mc.cores=cores,
-                             out.temp='/share/geospatial/jfrostad')
-  stop()
+  cooking <- mcmapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, mc.cores=1, out.temp=tmp.dir)
+  cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores, out.temp=tmp.dir)
+  housing <- mcmapply(collapseData, point=T:F, this.family='housing', SIMPLIFY=F, mc.cores=1, out.temp=tmp.dir)
+  housing.census <- mcmapply(collapseData, census.file=ipums.files, this.family='housing', SIMPLIFY=F, mc.cores=cores, out.temp=tmp.dir)
+  stop('Finished saving intermediate files')
 
 }
 
@@ -288,19 +274,23 @@ if (save_intermediate) {
 if (run_collapse) {
   
   #Run fx for each point/poly
-  cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F) %>% rbindlist
+  cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, debug=F) %>% rbindlist
   
   #Run fx for each census file
   cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
+    rbindlist
+    
+  #combine all and redefine the row ID
+  cooking <- list(cooking, cooking.census) %>% 
     rbindlist %>% 
-    list(cooking, .) %>% #combine all and redefine the row ID
-    rbindlist %>% 
-    cooking[, row_id := .I] %>% 
-    setkey(cooking, row_id)
+    .[, row_id := .I] %>% 
+    setkey(., row_id)
+  
+  #cleanup
+  rm(cooking.census)
 
   #save poly and point collapses
   #TODO loop over all fams in fx
-  this.family='cooking'
   paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>%
     write.fst(cooking, path=.)
 
@@ -320,7 +310,8 @@ cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=
 #TODO, current only able to resample stage1/2 countries
 cooking <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])] %>% 
   setnames(.,  c('lat', 'long'), c('latitude', 'longitude')) %>% #mbg formatting requirement
-  .[!(shapefile %like% "PRY_central_wo_asuncion")] #TODO investigate this shapefile issue
+  .[!(shapefile %like% "PRY_central_wo_asuncion")] %>%  #TODO investigate this shapefile issue
+  .[!(shapefile %like% "zmb_adm3_nid_14063")] #TODO investigate this shapefile issue
 
 #resample the polygons using internal fx
 #TODO potentially worth parallelizing by region?

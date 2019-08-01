@@ -21,13 +21,18 @@ package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.c
 source(paste0(repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = repo)
 
-# set cluster arguments
-use_geos_nodes  <- T
-proj_arg        <- 'proj_geo_nodes'
-proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
+# set node preference
+use_geos_nodes <- TRUE
+if (use_geos_nodes) {
+  proj <- 'proj_geo_nodes'
+  r_shell <- 'shell_geos.sh'
+} else {
+  proj <- 'proj_geospatial'
+  r_shell <- 'shell_prod.sh'
+}
 
 # set config and covariate files
-config_par   <- 'config_ort_best'
+config_par   <- 'config_hap_best'
 config_file <- file.path(indicator_group, 'model/configs/')
 cov_par      <- 'covs_ort_standard'
 cov_file <- config_file
@@ -69,12 +74,10 @@ for (i in indics) {
   # set specific arguments
   indicator       <- i
   jname           <- paste0(indicator, '_vif_selection')
-  mycores         <- ifelse(use_geos_nodes, 15, 40)
-  
-  # set up qsub
-  sys.sub <- paste0('qsub -e /share/geospatial/mbg/cooking/logs/errors -o /share/geospatial/mbg/cooking/logs/output ', 
-                    '-pe multi_slot ', mycores, proj, 
-                    '-v sing_image=default -v SET_OMP_THREADS=1 -v SET_MKL_THREADS=1 -N ', jname, ' ')
+  mymem <- '300G'
+  sys.sub <- paste0('qsub -e /share/geospatial/mbg/cooking/logs/errors -o /share/geospatial/mbg/cooking/logs/output ',
+                    '-l m_mem_free=', mymem, ' -P ', proj, ifelse(use_geos_nodes, ' -q geospatial.q ', ' '),
+                    '-l fthread=1 -l h_rt=00:12:00:00 -v sing_image=default -N ', jname, ' ')
   r_shell <- paste0('/share/code/geospatial/kewiens/ort/mbg_central/share_scripts/shell_sing.sh')
   script <- paste0(repo, '/covariate_selection/02_vif_selection_script.R')
   args <- paste(user, repo, indicator_group, indicator, config_par, config_file, cov_par, cov_file, 
@@ -82,6 +85,7 @@ for (i in indics) {
                 crop_covs, cropped_covs_file)
   
   # run launch script
-  system(paste(sys.sub, r_shell, script, args))
+  paste(sys.sub, r_shell, script, args) %>% system
   
 }
+#***********************************************************************************************************************

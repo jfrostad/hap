@@ -237,7 +237,7 @@ for(i in 1:nrow(loopvars)){
   if (region_cores < 9) region_rt <- '03:00:00:00'
   if (region_cores < 6) region_rt <- '01:12:00:00'
   if (region_cores > 9) region_rt <- '16:00:00:00'
-  region_mem <- region_cores*12
+  region_mem <- region_cores*24 #TODO qpid dawg
   
   # make a qsub string
   qsub <- make_qsub_share(age           = loopvars[i,2],
@@ -254,7 +254,7 @@ for(i in 1:nrow(loopvars)){
                           corerepo      = core_repo,
                           code          = parallel_script,
                           addl_job_name = paste0(indicator, '_', as.character(loopvars[i,1]), '_parallel'),
-                          singularity   = '/share/singularity-images/lbd/testing_INLA_builds/lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg',
+                          singularity   = '/share/singularity-images/lbd/testing_INLA_builds/lbd_rpkgs3.6.1gcc9mklrstudioserver1.2.1555_v5.simg',
                           singularity_opts = list(SET_OMP_THREADS=6, SET_MKL_THREADS=6))
   
   message(qsub) #for posterity

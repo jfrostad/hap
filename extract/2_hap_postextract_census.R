@@ -3,10 +3,10 @@ rm(list=ls())
 #Define values
 topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
-redownload <- T #update the codebook from google drive
+redownload <- F #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
 geos <- TRUE #running on geos nodes true/false
-cores <- 20
+cores <- 10
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract_census.R')
@@ -17,22 +17,18 @@ j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/")
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic) #where your extractions are stored
 folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
+setwd(folder_in)
 
 # ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-stages <- file.path(j, "/temp/gmanny/geospatial_stages_priority.csv") %>% fread
-if (geos){
-  package_lib <- '/temp/geospatial/geos_packages'
-  .libPaths(package_lib)
-  library(feather) #as of 11/20/2017 feather does not work on prod
-} else {
-  package_lib <- '/temp/geospatial/packages'}
-.libPaths(package_lib)
+
 
 #Load packages
-packages <- c('haven', 'stringr', 'data.table', 'dplyr', 'magrittr', 'parallel', 'doParallel')
-packages <- lapply(packages, library, character.only=T)
-library(fst, lib.loc = file.path(h, '_code/_lib/pkg'))
-library(gsheet, lib.loc = file.path(h, '_code/_lib/pkg'))
+package_lib    <- file.path(h, '_code/_lib/pkg')
+  .libPaths(package_lib)
+pacman::p_load(data.table, dplyr, haven, feather, fst, googledrive, magrittr, parallel, doParallel, readxl, stringr)
+
+#read stage document
+stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread #read info about stages
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -53,13 +49,11 @@ if (topic == "hap" & geos){
 }
 
 message("List IPUMS dtas")
-extractions <- list.files(folder_in, pattern="IPUMS_CENSUS", full.names=T)
+extractions <- list.files(folder_in, pattern="IPUMS", full.names=T)
 
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-# if(redownload==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
-# codebook <- read_xlsx('hap.xlsx', sheet='sheet1') %>% as.data.table
-codebook <- gsheet2tbl('https://docs.google.com/spreadsheets/d/1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o/edit#gid=0')
-codebook <- as.data.table(codebook)
+if (redownload) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+codebook <- read_xlsx('hap.xlsx', sheet='codebook') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
 #subset the codebook to ONLY the files that our extractors have worked on
@@ -67,14 +61,6 @@ codebook <- codebook[assigned %in% extractor_ids]
 #get the names of all the new files
 new.files <- codebook[, output_name] %>% unique %>% paste(., collapse="|")
 extractions <- grep(new.files, extractions, invert=F, value=T)
-#extractions <- grep('PER', extractions, invert=F, value=T) #only working on peru
-
-# message("Subset to Africa")
-# stages <- read.csv(paste0(j, "temp/gmanny/geospatial_stages_priority.csv"), stringsAsFactors=F)
-# africa <- stages[stages$Stage == 1, "alpha.3"]
-# africa <- paste0(africa, collapse="|")
-# 
-# files <- grep(africa, files, value=T)
 
 message("Read in IPUMS Geo Codebook")
 geo <- read.csv(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks/IPUMS_CENSUS.csv"), stringsAsFactors = F, encoding="windows-1252")
@@ -101,20 +87,16 @@ ipums_merge <- function(file, geo, folder_out, noms){
   missing_all_weights <- !("pweight" %in% names(dt)) & !("hhweight" %in% names(dt))
   missing_gid <- !("geospatial_id" %in% names(dt))
   missing_hap <- !("cooking_fuel" %in% names(dt)) & !(grepl('housing', names(dt)) %>% any)
-  if (has_pweight_not_hhweight){
-    setnames(dt, "pweight", "hhweight")
-  }
-  if (missing_all_weights | missing_hap | missing_gid){
-    return(nid)
-  }
+  
+  if (has_pweight_not_hhweight) setnames(dt, "pweight", "hhweight")
 
+  if (missing_all_weights | missing_hap | missing_gid) return(nid)
+  
   if (!missing_gid) dt[, geospatial_id := as.character(geospatial_id)] #force geospatial IDs to character to match the sheet
   m <- try(merge(dt, geo, by.x=c("nid", "ihme_loc_id", 'geospatial_id'), by.y=c("nid", 'iso3', 'geospatial_id'), all.x=T))
 
-  if (class(m) == "try-error"){
-    message(paste("Check try error", nid))
-    return(nid)
-  } else{
+  if (class(m) == "try-error") {message(paste("Check try error", nid)); return(nid)}
+  else{
     outname <- paste("IPUMS_CENSUS", nid, survey_module, iso3, year_start, year_end, sep="_")
     m$survey_series <- m$survey_name
     m$iso3 <- m$ihme_loc_id
@@ -127,13 +109,9 @@ ipums_merge <- function(file, geo, folder_out, noms){
     has_shp <- any(!is.na(m$shapefile)) & any(!is.na(m$location_code))
     has_lat_long <- any(!is.na(m$lat)) & any(!is.na(m$long))
     has_geography <- has_shp | has_lat_long
-    if (!has_geography){
-      message(paste("Check geography", nid, year_end))
-      return(nid)
-    }
+    if (!has_geography){message(paste("Check geography", nid, year_end)); return(nid)}
 
-    out <- paste0(folder_out, "/", outname, ".feather")
-    write_feather(m, out)
+    out <- paste0(folder_out, "/", outname, ".fst")
     write.fst(m, out)
     return(NULL)
   }
@@ -147,7 +125,6 @@ bad_nids <- mclapply(extractions, ipums_merge, geo=geo, folder_out=folder_out, n
 write.csv(bad_nids, paste0(folder_out, "/fix_these_nids.csv"), row.names = F, na='')
 #write.csv(to_do, to_do_outpath, row.names=F)
 
-
 #####################################################################
 #######Find broken extractions###################
 #####################################################################
@@ -155,7 +132,7 @@ write.csv(bad_nids, paste0(folder_out, "/fix_these_nids.csv"), row.names = F, na
 files <- list.files('L:/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap', pattern = 'IPUMS_CENSUS')
 files <- substr(files, 1, nchar(files)-4)
 files <- strsplit(files,'_')
-files[6]
+files[6] #TODO jank
 for(f in 1:length(files)){
   temp <- unlist(files[f])
   temp <- temp[6]
@@ -163,7 +140,7 @@ for(f in 1:length(files)){
 }
 files <- unlist(files)
 #find nids in codebook not in this list ^
-codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, alpha.3]), nid] %>% unique
+codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, iso3]), nid] %>% unique
 bad_ipums <- codebook.nids[!(codebook.nids %in% files)]
 
 #check against bad nids csv

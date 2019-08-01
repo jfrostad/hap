@@ -48,6 +48,11 @@ if (indis[[1]] == 'had_diarrhea') {
 
 regions <- c('dia_sssa', 'dia_essa', 'dia_wssa', 'dia_cssa')
 
+regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
+             'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
+             'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa') %>% 
+  .[!(. %like% 'ssa')]
+
 
 # set cov version for diarrhea (doesn't matter for ORT)
 # options: 'standard' or 'standard_inc_mbg'
@@ -55,7 +60,7 @@ regions <- c('dia_sssa', 'dia_essa', 'dia_wssa', 'dia_cssa')
 file_addin <- FALSE
 
 # bounds versions to test
-bounds_versions <- c(6, 7, 8)
+bounds_versions <- c(8)
 
 # train and bag fractions to test
 cv_fold <- 3
@@ -72,10 +77,10 @@ for (bv in bounds_versions) {
       
       # get arguments
       jname <- paste0(ind, '_', r, '_optim')
-      mymem <- '300G'
+      mymem <- '50G'
       sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
                         '-l m_mem_free=', mymem, ' -P ', proj, ifelse(use_geos_nodes, ' -q geospatial.q ', ' '),
-                        '-l fthread=1 -l h_rt=00:09:00:00 -v sing_image=default -N ', jname, ' ')
+                        '-l fthread=1 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' ')
       # launch script name to qsub
       script <- file.path(repo, 'gbm_optim/runGBM.R')
       jobnum <- paste0(ind, '_', r)
@@ -93,3 +98,4 @@ for (bv in bounds_versions) {
   }
 
 }
+#***********************************************************************************************************************

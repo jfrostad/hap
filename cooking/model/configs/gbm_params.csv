@@ -8,7 +8,7 @@ cooking_fuel_solid,dia_mid_east,6,11,1308,0.006701,0.5,3,NA
 cooking_fuel_solid,dia_name,6,11,1165,0.007099,0.5,3,NA
 cooking_fuel_solid,dia_s_america,5,13,1708,0.061407,0.5,3,NA
 cooking_fuel_solid,dia_se_asia,5,9,1331,0.009446,0.5,3,NA
-cooking_fuel_solid,dia_sssa,6,16,4000,0.080348671,0.5,3,7292019
+cooking_fuel_solid,dia_sssa,6,16,1981,0.073199679,0.5,3,7292019
 cooking_fuel_solid,COD,6,12,117,0.051635143,0.5,3,NA
 cooking_fuel_solid,NGA,5,10,772,0.010068,0.5,3,NA
 cooking_fuel_solid,ZWE,6,11,400,0.01398,0.5,3,NA
@@ -19,6 +19,6 @@ cooking_fuel_solid,dia_essa-zwe-ken,6,8,248,0.04789859,0.5,3,NA
 cooking_fuel_solid,dia_south_asia-ind-pak,5,11,1384,0.004243,0.5,3,NA
 cooking_fuel_solid,dia_wssa-nga,6,11,3674,0.01497,0.5,3,NA
 cooking_fuel_solid,KEN,4,9,2259,0.000828,0.5,3,NA
-cooking_fuel_solid,dia_wssa,4,9,2259,0.000828,0.5,3,NA
-cooking_fuel_solid,dia_essa,4,9,2259,0.000828,0.5,3,NA
-cooking_fuel_solid,dia_cssa,4,9,2259,0.000828,0.5,3,NA
+cooking_fuel_solid,dia_wssa,4,9,2259,0.000828,0.5,3,7292019
+cooking_fuel_solid,dia_essa,4,16,2000,0.048733988,0.5,3,7292019
+cooking_fuel_solid,dia_cssa,4,15,2000,0.059376165,0.5,3,7292019
