@@ -47,7 +47,7 @@ if (indicator == 'cooking') {
                'dia_essa-zwe-ken', 'dia_wssa-nga', 'dia_cssa-cod', 'dia_south_asia-ind-pak')
 }
 
-regions <- c('dia_sssa', 'dia_essa', 'dia_cssa')
+regions <- c('dia_wssa', 'dia_south_asia')
 
 
 ## Run covariate data scripts -------------------------------------------------------------------------

@@ -2,14 +2,14 @@
 ## Generic parallel script for running MBG models                  ##
 ## Roy Burstein, Nick Graetz, Aaron Osgood-Zimmerman, Jon Mosser   ##
 #####################################################################
-
+# source('/homes/jfrostad/_code/lbd/hap/cooking/model/parallel_hap.R') 
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~ SETUP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ## indicate whether running interactively
-interactive <- F
+interactive <- T
 
 ## if running interactively, set arguments
 if (interactive) {
@@ -32,6 +32,25 @@ if (interactive) {
   
   ## load an image of the main environment
   load(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/pre_run_tempimage_', run_date, pathaddin,'.RData'))
+  
+  ## Set BRT parameters from optimizer sheet
+  if (any(grepl('gbm', stacked_fixed_effects))) {
+    
+    gbm_params <- data.table::fread(paste0(core_repo, indicator_group, '/model/configs/gbm_params.csv'), stringsAsFactors=F)
+    gbm_tc <- gbm_params[indi == indicator & region == Regions, gbm_tc]
+    gbm_lr <- gbm_params[indi == indicator & region == Regions, gbm_lr]
+    gbm_bf <- gbm_params[indi == indicator & region == Regions, gbm_bf]
+    gbm_nminobs <- gbm_params[indi == indicator & region == Regions, gbm_nminobs]
+    gbm_ntrees <- gbm_params[indi == indicator & region == Regions, gbm_ntrees]
+    gbm_cv <- gbm_params[indi == indicator & region == Regions, gbm_cv]
+    
+  } else {
+    
+    gbm_cv <- NA
+    gbm_tc <- NA
+    gbm_bf <- NA
+    
+  }
   
 } else {
   
@@ -714,7 +733,7 @@ if(!as.logical(skipinla)) {
                                 tmb_input_stack = input_data,
                                 control_list    = list(trace=1, eval.max=500, iter.max=300, abs.tol=1e-20),
                                 optimizer       = 'nlminb', # add optimx
-                                ADmap_list      =  NULL ) #list(log_gauss_sigma = factor(NA))  ) # list(zrho = 0.80))
+                                ADmap_list      =  NULL ) #list(log_gauss_sigma = factor(NA))  ) # list(  zrho = 0.80))
     )
     
     # clamping

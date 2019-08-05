@@ -252,7 +252,7 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     # ------------------------------------------------------------------------------------------------------------------------
     # Make plots
     message('Making plots')
-    
+
     # create pdf to write to
     dir.create(paste0(outputdir, 'diagnostic_plots/'))
     pdf(paste0(outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, '.pdf'), height = 10, width =14)
@@ -278,6 +278,8 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     ad1_dat[, N_label := paste0(svy_id, ' [', Nrd, ']')]
 
     if (nrow(ad0_dat) != ad1_dat[,.(svy_id,ADM0_CODE, year)] %>% unique %>% nrow) warning('The number of years of admin 0 data does not match number of years of admin 1 data.')
+    
+    if (reg=='dia_wssa') browser()
     
     # for each country in the region
     for (admin_id in intersect(get_adm0_codes(reg), mbg[,ADM0_CODE] %>% unique)){

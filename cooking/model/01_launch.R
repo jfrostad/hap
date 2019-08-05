@@ -234,8 +234,8 @@ for(i in 1:nrow(loopvars)){
   
   # convert cores approximately to memory and run time
   region_rt <- '06:00:00:00'
-  if (region_cores < 9) region_rt <- '03:00:00:00'
-  if (region_cores < 6) region_rt <- '01:12:00:00'
+  if (region_cores < 9) region_rt <- '04:00:00:00'
+  if (region_cores < 6) region_rt <- '03:12:00:00'
   if (region_cores > 9) region_rt <- '16:00:00:00'
   region_mem <- region_cores*24 #TODO qpid dawg
   

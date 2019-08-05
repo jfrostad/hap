@@ -59,7 +59,8 @@
   regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
                'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
                'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
-  regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa')
+  regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa', 'dia_afr_horn')
+  regions <- 'dia_sssa'
   #regions <- c('ZAF', 'BWA', 'NAM')  
   # regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
   #              'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 

@@ -216,6 +216,7 @@ format_rasters <- function(these_rasters,
   message('loading links')
   #####################################################################
   # load the cell id to admin units link
+  browser()
   link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version)
   browser()
   
@@ -312,7 +313,7 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  shapefile                   <- '2019_02_27'
+  shapefile                   <- '2019_05_06'
   modeling_shapefile_version <- shapefile
   covs                        <- c('access2', 
                                    'diarrhea_prev',
@@ -391,7 +392,7 @@ regLoop <- function(region, build=T) {
                          var_names = var_names, #simplify raster names
                          rk = FALSE,
                          shapefile_version = shapefile,
-                         coastal_fix = F)
+                         coastal_fix = T)
 
     #reset key (to take correlation over country for each covariate combination)
     setkey(dt, ADM0_CODE, year)

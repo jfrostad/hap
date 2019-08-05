@@ -1,13 +1,13 @@
 indi,region,gbm_tc,gbm_nminobs,gbm_ntrees,gbm_lr,gbm_bf,gbm_cv,date_added
-cooking_fuel_solid,dia_afr_horn,6,11,1523,0.039115,0.5,3,NA
-cooking_fuel_solid,dia_central_asia,6,10,1767,0.024337,0.5,3,NA
+cooking_fuel_solid,dia_afr_horn,4,10,10000,0.085919598,0.5,3,8032019
+cooking_fuel_solid,dia_central_asia,4,8,9982,0.015543368,0.5,3,8032019
 cooking_fuel_solid,MNG,6,12,4041,0.011779,0.5,3,NA
-cooking_fuel_solid,dia_malay,6,11,5463,0.001605,0.5,3,NA
+cooking_fuel_solid,dia_malay,4,13,10000,0.019674474,0.5,3,8032019
 cooking_fuel_solid,dia_mcaca,4,11,6463,0.003904,0.5,3,NA
-cooking_fuel_solid,dia_mid_east,6,11,1308,0.006701,0.5,3,NA
-cooking_fuel_solid,dia_name,6,11,1165,0.007099,0.5,3,NA
+cooking_fuel_solid,dia_mid_east,2,15,9891,0.049456853,0.5,3,8032019
+cooking_fuel_solid,dia_name,4,13,10000,0.005288742,0.5,3,8032019
 cooking_fuel_solid,dia_s_america,5,13,1708,0.061407,0.5,3,NA
-cooking_fuel_solid,dia_se_asia,5,9,1331,0.009446,0.5,3,NA
+cooking_fuel_solid,dia_se_asia,4,14,10000,0.03268961,0.5,3,8032019
 cooking_fuel_solid,dia_sssa,6,16,1981,0.073199679,0.5,3,7292019
 cooking_fuel_solid,COD,6,12,117,0.051635143,0.5,3,NA
 cooking_fuel_solid,NGA,5,10,772,0.010068,0.5,3,NA
@@ -21,4 +21,5 @@ cooking_fuel_solid,dia_wssa-nga,6,11,3674,0.01497,0.5,3,NA
 cooking_fuel_solid,KEN,4,9,2259,0.000828,0.5,3,NA
 cooking_fuel_solid,dia_wssa,4,9,2259,0.000828,0.5,3,7292019
 cooking_fuel_solid,dia_essa,4,16,2000,0.048733988,0.5,3,7292019
-cooking_fuel_solid,dia_cssa,4,15,2000,0.059376165,0.5,3,7292019
+cooking_fuel_solid,dia_cssa,4,17,10000,0.02846667,0.5,3,8032019
+cooking_fuel_solid,dia_chn_mng,4,12,10000,0.039644117,0.5,3,8032019

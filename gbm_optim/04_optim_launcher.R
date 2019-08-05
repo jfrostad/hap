@@ -50,8 +50,7 @@ regions <- c('dia_sssa', 'dia_essa', 'dia_wssa', 'dia_cssa')
 
 regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
              'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
-             'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa') %>% 
-  .[!(. %like% 'ssa')]
+             'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
 
 
 # set cov version for diarrhea (doesn't matter for ORT)
@@ -60,7 +59,7 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa',
 file_addin <- FALSE
 
 # bounds versions to test
-bounds_versions <- c(8)
+bounds_versions <- c(9)
 
 # train and bag fractions to test
 cv_fold <- 3

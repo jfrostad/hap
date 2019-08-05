@@ -45,7 +45,8 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_dia_cssa',
                 'cooking/model/configs/',
-                '2019_07_31_09_03_32',
+                '2019_07_31_16_59_08',
+                #'2019_07_31_09_03_32',
                 'total')
 
 #pull args from the job submission if !interactive
@@ -122,6 +123,7 @@ message(paste0(Regions, '\n'))
 ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
 holdouts <- 0
 
+
 ## Combine and summarize aggregated results --------------------------
 
 # combine unraked results
@@ -133,29 +135,112 @@ combine_aggregation(rd       = run_date,
                     regions  = Regions,
                     holdouts = holdouts,
                     raked    = F,
-                    metrics = 'rates', #TODO do rates apply to HAP?
-                    delete_region_files = F)
+                    delete_region_files = F,
+                    metrics = 'rates')
 
 # summarize admins
-summarize_admins(ad_levels = c(0,1,2), raked = F)
+summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
 
 # combine raked results
-# TODO currently irrelevant
-# message('Combining raked aggregated results')
-# if (indicator == 'had_diarrhea') {
-#   combine_aggregation(rd       = run_date,
-#                       indic    = indicator,
-#                       ig       = indicator_group,
-#                       ages     = 0,
-#                       regions  = Regions,
-#                       holdouts = holdouts,
-#                       raked    = T,
-#                       measure  = measure,
-#                       delete_region_files = F)
-#   
-#   # summarize admins
-#   summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure)
-# }
+message('Combining raked aggregated results')
+if (indicator == 'had_diarrhea') {
+  combine_aggregation(rd       = run_date,
+                      indic    = indicator,
+                      ig       = indicator_group,
+                      ages     = 0,
+                      regions  = Regions,
+                      holdouts = holdouts,
+                      raked    = T,
+                      measure  = measure,
+                      delete_region_files = F,
+                      metrics = 'rates')
+  
+  # summarize admins
+  summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
+}
+
+
+## Set Brazil to admin 1 for diarrhea --------------------------
+
+if (indicator == 'had_diarrhea') {
+  
+  # load files
+  ad1 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_', measure, '_summary.csv'))
+  ad2 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
+  ad <- merge(ad2, ad1, by = names(ad1)[grep('ADM|region|year', names(ad1))])
+  
+  # set brazil to admin 1
+  braz <- ad[ADM0_NAME == 'Brazil']
+  braz[, mean := mean.y]
+  braz[, upper := upper.y]
+  braz[, lower := lower.y]
+  braz[, cirange := cirange.y]
+  braz[, pop := pop.x]
+  braz[, grep('.x|.y', names(braz)) := NULL]
+  
+  # bind back to admin 2 file and save
+  ad2 <- ad2[ADM0_NAME != 'Brazil']
+  ad2 <- rbindlist(list(ad2, braz), use.names = T)
+  write.csv(ad2, paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
+}
+
+
+## Aggregate data and stackers ------------------------------------------------------
+
+# Aggregate data to admin 0 and 1
+dat <- aggregate_input_data(indicator, 
+                            indicator_group, 
+                            run_date, 
+                            Regions,
+                            modeling_shapefile_version)
+
+# Aggregate stackers to admin 0 and 1
+stack <- aggregate_child_stackers(indicator, 
+                                  indicator_group, 
+                                  run_date, 
+                                  Regions,
+                                  modeling_shapefile_version)
+
+
+## Combine data and stackers with summary results ------------------------------------------
+
+# Load unraked estimates
+mbg <- list(fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv')),
+            fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv')))  
+names(mbg) <- c('ad0', 'ad1')
+
+# Load raked estimates
+if (indicator == 'had_diarrhea') {
+  mbg_raked <- list(fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_raked_prevalence_summary.csv')),
+                    fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_prevalence_summary.csv')))
+  names(mbg_raked) <- c('ad0', 'ad1')
+}
+
+# Combine
+for (a in c('ad0', 'ad1')) {
+  
+  # raked results
+  if (indicator == 'had_diarrhea') {
+    rake_cols <- c('mean', 'upper', 'lower', 'cirange')
+    setnames(mbg_raked[[a]], rake_cols, paste0(rake_cols, '_raked'))
+    mbg[[a]] <- merge(mbg[[a]], mbg_raked[[a]], 
+                      by = names(mbg[[a]])[grep('ADM|region|year|pop', names(mbg[[a]]))],
+                      all.x = T)
+  }
+  
+  # stackers
+  mbg[[a]] <- merge(mbg[[a]], stack[[a]],
+                    by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
+                    all.x = T)
+  
+  # data
+  mbg[[a]] <- merge(mbg[[a]], dat[[a]],
+                    by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
+                    all.x = T)
+  
+  # save
+  write.csv(mbg[[a]], paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers_', a, '.csv' ))
+}
 
 
 ## Plot stackers and covariates ------------------------------------------------------
@@ -168,12 +253,23 @@ if (use_stacking_covs) {
   ## Stackers over time aggregated to admins
   #TODO add source / points columns to input dataset
   source(file.path(core_repo, 'diagnostics/03_stacker_admin_time_series.R'))
-  plot_stackers_by_adm01(indicator, 
+  
+  # # plot covariate weights
+  # message('Making covariate weight plots')
+  # get_cov_weights(indicator, 
+  #                 indicator_group, 
+  #                 run_date, 
+  #                 Regions, 
+  #                 outputdir)
+  
+  # plot sackers over time aggregated to admins
+  message('Making time series plots for stackers by admin unit')
+  plot_stackers_by_adm01(admin_data = mbg,
+                         indicator, 
                          indicator_group, 
                          run_date, 
                          Regions,
                          measure = measure,
-                         draws = T,
                          raked = ifelse(indicator == 'had_diarrhea', T, F),
                          credible_interval = 0.95,
                          N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000))
