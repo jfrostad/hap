@@ -59,11 +59,11 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa',
 file_addin <- FALSE
 
 # bounds versions to test
-bounds_versions <- c(9)
+bounds_versions <- c(1)
 
 # train and bag fractions to test
 cv_fold <- 3
-bag_fraction <- 0.5
+bag_fraction <- 0.8
 
 
 ## BRT optimizer script -------------------------------------------------------------------------

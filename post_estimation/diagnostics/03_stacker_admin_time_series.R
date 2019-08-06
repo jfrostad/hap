@@ -38,7 +38,8 @@
 
 # -----------------------------------------------------------------------------------
 # Start function
-plot_stackers_by_adm01 <- function(indicator = indicator,
+plot_stackers_by_adm01 <- function(admin_data,
+                                   indicator = indicator,
                                    indicator_group = indicator_group,
                                    run_date = run_date,
                                    regions = Regions,
@@ -46,8 +47,7 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
                                    draws = T,
                                    raked = T,
                                    credible_interval = 0.95,
-                                   N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
-                                   admin_data = NULL) {
+                                   N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000)) {
   # -----------------------------------------------------------------------------------
   
   
@@ -56,75 +56,75 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
   pacman::p_load(data.table, ggplot2, ggthemes, ggrepel, magrittr, raster, rgeos, rgdal, sp)
   # --------------------------
   
-  # ------------------------------------------------------------------------------------------------------------------------
-  # Load functions
-  
-  # Get outputs
-  source('/home/j/temp/central_comp/libraries/current/r/get_outputs.R')
-  
-  # Get model information from RData objects
-  fetch_from_rdata <- function(file_location, item_name, use_grep = F){
-    
-    load(file_location)
-    
-    if (use_grep) ret_obj <- lapply(item_name, function(x) mget(grep(x, ls(), value=T)))
-    else ret_obj <- lapply(item_name, function(x) get(x))
-    
-    if (length(item_name)==1) ret_obj <- ret_obj[[1]]
-
-    return(ret_obj)
-    
-  }
-  
-  # Summarize model results by admin
-  summarize_admin <- function(outputdir, measure, admin_level, admin_data, draws, raked, credible_interval) {
-    
-    if (raked) admin <- paste0(outputdir, indicator,'_raked_', measure, '_admin_draws_eb_bin0_0.RData')
-    else admin <- paste0(outputdir, indicator,'_unraked_admin_draws_eb_bin0_0.RData')
-    
-    load(admin)
-    
-    admin <- paste0('admin_',admin_level) %>% get %>% copy
-    
-    draw_cols <- grep('V[0-9]*', names(admin), value = T)
-    
-    # subset by region
-    admin <- admin[region == reg]
-    
-    #create counts
-    #get rates
-    admin[, paste0('mean_rate') := rowMeans(.SD, na.rm = T), .SDcols = draw_cols]
-    admin[, paste0('lower_rate') := apply(.SD[,draw_cols,with=F], 1, quantile, probs = (1-credible_interval)/2, na.rm = T)]
-    admin[, paste0('upper_rate') := apply(.SD[,draw_cols,with=F], 1, quantile, probs = 1-(1-credible_interval)/2, na.rm = T)]
-    
-    setnames(admin,draw_cols, paste0(draw_cols,'_rate'))
-    
-    #get counts
-    admin[, paste0(c('mean','lower','upper',draw_cols), '_count') := lapply(c('mean','lower','upper', draw_cols), function(x)
-      get(paste0(x,'_rate')) * pop)]
-    
-    admin[, measure := measure]
-    
-    dcs <- c(paste0(draw_cols, '_rate'), paste0(draw_cols,'_count'))
-    ndcs <- names(admin) %>% .[!. %in% dcs]
-    
-    setcolorder(admin,c(ndcs, dcs))
-    
-    if (!draws) admin[,(dcs):=NULL] 
-    
-    # add admin names
-    link <- admin_data[['ad1']]
-    kcols <- expand.grid(adlev = 0:admin_level, type = c('NAME','CODE'))
-    kcols <- paste0('ADM',kcols$adlev,'_',kcols$type)
-    link <- link[,kcols, with = F] %>% unique
-    
-    merge_vars <- intersect(names(admin), names(link))
-    
-    admin <- merge(admin, link, by = merge_vars) %>% 
-      return
-
-  }
-  # ------------------------------------------------------------------------------------------------------------------------
+  # # ------------------------------------------------------------------------------------------------------------------------
+  # # Load functions
+  # 
+  # # Get outputs
+  # source('/home/j/temp/central_comp/libraries/current/r/get_outputs.R')
+  # 
+  # # Get model information from RData objects
+  # fetch_from_rdata <- function(file_location, item_name, use_grep = F){
+  #   
+  #   load(file_location)
+  #   
+  #   if (use_grep) ret_obj <- lapply(item_name, function(x) mget(grep(x, ls(), value=T)))
+  #   else ret_obj <- lapply(item_name, function(x) get(x))
+  #   
+  #   if (length(item_name)==1) ret_obj <- ret_obj[[1]]
+  # 
+  #   return(ret_obj)
+  #   
+  # }
+  # 
+  # # Summarize model results by admin
+  # summarize_admin <- function(outputdir, measure, admin_level, admin_data, draws, raked, credible_interval) {
+  #   
+  #   if (raked) admin <- paste0(outputdir, indicator,'_raked_', measure, '_admin_draws_eb_bin0_0.RData')
+  #   else admin <- paste0(outputdir, indicator,'_unraked_admin_draws_eb_bin0_0.RData')
+  #   
+  #   load(admin)
+  #   
+  #   admin <- paste0('admin_',admin_level) %>% get %>% copy
+  #   
+  #   draw_cols <- grep('V[0-9]*', names(admin), value = T)
+  #   
+  #   # subset by region
+  #   admin <- admin[region == reg]
+  #   
+  #   #create counts
+  #   #get rates
+  #   admin[, paste0('mean_rate') := rowMeans(.SD, na.rm = T), .SDcols = draw_cols]
+  #   admin[, paste0('lower_rate') := apply(.SD[,draw_cols,with=F], 1, quantile, probs = (1-credible_interval)/2, na.rm = T)]
+  #   admin[, paste0('upper_rate') := apply(.SD[,draw_cols,with=F], 1, quantile, probs = 1-(1-credible_interval)/2, na.rm = T)]
+  #   
+  #   setnames(admin,draw_cols, paste0(draw_cols,'_rate'))
+  #   
+  #   #get counts
+  #   admin[, paste0(c('mean','lower','upper',draw_cols), '_count') := lapply(c('mean','lower','upper', draw_cols), function(x)
+  #     get(paste0(x,'_rate')) * pop)]
+  #   
+  #   admin[, measure := measure]
+  #   
+  #   dcs <- c(paste0(draw_cols, '_rate'), paste0(draw_cols,'_count'))
+  #   ndcs <- names(admin) %>% .[!. %in% dcs]
+  #   
+  #   setcolorder(admin,c(ndcs, dcs))
+  #   
+  #   if (!draws) admin[,(dcs):=NULL] 
+  #   
+  #   # add admin names
+  #   link <- admin_data[['ad1']]
+  #   kcols <- expand.grid(adlev = 0:admin_level, type = c('NAME','CODE'))
+  #   kcols <- paste0('ADM',kcols$adlev,'_',kcols$type)
+  #   link <- link[,kcols, with = F] %>% unique
+  #   
+  #   merge_vars <- intersect(names(admin), names(link))
+  #   
+  #   admin <- merge(admin, link, by = merge_vars) %>% 
+  #     return
+  # 
+  # }
+  # # ------------------------------------------------------------------------------------------------------------------------
   
   
   # ------------------------------------------------------------------------------------------------------------------------
@@ -132,119 +132,88 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
   
   # set model output directories
   message('Loading and cleaning model information')
-  outputdir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
-  imagedir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/')
-  
-  # load and aggregate data if it is not given
-  if (is.null(admin_data)) {
-    message(paste0('You have not provided admin data. Aggregating data from /share/geospatial/mbg/input_data/', indicator, '.csv'))
-    input_data <- fread(paste0('/share/geospatial/mbg/input_data/', indicator, '.csv'))
-    if (regions %like% 'south_asia|IND|PAK') {
-      data_reg <- 'dia_south_asia'
-    } else if (regions %like% 'essa|KEN|ZWE') {
-      data_reg <- 'dia_essa'
-    } else if (regions %like% 'wssa|NGA') {
-      data_reg <- 'dia_wssa'
-    } else if (regions %like% 'chn_mng|MNG') {
-      data_reg <- 'dia_chn_mng'
-    } else if (regions %like% 'cssa|COD') {
-      data_reg <- 'dia_cssa'
-    } else {
-      data_reg <- regions
-    }
-    admin_data <- input_aggregate_admin(indicator = indicator, 
-                                        indicator_group = indicator_group, 
-                                        reg = data_reg,
-                                        run_date = run_date,
-                                        input_data = input_data,
-                                        sample_column = 'sum_of_sample_weights',
-                                        shapefile_version = modeling_shapefile_version)
-    rm(input_data)
-  }
+  outputdir = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
+  imagedir = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/')
   
   # loop over regions
   for (reg in regions) {
     message(reg)
     
+    # make sure input files are data tables
+    admin_data[['ad0']] <- as.data.table(admin_data[['ad0']])
+    admin_data[['ad1']] <- as.data.table(admin_data[['ad1']])
+    
+    # subset input data
+    ad0_data <- admin_data[['ad0']][region == reg]
+    ad1_data <- admin_data[['ad1']][region == reg]
+    
     # load submodel names
-    config <- fetch_from_rdata(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'config')
+    config = fetch_from_rdata(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'config')
     
     # check to see if new stacking was used
-    contains_object <- function(file, obj){
+    contains_object = function(file, obj){
       load(file)
-      exists(obj) %>% return
+      return(exists(obj))
     }
     
-    if (contains_object(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'stacking_models')){
-      
-      stack <- fetch_from_rdata(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'stacking_models')
-      submodels <- sapply(stack, function(x) x$model_name, simplify = T)
-    
-      } else submodels <- trimws(strsplit(config[V1 == 'stacked_fixed_effects',V2], '+', fixed = T)[[1]])
-
+    if(contains_object(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'stacking_models')){
+      stack = fetch_from_rdata(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'stacking_models')
+      submodels = unlist(lapply(stack, function(x) x$model_name))
+    }else{
+      submodels = trimws(strsplit(config[V1 == 'stacked_fixed_effects',V2], '+', fixed = T)[[1]])
+    }
     
     # set naming
-    if (raked) varnames <- data.table(variable = c(submodels, 'Unraked', 'Raked'), var_name = c(submodels, 'Unraked', 'Raked'))
-    else varnames <- data.table(variable = c(submodels, 'Unraked'), var_name = c(submodels, 'Unraked'))
-
+    if (raked) {
+      varnames = data.table(variable = c(submodels, 'Unraked', 'Raked'),
+                            var_name = c(submodels, 'Unraked', 'Raked'))
+    } else {
+      varnames = data.table(variable = c(submodels, 'Unraked'),
+                            var_name = c(submodels, 'Unraked'))
+    }
+    
     # load coefficients
-    mod <- lapply(paste0(outputdir, indicator, '_model_eb_bin0_',reg,'_0.RData'), 
+    mod = lapply(paste0(outputdir, indicator, '_model_eb_bin0_',reg,'_0.RData'), 
                  function(x) fetch_from_rdata(x, 'res_fit'))
     if (as.logical(use_inla_country_fes)) {
       # fixed effects
-      mod <- mod[[1]]
-      coefs <- data.table(child = submodels, coef = invlogit(mod$summary.fixed$mean[2:4]), region = reg)
+      mod = mod[[1]]
+      coefs = data.table(child = submodels, coef = invlogit(mod$summary.fixed$mean[2:4]), region = reg)
     } else {
       # random effects
-      mod <- lapply(mod, function(x) data.table(child = submodels, coef = x$summary.random$covar$mean))
-      coefs <- rbindlist(lapply(seq(reg), function(x) mod[[x]][,region:=reg[x]]))
+      mod = lapply(mod, function(x) data.table(child = submodels, coef = x$summary.random$covar$mean))
+      coefs = rbindlist(lapply(seq(reg), function(x) mod[[x]][,region:=reg[x]]))
     }
     
-    
-    # get unraked admin1 results
-    mbg <- summarize_admin(outputdir, measure, 1, admin_data, draws, raked = F, credible_interval)
-    
-    # reshape mbg long
-    mbg <- mbg[, c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'mean_rate', 'lower_rate', 'upper_rate', submodels), with = F]
-    mbg <- melt(mbg, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'lower_rate', 'upper_rate'), variable.factor = F)
-    mbg[variable == 'mean_rate', variable := 'Unraked']
+    # get unraked admin1 results and reshape long
+    mbg = ad1_data[, c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'mean', 'lower', 'upper', submodels), with = F]
+    mbg = melt(mbg, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'lower', 'upper'), variable.factor = F)
+    mbg[variable == 'mean', variable:= 'Unraked']
     
     if (raked) {
-      # get raked admin1 results
-      mbg_raked <- summarize_admin(outputdir, measure, 1, admin_data, draws, raked = T, credible_interval)
-      
-      # reshape mbg_raked long
-      mbg_raked <- mbg_raked[, c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'mean_rate', 'lower_rate', 'upper_rate', submodels), with = F]
-      mbg_raked <- melt(mbg_raked, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'lower_rate', 'upper_rate'), variable.factor = F)
-      mbg_raked[variable == 'mean_rate', variable:= 'Raked']
+      # get unraked admin1 results and reshape long
+      mbg_raked = ad1_data[, c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'mean_raked', 'lower_raked', 'upper_raked', submodels), with = F]
+      mbg_raked = melt(mbg_raked, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'lower_raked', 'upper_raked'), variable.factor = F)
+      mbg_raked[variable == 'mean_raked', variable:= 'Raked']
       
       # add to data
-      mbg <- rbindlist(list(mbg, mbg_raked), use.names = TRUE)
+      mbg = rbindlist(list(mbg, mbg_raked), use.names = TRUE)
     }
     
-    # get unraked admin0 results
-    adm0 <- summarize_admin(outputdir, measure, 0, admin_data, draws, raked = F, credible_interval)
-    
-    # reshape adm0 long
-    adm0 <- adm0[, c('ADM0_CODE', 'ADM0_NAME', 'year', 'mean_rate', 'lower_rate', 'upper_rate', submodels), with = F]
-    adm0 <- melt(adm0, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'year', 'lower_rate', 'upper_rate'), variable.factor = F)
-    adm0[variable == 'mean_rate', variable:= 'Unraked']
+    # get unraked admin0 results  and reshape long
+    adm0 = ad0_data[, c('ADM0_CODE', 'ADM0_NAME', 'year', 'mean', 'lower', 'upper', submodels), with = F]
+    adm0 = melt(adm0, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'year', 'lower', 'upper'), variable.factor = F)
+    adm0[variable == 'mean', variable:= 'Unraked']
     
     if (raked) {
-      
-      # get raked admin0 results
-      adm0_raked <- summarize_admin(outputdir, measure, 0, admin_data, draws, raked = T, credible_interval)
-      adm0_raked <- adm0_raked[region == reg]
-      
-      # reshape adm0_raked long
-      adm0_raked <- adm0_raked[, c('ADM0_CODE', 'ADM0_NAME', 'year', 'mean_rate', 'lower_rate', 'upper_rate', submodels), with = F]
-      adm0_raked <- melt(adm0_raked, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'year', 'lower_rate', 'upper_rate'), variable.factor = F)
-      adm0_raked[variable == 'mean_rate', variable:= 'Raked']
+      # get raked admin0 results and reshape long
+      adm0_raked = ad0_data[, c('ADM0_CODE', 'ADM0_NAME', 'year', 'mean_raked', 'lower_raked', 'upper_raked', submodels), with = F]
+      adm0_raked = melt(adm0_raked, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'year', 'lower_raked', 'upper_raked'), variable.factor = F)
+      adm0_raked[variable == 'mean_raked', variable:= 'Raked']
       
       # add to data
-      adm0 <- rbindlist(list(adm0, adm0_raked), use.names = TRUE)
+      adm0 = rbindlist(list(adm0, adm0_raked), use.names = TRUE)
       rm(adm0_raked)
-      
     }
     # ------------------------------------------------------------------------------------------------------------------------
     
@@ -259,9 +228,11 @@ plot_stackers_by_adm01 <- function(indicator = indicator,
     
     #TODO repetitive coding structure, apply function over admin_data list instead of using 2 data.tables??
     
-    # load the aggregated data that went into the model
-    ad0_dat <- admin_data$ad0
-    ad1_dat <- admin_data$ad1
+    # load and clean the aggregated data that went into the model
+    ad0_dat = ad0_data[!is.na(input_mean)]
+    setnames(ad0_dat, c('input_mean', 'input_ss'), c('outcome', 'N'))
+    ad1_dat = ad1_data[!is.na(input_mean)]
+    setnames(ad1_dat, c('input_mean', 'input_ss'), c('outcome', 'N'))
     
     # add breaks for plotting points in proportion to N
     minn <- min(c(ad0_dat$N,ad1_dat$N))

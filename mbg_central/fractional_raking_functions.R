@@ -774,12 +774,14 @@ fractional_rake_rates <- function(cell_pred = cell_pred,
                                   sharedir = sharedir,
                                   run_date = run_date,
                                   indicator = indicator,
-                                  gbd = gbd,
-                                  rake_method = "linear",
+                                  gbd=gbd,
+                                  rake_method = rake_method,
                                   gbd_pops = gbd_pops,
                                   countries_not_to_rake = NULL,
                                   countries_not_to_subnat_rake = NULL,
-                                  custom_output_folder = NULL){
+                                  custom_output_folder = NULL,
+                                  hold = holdout,
+                                  meas = 'prevalence'){
   # setting a reference for the number of draws
   ndraws = ncol(cell_pred)
   
@@ -878,7 +880,9 @@ fractional_rake_rates <- function(cell_pred = cell_pred,
                                             countries_not_to_rake = countries_not_to_rake,
                                             custom_output_folder = custom_output_folder,
                                             countries_not_to_subnat_rake = countries_not_to_subnat_rake,
-                                            rake_method = rake_method)
+                                            rake_method = rake_method,
+                                            h = hold,
+                                            m = meas)
 }
 
 
@@ -938,12 +942,13 @@ fractional_agg_rates <- function(cell_pred = cell_pred,
                                  run_date = run_date,
                                  indicator = indicator,
                                  main_dir = main_dir,
-                                 rake_method = "linear",
+                                 rake_method = rake_method,
                                  age = 0,
                                  holdout = 0,
                                  return_objects = FALSE,
                                  countries_not_to_subnat_rake = countries_not_to_subnat_rake,
-                                 custom_output_folder = NULL) {
+                                 custom_output_folder = NULL,
+                                 meas = 'prevalence') {
   # setting a reference for the number of draws
   ndraws <- ncol(cell_pred)
   region <- reg
@@ -1023,8 +1028,8 @@ fractional_agg_rates <- function(cell_pred = cell_pred,
   
   ## load the raking factors
   fractional_rf <- read.csv(file = ifelse(is.null(custom_output_folder),
-                                          paste0(sharedir, "/output/", run_date, "/", indicator, "_", reg, "_rf.csv"),
-                                          paste0(custom_output_folder, "/", indicator, "_", reg, "_rf.csv")
+                                          paste0(sharedir, "/output/", run_date, "/", indicator, "_", reg, "_", meas, "_rf_", holdout, ".csv"),
+                                          paste0(custom_output_folder, "/", indicator, "_", reg, "_", meas, "_rf_", holdout, ".csv")
   ))
   
   ## merge them onto the cell_pred
@@ -1052,11 +1057,11 @@ fractional_agg_rates <- function(cell_pred = cell_pred,
   save(raked_cell_pred, file = ifelse(is.null(custom_output_folder),
                                       paste0(
                                         sharedir, "/output/", run_date, "/",
-                                        indicator, "_raked_cell_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"
+                                        indicator, "_cell_draws_raked_", meas, "_eb_bin", age, "_", reg, "_", holdout, ".RData"
                                       ),
                                       paste0(
                                         custom_output_folder, "/",
-                                        indicator, "_raked_cell_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"
+                                        indicator,  "_cell_draws_raked_", meas, "_eb_bin", age, "_", reg, "_", holdout, ".RData"
                                       )
   ))
   
@@ -1090,10 +1095,10 @@ fractional_agg_rates <- function(cell_pred = cell_pred,
   save(raked_cell_pred_c, file = ifelse(is.null(custom_output_folder),
                                         paste0(
                                           sharedir, "/output/", run_date, "/",
-                                          indicator, "_raked_c_cell_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"
+                                          indicator, "_c_cell_draws_raked_", meas, "_eb_bin", age, "_", reg, "_", holdout, ".RData"
                                         ), paste0(
                                           custom_output_folder, "/",
-                                          indicator, "_raked_c_cell_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"
+                                          indicator, "_c_cell_draws_raked_", meas, "_eb_bin", age, "_", reg, "_", holdout, ".RData"
                                         )
   ))
   
@@ -1131,8 +1136,8 @@ fractional_agg_rates <- function(cell_pred = cell_pred,
   ## save raked counts aggregations
   save(admin_0, admin_1, admin_2, sp_hierarchy_list,
        file = ifelse(is.null(custom_output_folder),
-                     paste0(main_dir, "/", indicator, "_", "raked", "_c", "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"),
-                     paste0(custom_output_folder, "/", indicator, "_", "raked", "_c", "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData")
+                     paste0(main_dir, "/", indicator, "_", "raked", "_", meas, "_c", "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"),
+                     paste0(custom_output_folder, "/", indicator, "_", "raked", "_", meas, "_c", "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData")
        )
   )
   
@@ -1149,8 +1154,8 @@ fractional_agg_rates <- function(cell_pred = cell_pred,
   ## save raked rates aggregations
   save(admin_0, admin_1, admin_2, sp_hierarchy_list,
        file = ifelse(is.null(custom_output_folder),
-                     paste0(main_dir, "/", indicator, "_", "raked", "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"),
-                     paste0(custom_output_folder, "/", indicator, "_", "raked", "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData")
+                     paste0(main_dir, "/", indicator, "_", "raked", "_", meas, "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"),
+                     paste0(custom_output_folder, "/", indicator, "_", "raked", "_", meas, "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData")
        )
   )
   
@@ -1561,13 +1566,13 @@ calculate_pop_scalars <- function(cell_pred = cell_pred,
     warning("Forcing those missing raking factors to 1")
     scalars[is.na(pop_scalar), pop_scalar:= 1]
   }
-
+  
   if (!is.null(custom_output_folder)) {
     write.csv(scalars, file = paste0(custom_output_folder, "/", indicator, "_", stratum, "_pop_rf.csv"))
   } else {
     write.csv(scalars, file = paste0(sharedir, "/output/", run_date, "/", indicator, "_", stratum, "_pop_rf.csv"))
   }
-
+  
   return(scalars)
 }
 
@@ -1619,7 +1624,9 @@ calculate_fractional_rfs <- function(ndraws = ndraws,
                                      approx_0_1 = F,
                                      zero_heuristic = F,
                                      iterate = F,
-                                     rake_method = "linear") {
+                                     rake_method = "linear",
+                                     h = 0,
+                                     m = 'prevalence') {
   message("converting from prevalence to counts")
   # set the variables to aggregate
   overs <- paste0("V", 1:ndraws)
@@ -1734,9 +1741,9 @@ calculate_fractional_rfs <- function(ndraws = ndraws,
   
   # saving the raking factors
   if (!is.null(custom_output_folder)) {
-    write.csv(fractional_rf, file = paste0(custom_output_folder, "/", indicator, "_", stratum, "_rf.csv"))
+    write.csv(fractional_rf, file = paste0(custom_output_folder, "/", indicator, "_", stratum, "_", m, "_rf_", h, ".csv"))
   } else {
-    write.csv(fractional_rf, file = paste0(sharedir, "/output/", run_date, "/", indicator, "_", stratum, "_rf.csv"))
+    write.csv(fractional_rf, file = paste0(sharedir, "/output/", run_date, "/", indicator, "_", stratum, "_", m, "_rf_", h, ".csv"))
   }
   
   return(fractional_rf)

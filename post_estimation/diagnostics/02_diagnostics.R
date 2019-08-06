@@ -2,7 +2,7 @@
 ## MBG diagnostics functions and plots for ORT
 ## Written by Kirsten Wiens
 ## Created 2018/09/17
-#source("/homes/jfrostad/_code/lbd/hap/diagnostics/02_diagnostics.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/02_diagnostics.R", echo=T)
 ##############################################################################
 
 
@@ -45,8 +45,8 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_dia_cssa',
                 'cooking/model/configs/',
-                '2019_07_31_16_59_08',
-                #'2019_07_31_09_03_32',
+                #'2019_07_31_16_59_08',
+                '2019_07_31_09_03_32',
                 'total')
 
 #pull args from the job submission if !interactive
@@ -68,6 +68,12 @@ message(indicator)
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
+
+## Load custom post-estimation functions
+lapply(file.path(core_repo,
+              'post_estimation/_lib/',
+              list.files(file.path(core_repo, 'post_estimation/_lib/'))),
+       source)
 
 #use your own diacritics fx, due to inscrutable error
 #note: requires mgsub pkg
@@ -250,19 +256,15 @@ dir.create(paste0(outputdir, '/diagnostic_plots/'))
 
 if (use_stacking_covs) {
 
-  ## Stackers over time aggregated to admins
-  #TODO add source / points columns to input dataset
-  source(file.path(core_repo, 'diagnostics/03_stacker_admin_time_series.R'))
-  
-  # # plot covariate weights
+  # plot covariate weights
   # message('Making covariate weight plots')
-  # get_cov_weights(indicator, 
-  #                 indicator_group, 
-  #                 run_date, 
-  #                 Regions, 
+  # get_cov_weights(indicator,
+  #                 indicator_group,
+  #                 run_date,
+  #                 Regions,
   #                 outputdir)
   
-  # plot sackers over time aggregated to admins
+  # plot stackers over time aggregated to admins
   message('Making time series plots for stackers by admin unit')
   plot_stackers_by_adm01(admin_data = mbg,
                          indicator, 

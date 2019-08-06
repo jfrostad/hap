@@ -9,7 +9,7 @@
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ## indicate whether running interactively
-interactive <- T
+interactive <- F
 
 ## if running interactively, set arguments
 if (interactive) {
@@ -18,7 +18,7 @@ if (interactive) {
   ## set arguments
   reg                      <- 'dia_sssa'
   age                      <- 0
-  run_date                 <- "2019_07_09_09_12_17"
+  run_date                 <- "2019_08_02_14_30_49"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -959,7 +959,6 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 # set specific arguments
 measure         <- 'total'
 jname           <- paste('agg', reg, indicator, sep = '_')
-mycores         <- 1
 
 # set memory by region
 individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
@@ -974,10 +973,10 @@ sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ',
                   '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:12:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
 r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(repo, indicator_group, 'model/aggregate_hap.R')
-
+script <- file.path(repo, 'mbg_central/share_scripts/frax_script_ort.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 
-              use_geos_nodes, run_date, measure, holdout)
+                    use_geos_nodes, run_date, measure, holdout)
+                    
 
 # submit qsub
 paste(sys.sub, r_shell, script, args) %>% 
