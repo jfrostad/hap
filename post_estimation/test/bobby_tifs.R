@@ -36,7 +36,7 @@ pacman::p_load(ccaPP, fst, mgsub, wCorr)
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
 ##function lib##
 # load MBG packages
-core_repo <- file.path(h_root, '_code/lbd/ort/')
+core_repo <- file.path(h_root, '_code/lbd/hap/')
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
@@ -63,21 +63,13 @@ fix_diacritics <<- function(x) {
 }
 
 #use the custom link table that Tim Whitson built for stage3
-get_link_table <<- function(simple_raster, shapefile_version) {
+get_link_table <<- function(simple_raster, shapefile_version, global_ids, global_link) {
   
   require(raster)
-  
-  #for custom stage3 links
-  global_link_dir <- '/share/scratch/tmp/fwlt/' #TODO make official
-
-  #read in link_table
-  global_link <- file.path(global_link_dir, "link_table_full_world.rds") %>% readRDS %>%  as.data.table
-  #read in id_raster
-  global_raster <- file.path(global_link_dir, 'id_raster_full_world.rds') %>% readRDS
 
   #extract the pixel IDs using the cropped and masked global ID raster
   pixel_ids <- 
-    crop(global_raster, simple_raster) %>% #crop id_raster to simple_raster
+    crop(global_ids, simple_raster) %>% #crop id_raster to simple_raster
     mask(., simple_raster) %>% #mask id_raster with simple_raster
     raster::extract(., extent(.), na.rm = T) %>% #extract id_raster
     na.omit
@@ -202,7 +194,7 @@ format_rasters <- function(these_rasters,
   simple_polygon <- simple_polygon_list[[2]]
   
   ## Load list of raster inputs (pop and simple)
-  if (coastal_fix) raster_list <- build_simple_raster_pop(subset_shape, link_table = shapefile_version) #uses new simple_raster 
+  if (coastal_fix) raster_list <- build_simple_raster_pop(subset_shape, link_table=global_link_table) #uses new simple_raster 
   else raster_list <- build_simple_raster_pop(subset_shape, link_table = NULL) #uses old rasterize
   
   simple_raster <- raster_list[["simple_raster"]]
@@ -217,7 +209,8 @@ format_rasters <- function(these_rasters,
   #####################################################################
   # load the cell id to admin units link
   browser()
-  link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version)
+  link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version, 
+                               global_link=global_link_table, global_ids=global_id_raster)
   browser()
   
   #####################################################################
@@ -347,6 +340,13 @@ tmp_dir <- '/home/j/temp/jfrostad/'
 data_dir <- file.path(tmp_dir, 'data', 'bobby_tifs')
 out_dir <- file.path(tmp_dir, 'output', 'bobby_tifs')
 
+#global link info
+global_link_dir <- '/share/scratch/tmp/fwlt/' #TODO make official
+#read in link_table
+global_link_table <- file.path(global_link_dir, "link_table_full_world.rds") %>% readRDS %>%  as.data.table
+#read in id_raster
+global_id_raster <- file.path(global_link_dir, 'id_raster_full_world.rds') %>% readRDS
+
 ## load in region list
 region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
   fread %>% 
@@ -443,7 +443,7 @@ regLoop <- function(region, build=T) {
       message('|~>calculation is at the level of...', by_vars %>% list) 
 
       #calculate correlation
-      out <- dt[, (new_cols) := lapply(.SD, weightedCorr, y=y_var, weights=wt, method='Spearman'), #note: cov is x
+      dt[, (new_cols) := lapply(.SD, weightedCorr, y=y_var, weights=wt, method='Spearman'), #note: cov is x
                 by=by_vars, .SDcols=var_list] %>% 
         unique(., by=key(.)) %>% 
         { if (collapse) . else .[, (cov) := y_var] } %>%  #rename y_var if you want to keep it
@@ -458,7 +458,6 @@ regLoop <- function(region, build=T) {
   #note that the key needs to be SET to specify level of aggregation
   calcCorrs <- function(dt, by_vars, wt_var, collapse) {
 
-    tmp <-
     na.omit(dt, cols=var_names) %>% #remove NA values as it causes weightedCorr to fail (na.rm not implemented)
       lapply(covs, wCorrCovs, input_dt=., var_list=var_names, #calculate for each covariate
              by_vars=by_vars, wt_var=wt_var, collapse=collapse) %>%  #grab opts from external fx

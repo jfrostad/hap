@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 07/12/2019
 # Purpose: Function to help vet data for a given problem NID
-# source("/homes/jfrostad/_code/lbd/hap/diagnostics/_lib/vetting_tool.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/_lib/vetting_tool.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -33,13 +33,12 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(ggwordcloud, sf)
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, ggwordcloud, naniar, readxl, sf, stringr, viridis) 
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, readxl, sf, stringr, viridis) 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #which nid are we vetting?
-problem.nid <- 21163 #set the NID you want to vet
+problem.nid <- 56169 #set the NID you want to vet
 
 #R options
 options(scipen=999) #not a fan
@@ -49,7 +48,7 @@ redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
 
 #plot options
-plot.wordcloud <- T #set T if you want to print a wordcloud to examine the string mapping
+plot.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
 plot.pts <- T #set T if you want to print a map of the model input by SFU%
 plot.miss <- T #set T to create plots of missingness over different factors
 remote <- F #set T to save plots, if working in a remote or qlogin situation
