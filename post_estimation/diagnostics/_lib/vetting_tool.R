@@ -37,9 +37,6 @@ pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, re
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
-#which nid are we vetting?
-problem.nid <- 55992 #set the NID you want to vet
-
 #R options
 options(scipen=999) #not a fan
 
@@ -278,6 +275,9 @@ plotMiss <- function(info_list, by_var) {
 #***********************************************************************************************************************
 
 # ---VET----------------------------------------------------------------------------------------------------------------
+#which nid are we vetting?
+problem.nid <- 13816 #set the NID you want to vet
+
 #build the vetting object
 info <- vetAssistant(problem.nid)
 
