@@ -460,11 +460,10 @@ global_id_raster <- file.path(global_link_dir, 'lbd_full_id_raster.rds') %>% rea
 region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
   fread %>% 
   .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
-regions <- region_list[Stage %in% c('1', '2a'), unique(mbg_reg)]  #if only using LMICs
-#regions <- NULL #TODO remove
-regions <- c(regions, region_list[mbg_reg=='', unique(iso3)]) #if using all
-regions <- regions %>% .[!(. %in% c('RUS', 'CAN', 'USA'))] #TODO currently unsupported
-
+regions <- region_list[Stage %in% c('1', '2a'), unique(mbg_reg)] %>%   #if only using LMICs
+  c(., region_list[mbg_reg=='', unique(iso3)]) %>% #if using all
+  .[!(. %in% c('RUS', 'CAN', 'USA'))] %>%  #TODO currently unsupported
+  sample #try not to hit the bigger regions all at once in mclapply
 
 ## load in bobby's tifs and work on them
 var_names <- c('distance', 'median', 'ratio')

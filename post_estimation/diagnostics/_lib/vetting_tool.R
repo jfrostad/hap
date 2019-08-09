@@ -33,7 +33,8 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, readxl, sf, stringr, viridis) 
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, ggwordcloud, 
+               imguR, naniar, readxl, sf, stringr, viridis) 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
 
@@ -45,7 +46,9 @@ redownload.hap <- F #set T if new codebooking activity for HAP
 redownload.wash <- F #set T if new data vetting activity for WASH
 
 #plot options
-plot.wordcloud <- F #set T if you want to print a wordcloud to examine the string mapping
+imgur <- T #set T if saving addtl diagnostics to imgur
+imgur_refresh <- F #set T if needing to refresh imgur token (must be done locally)
+plot.wordcloud <- T #set T if you want to print a wordcloud to examine the string mapping
 plot.pts <- T #set T if you want to print a map of the model input by SFU%
 plot.miss <- T #set T to create plots of missingness over different factors
 remote <- F #set T to save plots, if working in a remote or qlogin situation
@@ -83,7 +86,7 @@ if(redownload.wash==T) drive_download(as_id('1xn91Y3_lIr0G0Z_BBn-HMO9B9vFFzvCf_P
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
 lbd.shared.function.dir <- file.path(h_root, "_code/lbd/hap/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
-mbg_setup(repo=lbd.shared.function.dir, package_list = package_list)
+suppressMessages(mbg_setup(repo=lbd.shared.function.dir, package_list = package_list))
 
 #helper function in order to pull all relevant files for a given problem NID
 vetAssistant <- function(this.nid,
@@ -158,7 +161,7 @@ vetAssistant <- function(this.nid,
     file.path(dirs[['geog']]) %>% 
     #get survey series from the collapsed data
     list.files(full.names = T, 
-               pattern=paste0(mod[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
+               pattern=paste0(col[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
     fread
   
   #pull the string combos
@@ -188,10 +191,7 @@ vetAssistant <- function(this.nid,
 
 #plot word cloud
 wordCloud <- function(str.dt, this.var, order, colors) {
-  
-  #TODO move back to p_load when versioning issues are resolved (new singularity?)
-  #require(ggwordcloud)
-  
+
   #subset data
   dt <- copy(str.dt)
   dt[, factor_mapped := factor(var_mapped, levels=order)]
@@ -216,7 +216,7 @@ wordCloud <- function(str.dt, this.var, order, colors) {
   
   print(plot)
   
-  return(NULL)
+  return(plot)
   
 }
 
@@ -252,7 +252,7 @@ mapPoints <- function(info_list, borders_file=NULL, plot_borders=use.sf) {
   
   print(plot) #display
   
-  return(NA)
+  return(plot)
   
 }
 
@@ -269,14 +269,35 @@ plotMiss <- function(info_list, by_var) {
   
   print(plot) #display
   
-  return(NA)
+  return(plot)
+  
+}
+
+#helper function to use imguR pkg to upload your plots to a single album w proper title
+imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid) {
+  
+  #initialize title
+  alb_title <- paste(cb$ihme_loc_id, nid, 'DIAGNOSTICS', sep='_')
+  
+  for (i in 1:length(plots)) {
+    
+    img <- imgur(token=my_tkn, height=900, width=1200)
+    print(plots[[i]])
+    obj <- imgur_off(img)
+    #create album if on first loop
+    if (i==1) alb <- create_album(obj, title = alb_title, privacy = "hidden", token = tkn)
+    add_album_images(alb$id, obj, token = my_tkn)
+    
+  }
+  
+  message('www.imgur.com/a/',alb$id)
   
 }
 #***********************************************************************************************************************
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 13816 #set the NID you want to vet
+problem.nid <- 76704 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)
@@ -310,19 +331,24 @@ type.colors <- c(plasma(3, direction=-1), "#C0C0C0") #use gray for other
 names(type.colors) <- type.order
 
 #save plots
-if (remote) pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'), height=8, width=11)
-#if (imgur)
+plot_list <- list() #initialize list
+if (remote) {pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'), height=8, width=11)
+} else if (imgur & imgur_refresh) {tkn <- imgur_login(); file.path(doc.dir, 'imgur_tkn.RDS') %>% saveRDS(tkn, file=.)
+} else if (imgur & !imgur_refresh) tkn <- file.path(doc.dir, 'imgur_tkn.RDS') %>% readRDS
 
 #create wordcloud using internal function based on ggwordcloud#
 #TODO setup scale for all vars
-if (plot.wordcloud) wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
+if (plot.wordcloud) plot_list[[1]] <- wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
 #check out spatial patterns#
-if (plot.pts) mapPoints(info_list=info, borders_file=ad2.borders)
+if (plot.pts) plot_list[[2]] <- mapPoints(info_list=info, borders_file=ad2.borders)
 
 #check out missingness patterns
-if (plot.miss) plotMiss(info_list=info, by_var = 'admin_1')
+if (plot.miss) plot_list[[3]] <- plotMiss(info_list=info, by_var = 'admin_1')
 
 #save plots
 if (remote) dev.off()
+
+#upload plots
+if (imgur) imgUploadHelper(plots=plot_list)
 #***********************************************************************************************************************
