@@ -43,10 +43,9 @@ debug.args <- c('simulate',
                 'cooking_fuel_solid',
                 'config_hap_best',
                 'cooking/model/configs/',
-                'covs_cooking_dia_cssa',
+                'covs_cooking_dia_essa',
                 'cooking/model/configs/',
-                #'2019_07_31_16_59_08',
-                '2019_07_31_09_03_32',
+                '2019_07_31_16_59_08',
                 'total')
 
 #pull args from the job submission if !interactive

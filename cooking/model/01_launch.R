@@ -23,6 +23,10 @@ parallel_script <- commandArgs()[11]
 repo       <- core_repo
 message(indicator)
 
+## Singularity version
+sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
+which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v4.simg')
+
 ## Load MBG packages
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
@@ -254,7 +258,7 @@ for(i in 1:nrow(loopvars)){
                           corerepo      = core_repo,
                           code          = parallel_script,
                           addl_job_name = paste0(indicator, '_', as.character(loopvars[i,1]), '_parallel'),
-                          singularity   = '/share/singularity-images/lbd/testing_INLA_builds/lbd_rpkgs3.6.1gcc9mklrstudioserver1.2.1555_v5.simg',
+                          singularity   = which_sing,
                           singularity_opts = list(SET_OMP_THREADS=6, SET_MKL_THREADS=6))
   
   message(qsub) #for posterity

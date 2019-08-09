@@ -38,7 +38,7 @@ pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, naniar, re
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #which nid are we vetting?
-problem.nid <- 56169 #set the NID you want to vet
+problem.nid <- 55992 #set the NID you want to vet
 
 #R options
 options(scipen=999) #not a fan
@@ -97,7 +97,8 @@ vetAssistant <- function(this.nid,
                            'model'=model.dir,
                            'doc'=doc.dir,
                            'geog'=geog.dir
-                         )) {
+                         ),
+                         debug=F) {
   
   message('pulling relevant files for problem survey, nid = ', this.nid)
   
@@ -108,6 +109,8 @@ vetAssistant <- function(this.nid,
     read_xlsx(., sheet='codebook') %>% 
     as.data.table
   
+  if (debug) browser()
+
   #pull the raw data
   message(' --> raw data') 
   raw <- 
@@ -190,7 +193,7 @@ vetAssistant <- function(this.nid,
 wordCloud <- function(str.dt, this.var, order, colors) {
   
   #TODO move back to p_load when versioning issues are resolved (new singularity?)
-  require(ggwordcloud)
+  #require(ggwordcloud)
   
   #subset data
   dt <- copy(str.dt)
@@ -308,6 +311,7 @@ names(type.colors) <- type.order
 
 #save plots
 if (remote) pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'), height=8, width=11)
+#if (imgur)
 
 #create wordcloud using internal function based on ggwordcloud#
 #TODO setup scale for all vars

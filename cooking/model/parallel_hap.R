@@ -18,7 +18,7 @@ if (interactive) {
   ## set arguments
   reg                      <- 'dia_sssa'
   age                      <- 0
-  run_date                 <- "2019_08_02_14_30_49"
+  run_date                 <- "2019_08_07_10_58_03"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'

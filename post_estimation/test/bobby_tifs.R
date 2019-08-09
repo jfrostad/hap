@@ -31,6 +31,9 @@ if (Sys.info()["sysname"] == "Linux") {
 #load external packages
 #TODO request adds to lbd singularity
 pacman::p_load(ccaPP, fst, mgsub, wCorr)
+
+#options
+cores <- 5
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -303,9 +306,7 @@ format_rasters <- function(these_rasters,
   ## Load list of raster inputs (pop and simple)
   if (coastal_fix) raster_list <- build_simple_raster_pop(subset_shape, link_table=global_link_table) #uses new simple_raster 
   else raster_list <- build_simple_raster_pop(subset_shape, link_table = NULL) #uses old rasterize
-  
-  browser()
-  
+
   simple_raster <- raster_list[["simple_raster"]]
   pop_raster <- raster_list[["pop_raster"]]
   pixel_id <- seegSDM:::notMissingIdx(simple_raster)
@@ -319,8 +320,7 @@ format_rasters <- function(these_rasters,
   # load the cell id to admin units link
   link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version, 
                                global_link=global_link_table, global_ids=global_id_raster, 
-                               debug=T)
-  #browser()
+                               debug=F)
   
   #####################################################################
   #turn the rasters into a DT and merge them together
@@ -415,7 +415,7 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  shapefile                   <- '2019_05_06'
+  shapefile                   <- 'current'
   modeling_shapefile_version <- shapefile
   covs                        <- c('access2', 
                                    'diarrhea_prev',
@@ -450,19 +450,21 @@ data_dir <- file.path(tmp_dir, 'data', 'bobby_tifs')
 out_dir <- file.path(tmp_dir, 'output', 'bobby_tifs')
 
 #global link info
-global_link_dir <- '/share/scratch/tmp/fwlt/' #TODO make official
+global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', shapefile) #TODO make official
 #read in link_table
-global_link_table <- file.path(global_link_dir, "link_table_full_world.rds") %>% readRDS %>%  as.data.table
+global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>%  as.data.table
 #read in id_raster
-global_id_raster <- file.path(global_link_dir, 'id_raster_full_world.rds') %>% readRDS
+global_id_raster <- file.path(global_link_dir, 'lbd_full_id_raster.rds') %>% readRDS
 
 ## load in region list
 region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
   fread %>% 
   .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
 regions <- region_list[Stage %in% c('1', '2a'), unique(mbg_reg)]  #if only using LMICs
-regions <- NULL #TODO remove
+#regions <- NULL #TODO remove
 regions <- c(regions, region_list[mbg_reg=='', unique(iso3)]) #if using all
+regions <- regions %>% .[!(. %in% c('RUS', 'CAN', 'USA'))] #TODO currently unsupported
+
 
 ## load in bobby's tifs and work on them
 var_names <- c('distance', 'median', 'ratio')
@@ -593,7 +595,7 @@ regLoop <- function(region, build=T) {
 }
 
 #loop over all regions
-out <- lapply(regions, regLoop, build=T) 
+out <- mclapply(regions, regLoop, build=T, mc.cores=cores) 
 
 #bind results
 out_ad0 <- lapply(out, function(x) x[['ad0']]) %>% rbindlist(use.names=T, fill=T)
