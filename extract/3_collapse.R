@@ -25,7 +25,7 @@ if (Sys.info()["sysname"] == "Linux") {
 } else {j_root <- "J:"; h_root <- "H:"}
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, readxl, tidyverse) 
+pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, tidyverse) 
 package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 #capture date
@@ -37,11 +37,13 @@ cores <- 10
 this.family='cooking'
 modeling_shapefile_version <- "current"
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
+collapse_date <- "2019_07_31" #which data of collapse to use if not rerunning
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- F #set to TRUE if you have new data and want to recollapse
+run_collapse <- T #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
+new_vetting <- F #set to TRUE to refresh the vetting diagnostic
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -176,13 +178,13 @@ collapseData <- function(this.family,
     missing.vars <- idMissing(dt, this.var="cooking_fuel_dirty", criteria=.2, wt.var='hh_size')
     
     #ID cluster_ids with missing hhweight
-    #decided to use 10% unweighted criteria instead of 0 tolerance
-    missing.wts <- idMissing(dt, this.var="hhweight", criteria=.1, wt.var=NA)
+    #decided to use 20% unweighted criteria instead of 0 tolerance
+    missing.wts <- idMissing(dt, this.var="hhweight", criteria=.2, wt.var=NA)
     
     #ID points with hhweight|hh_size<=0 (invalid)
     #drop clusters with more than 20% invalid, then drop invalid rows 
-    invalid.wts <- idMissing(dt, this.var="hhweight", criteria=.1, wt.var=NA, check.threshold = T, threshold=0)
-    invalid.sizes <- idMissing(dt, this.var="hh_size", criteria=.1, wt.var=NA, check.threshold = T, threshold=0)
+    invalid.wts <- idMissing(dt, this.var="hhweight", criteria=.2, wt.var=NA, check.threshold = T, threshold=0)
+    invalid.sizes <- idMissing(dt, this.var="hh_size", criteria=.2, wt.var=NA, check.threshold = T, threshold=0)
     
     #ID missing hh sizes, then crosswalk values
     missing.sizes <- idMissing(dt, this.var="hh_size", criteria=.2, wt.var=NA)
@@ -297,7 +299,16 @@ if (run_collapse) {
   #combine diagnostics and cleanup intermediate files
   collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel_dirty', 'hh_size'), cleanup=T)
   
-} else cooking <- paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>% read.fst(as.data.table=T)
+} else cooking <- paste0(out.dir, "/", "data_", this.family, '_', collapse_date, ".fst") %>% read.fst(as.data.table=T)
+#***********************************************************************************************************************
+
+# ---DATA EXCLUSION-----------------------------------------------------------------------------------------------------
+#exclude datapoints based on HAP vetting
+setwd(doc.dir)
+if (new_vetting) {setwd(doc.dir); drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
+vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='HAP Vetting', skip=1) %>% as.data.table
+excluded_nids <- vetting[`HAP Vetting Status`=='Excluded', nid] %>% unique #get list of excluded points
+cooking <- cooking[!(nid %in% excluded_nids)] #remove any excluded datapoints
 #***********************************************************************************************************************
 
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------

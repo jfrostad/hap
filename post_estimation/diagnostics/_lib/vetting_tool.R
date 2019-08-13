@@ -78,9 +78,9 @@ if (use.sf) ad2.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefile
 graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs/vetting')
 
 ##Refresh google sheets##
-file.path(doc.dir, 'vetting') %>% setwd
-if(redownload.hap==T) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
-if(redownload.wash==T) drive_download(as_id('1xn91Y3_lIr0G0Z_BBn-HMO9B9vFFzvCf_PQYpIV4AM8'), overwrite=T)
+setwd(doc.dir)
+if(redownload.hap) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+if(redownload.wash) drive_download(as_id('10CLKgyLLzssrWeuyw3US59gTydfYuLreduzdOZWDunQ'), overwrite=T)
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -105,7 +105,7 @@ vetAssistant <- function(this.nid,
   #pull the codebook
   message(' -> codebook')
   cb <-
-    file.path(dirs[['raw']], 'hap.xlsx') %>% 
+    file.path(dirs[['doc']], 'hap.xlsx') %>% 
     read_xlsx(., sheet='codebook') %>% 
     as.data.table
   
@@ -163,12 +163,13 @@ vetAssistant <- function(this.nid,
     list.files(full.names = T, 
                pattern=paste0(col[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
     fread
-  
+
   #pull the string combos
   message(' --------> wash tracking sheet')
   wash <- 
-    file.path(dirs[['doc']], 'vetting', 'wash_tracking.csv') %>% 
-    fread
+  file.path(dirs[['doc']], 'WaSH Tracking Sheet.xlsx') %>% 
+    read_xlsx(., sheet='WaSH Vetting Sheet ') %>% 
+    as.data.table
   
   #subset to the nid and then output info list
   out <- list (
