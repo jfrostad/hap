@@ -30,10 +30,10 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(ccaPP, fst, mgsub, wCorr)
+pacman::p_load(ccaPP, fst, mgsub, sf, wCorr)
 
 #options
-cores <- 5
+cores <- 10
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -218,7 +218,147 @@ rasterize_check_coverage <<- function(shapes, template_raster, field, ..., link_
   }
   return(result)
 }
-# -------------------------------------------------------------------
+
+#update the simple polygon fx to remove unnecessary pieces and use SF to speedup process
+load_simple_polygon <<- function(gaul_list, buffer, tolerance = 0.2,
+                                 subset_only = F, makeplots = F, 
+                                 raking = F, shapefile_version = 'current', testing=F) {
+  
+  # Make a new simple_poly
+  # count the vertices of a SpatialPolygons object, with one feature
+  # TODO can be supplanted by mapview::npts() for sf
+  vertices <- function(x) sum(sapply(x@polygons[[1]]@Polygons, function(y) nrow(y@coords)))
+  
+  if (testing) {
+    message("Opening master shapefile...")
+    master_shape_old <- readOGR(get_admin_shapefile(
+      admin_level = 0, raking = raking,
+      version = shapefile_version
+    ))
+    master_shape_old@data$ADM0_CODE <- as.numeric(as.character(master_shape_old@data$ADM0_CODE))
+    subset_shape_old <- master_shape_old[master_shape_old@data$ADM0_CODE %in% gaul_list, ]
+  }
+  
+  # ~~~~~~~~~~~~~~~~~
+  # load data
+  message("Opening master shapefile...")
+  master_shape <- get_admin_shapefile(admin_level = 0, raking = raking, version = shapefile_version) %>% read_sf
+  
+  #TODO learn how to shift entire fx to sf paradigm
+  subset_shape <- master_shape[master_shape$ADM0_CODE %in% gaul_list,]
+  subset_shape <- subset_shape %>% as_Spatial #for now, just convert it back into SPDF
+
+  if (subset_only) {
+    
+    list(subset_shape=subset_shape,spoly_spdf=NULL) %>% return
+    
+  } else {
+    
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    message('Making a super-low-complexity map outline for INLA mesh creation')
+    
+
+    message('Full polygon vertices: ', vertices(subset_shape))
+    #message('Full polygon vertices: ', npts(subset_shape))
+    
+    if (testing) vertices(subset_shape_old) == npts(subset_shape)
+
+    # Merge everything together (where intersecting)
+    af <- gUnaryUnion(subset_shape)
+    #af <- st_union(subset_shape)
+    
+    # Initial simplification
+    af_simple <- gSimplify(af, tol = tolerance, topologyPreserve = TRUE)
+    #af_simple <- st_simplify(af, dTolerance = tolerance, preserveTopology = TRUE)
+    
+    # Remove tiny features
+    # Get all sub polygons and their areas
+    polys <- af_simple@polygons[[1]]@Polygons
+    areas <- sapply(polys, function(x) x@area)
+    
+    # If there is more than one sub polygon, remove the ditzels (many single-country subsets are a single polygon,
+    #   like Uganda, which would break these few lines)
+    if(length(areas)>1) {
+      # find top 5% by area
+      big_idx <- which(areas > quantile(areas, 0.95))
+      
+      # convert back into a spatialPolygons object
+      spoly <- SpatialPolygons(list(Polygons(polys[big_idx], ID = 1)))
+    }
+    if(length(areas)==1) {
+      spoly <- af_simple
+      big_idx <- 1
+    }
+    
+    # Buffer slightly
+    spoly <- gBuffer(spoly, width = buffer)
+    
+    # simplify again to reduce vertex count
+    spoly <- gSimplify(spoly, tol = tolerance, topologyPreserve = TRUE)
+    
+    # Get list of original polygons
+    polys2 <- af@polygons[[1]]@Polygons
+    
+    # Check if all are within the simple polygon
+    check_if_in_spoly <- function(the_poly, compare_to, the_proj = projection(master_shape)) {
+      the_poly <- SpatialPolygons(list(Polygons(list(the_poly), ID = 1)))
+      projection(the_poly) <- the_proj
+      projection(compare_to) <- the_proj
+      
+      if(suppressWarnings(gIsValid(the_poly)) == F) return(TRUE) #Ignore invalid polygons
+      
+      poly_intersect <- rgeos::gIntersection(the_poly, compare_to)
+      
+      if(is.null(poly_intersect)) {
+        return(FALSE)
+      } else {
+        return(ifelse((raster::area(poly_intersect) == raster::area(the_poly)), TRUE, FALSE))
+      }
+    }
+    
+    over_list <- sapply(polys2, function(x) check_if_in_spoly(x, compare_to = spoly))
+    
+    if (all(over_list) == FALSE) {
+      # Add back in polygons if missed by above procedure (e.g. islands dropped)
+      big_idx <- unique(c(big_idx, which(over_list == F)))
+      spoly <- SpatialPolygons(list(Polygons(polys[big_idx], ID = 1)))
+      spoly <- gBuffer(spoly, width = buffer)
+      spoly <- gSimplify(spoly, tol = tolerance, topologyPreserve = TRUE)
+    }
+    
+    # Now check again with new spoly
+    over_list <- sapply(polys2, function(x) check_if_in_spoly(x, compare_to = spoly))
+    
+    # If still not all enclosed, tolerance probably too high. Return warning
+    if (all(over_list) == FALSE) {
+      number_false = length(over_list[over_list == F])
+      number_total = length(over_list)
+      warning(paste0(number_false, " of ", number_total, " polygons are NOT enclosed within your simple polygon. \n",
+                     "Adjust your buffer and tolerance values."))
+    }
+    
+    # Return results
+    #message('Simplified vertices: ', npts(spoly))
+    message('Simplified vertices: ', vertices(spoly))
+    
+    # plot to check it encloses all of the important bits
+    if(makeplots) plot(spoly)
+    if(makeplots) plot(af, add = TRUE, border = grey(0.5))
+    
+    # turn into an SPDF
+    spoly_spdf <- SpatialPolygonsDataFrame(spoly,
+                                           data = data.frame(ID = 1),
+                                           match.ID = FALSE)
+    
+    # add projection information
+    projection(spoly_spdf) <- projection(master_shape)
+    #projection(spoly_spdf) <- st_crs(master_shape)
+    
+    return(list(subset_shape=subset_shape,spoly_spdf=spoly_spdf))
+  }
+}
+
 # Helper function to turn a tif raster file into a dt
 raster_to_dt <- function(the_raster,
                          simple_polygon,
@@ -293,7 +433,7 @@ format_rasters <- function(these_rasters,
                            shapefile_version = 'current') {
   
   message('loading simple raster & populations')
-  
+
   ## Load simple polygon template to model over
   gaul_list <- get_adm0_codes(reg, shapefile_version = shapefile_version)
   simple_polygon_list <- load_simple_polygon(
@@ -460,9 +600,9 @@ global_id_raster <- file.path(global_link_dir, 'lbd_full_id_raster.rds') %>% rea
 region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
   fread %>% 
   .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
-regions <- region_list[Stage %in% c('1', '2a'), unique(mbg_reg)] %>%   #if only using LMICs
-  c(., region_list[mbg_reg=='', unique(iso3)]) %>% #if using all
-  .[!(. %in% c('RUS', 'CAN', 'USA'))] %>%  #TODO currently unsupported
+regions <- region_list[Stage %in% c('1', '2a', '2b'), unique(mbg_reg)] #if only using LMICs
+regions <- c(regions, region_list[mbg_reg=='', unique(iso3)]) %>% #if using all
+  .[!(. %in% c('RUS', 'CAN', 'USA', 'GRL'))] %>%  #TODO big boys currently unsupported
   sample #try not to hit the bigger regions all at once in mclapply
 
 ## load in bobby's tifs and work on them
@@ -507,14 +647,16 @@ regLoop <- function(region, build=T) {
     #reset key (to take correlation over country for each covariate combination)
     setkey(dt, ADM0_CODE, year)
     toc(log = TRUE)
-    
+
     # finish up and save
     tic('Saving raw table as fst')
     message('-> finished making tables. now saving as \n...', fst_path)
-    write.fst(dt, path = fst_path)
+    if (nrow(dt)>0) write.fst(dt, path = fst_path) 
+    else return(NULL) 
     toc(log = TRUE)
     
-  } else dt <- read.fst(fst_path, as.data.table = T) #else, read from disk
+  } else if (file.exists(fst_path)) dt <- read.fst(fst_path, as.data.table = T) #else, read from disk
+  else return(NULL)
 
   # aggregate to ad2
   tic('Aggregation - AD2')
@@ -533,13 +675,8 @@ regLoop <- function(region, build=T) {
     #copy to avoid global assignments
     dt <- copy(input_dt) %>% 
       na.omit(., cols=cov) #remove any rows that are missing the cov (see above limitation of weightedCorr)
-    
-    if (nrow(dt)==0) {
-      
-      message('no data available for ', cov, '!\n|~>skipping')
-      return(NULL)
-      
-    } else {
+    if (nrow(dt)==0) { message('no data available for ', cov, '!\n|~>skipping'); return(NULL) }
+    else {
       
       #create the new column names
       new_cols <- paste0('corr_', cov, '_X_', var_list) 
@@ -568,14 +705,18 @@ regLoop <- function(region, build=T) {
   #note that the key needs to be SET to specify level of aggregation
   calcCorrs <- function(dt, by_vars, wt_var, collapse) {
 
-    na.omit(dt, cols=var_names) %>% #remove NA values as it causes weightedCorr to fail (na.rm not implemented)
-      lapply(covs, wCorrCovs, input_dt=., var_list=var_names, #calculate for each covariate
+    dt <- na.omit(dt, cols=var_names) #remove NA values as it causes weightedCorr to fail (na.rm not implemented)
+    #cannot calculate if raster values don't exist for region
+    if (nrow(dt) < 1) return(NULL)
+    else {  
+      lapply(covs, wCorrCovs, input_dt=dt, var_list=var_names, #calculate for each covariate
              by_vars=by_vars, wt_var=wt_var, collapse=collapse) %>%  #grab opts from external fx
       .[!sapply(., is.null)] %>% #remove the null tables (missing covariate values)
       { if (collapse) . else lapply(., function(x) setkeyv(x, cols=c(key(x), var_names))) } %>% #req to avoid dupes in next step
       Reduce(function(...) merge(..., all = TRUE), .) %>%  #merge output
       merge(country_info, ., by='ADM0_CODE', all.y=T) %>% #add on the country info
       return
+    }
 
   }
   
@@ -594,11 +735,15 @@ regLoop <- function(region, build=T) {
 }
 
 #loop over all regions
-out <- mclapply(regions, regLoop, build=T, mc.cores=cores) 
+out <- mclapply(regions, regLoop, build=T, mc.cores=1) 
 
 #bind results
-out_ad0 <- lapply(out, function(x) x[['ad0']]) %>% rbindlist(use.names=T, fill=T)
-out_ad2 <- lapply(out, function(x) x[['ad2']]) %>% rbindlist(use.names=T, fill=T)
+out_ad0 <- lapply(out, function(x) x[['ad0']]) %>% 
+  .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
+  rbindlist(use.names=T, fill=T)
+out_ad2 <- lapply(out, function(x) x[['ad2']]) %>% 
+  .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
+  rbindlist(use.names=T, fill=T)
 
 # finish up and save
 tic('Saving ad0')

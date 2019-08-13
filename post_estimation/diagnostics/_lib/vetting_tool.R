@@ -245,7 +245,7 @@ mapPoints <- function(info_list, borders_file=NULL, plot_borders=use.sf) {
   plot <- 
   canvas +
     geom_point(data=dt, aes(x=longitude, y=latitude, color=cooking_fuel_solid/N, size=N)) +
-    scale_color_viridis_c('SFU%', option='plasma') +
+    scale_color_viridis_c('SFU%', option='plasma', direction = -1) +
     ggtitle(paste0('Final MBG Input Dataset, for NID #', problem.nid), 
             paste0(svy_name, '...[N=', sum(dt$N), ']')) +
     theme_bw()
@@ -297,7 +297,7 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 76704 #set the NID you want to vet
+problem.nid <- 134753 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)

@@ -4,11 +4,11 @@
 ## Modified for ORT and diarrhea by Kirsten Wiens on 2019/06/03
 ##
 ###############################################################################
-
+# source('/homes/jfrostad/_code/lbd/hap/mbg_central/share_scripts/frax_script_hap.R') 
 
 ## Setup ---------------------------------------------------------------------------------------------------
-
-interactive <- T
+#detect if running in rstudio IDE
+interactive <- !(is.na(Sys.getenv("RSTUDIO", unset = NA)))
 
 if (interactive) {
   
@@ -18,12 +18,12 @@ if (interactive) {
   indicator <- 'cooking_fuel_solid'
   indicator_group <- 'cooking'
   config_par   <- 'hap_best'
-  cov_par <- 'covs_cooking_dia_sssa'
+  cov_par <- 'covs_cooking_dia_wssa'
   holdout <- 0
   age <- 0
-  run_date <- '2019_08_02_14_30_49'
+  run_date <- '2019_08_08_18_14_46'
   measure <- 'prevalence'
-  reg <- 'dia_sssa'
+  reg <- 'dia_wssa'
   
 } else {
   

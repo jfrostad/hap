@@ -2,7 +2,7 @@
 ## MBG diagnostics functions and plots for ORT
 ## Written by Kirsten Wiens
 ## Created 2018/09/17
-# source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/02_diagnostics.R", echo=T)
+#source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/02_diagnostics.R", echo=T)
 ##############################################################################
 
 
@@ -33,7 +33,7 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(magrittr, mgsub)
 
 #running interactively?
-debug <- T
+debug <- !(is.na(Sys.getenv("RSTUDIO", unset = NA)))
 debug.args <- c('simulate',
                 'command',
                 'args',
@@ -45,7 +45,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_dia_essa',
                 'cooking/model/configs/',
-                '2019_07_31_16_59_08',
+                '2019_08_08_18_14_46',
                 'total')
 
 #pull args from the job submission if !interactive

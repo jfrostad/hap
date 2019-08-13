@@ -10,7 +10,8 @@
 rm(list=ls())
 
 #running interactively?
-debug <- F
+debug <- !(is.na(Sys.getenv("RSTUDIO", unset = NA)))
+
 if (debug) warning('debug is set to TRUE - if you did not mean to run interactively then kill job and turn off debug')
 debug.args <- c('simulate',
                 'command',

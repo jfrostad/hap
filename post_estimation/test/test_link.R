@@ -66,7 +66,7 @@ fix_diacritics <<- function(x) {
 get_link_table <<- function(simple_raster, shapefile_version, global_ids, global_link, debug=F) {
   
   require(raster)
-
+  
   #extract the pixel IDs using the cropped and masked global ID raster
   pixel_ids <- 
     crop(global_ids, simple_raster) %>% #crop id_raster to simple_raster
@@ -78,22 +78,22 @@ get_link_table <<- function(simple_raster, shapefile_version, global_ids, global
   link_table <- global_link[ID %in% pixel_ids,]
   
   if (debug) {
-  #TODO remove when working properly
-  #offical link
-  old_global_link <- data.table(readRDS(sprintf("/snfs1/WORK/11_geospatial/admin_shapefiles/%s/lbd_standard_link.rds", shapefile_version)))
-  #read in id_raster
-  old_global_raster <- readRDS(sprintf("/snfs1/WORK/11_geospatial/admin_shapefiles/%s/lbd_standard_id_raster.rds", shapefile_version))
-  browser()
-  
-  #extract the pixel IDs using the cropped and masked global ID raster
-  old_pixel_ids <- 
-    crop(old_global_raster, simple_raster) %>%  #crop id_raster to simple_raster
-    mask(., simple_raster) %>%  #mask id_raster with simple_raster
-    raster::extract(., extent(.), na.rm = T) %>% #extract id_raster
-    na.omit
-  
-  #subset link table by pixel ids from extract
-  old_link_table <- old_global_link[ID %in% old_pixel_ids,]
+    #TODO remove when working properly
+    #offical link
+    old_global_link <- data.table(readRDS(sprintf("/snfs1/WORK/11_geospatial/admin_shapefiles/%s/lbd_standard_link.rds", shapefile_version)))
+    #read in id_raster
+    old_global_raster <- readRDS(sprintf("/snfs1/WORK/11_geospatial/admin_shapefiles/%s/lbd_standard_id_raster.rds", shapefile_version))
+    browser()
+    
+    #extract the pixel IDs using the cropped and masked global ID raster
+    old_pixel_ids <- 
+      crop(old_global_raster, simple_raster) %>%  #crop id_raster to simple_raster
+      mask(., simple_raster) %>%  #mask id_raster with simple_raster
+      raster::extract(., extent(.), na.rm = T) %>% #extract id_raster
+      na.omit
+    
+    #subset link table by pixel ids from extract
+    old_link_table <- old_global_link[ID %in% old_pixel_ids,]
   }
   
   #make sure list of pixel ids is same number of nonna cells in simple raster
@@ -103,13 +103,13 @@ get_link_table <<- function(simple_raster, shapefile_version, global_ids, global
   }
   
   if(debug) {
-  #return subsetted link table and list of pixel ids
-  list("link_table" = link_table, "pixel_ids" = pixel_ids,
-       "old_link" = old_link_table, "old_pixel_ids" = old_pixel_ids) %>% 
-    return
+    #return subsetted link table and list of pixel ids
+    list("link_table" = link_table, "pixel_ids" = pixel_ids,
+         "old_link" = old_link_table, "old_pixel_ids" = old_pixel_ids) %>% 
+      return
   } else list("link_table" = link_table, "pixel_ids" = pixel_ids) %>% return
   
-}
+  }
 
 build_simple_raster_pop <<- function(subset_shape, u5m=FALSE, field=NULL, raking=F, link_table=modeling_shapefile_version) {
   
@@ -198,7 +198,7 @@ rasterize_check_coverage <<- function(shapes, template_raster, field, ..., link_
   # https://stackoverflow.com/a/24558696
   pixel_owner <- table[table[, .I[which.max(area_fraction)], by=pixel_id]$V1]
   pixel_owner <- pixel_owner[order(pixel_id)]
-
+  
   # generate world raster with pixel values for `field`
   world_pixel_owner <- suppressWarnings(empty_world_raster(whole_world = global))
   # subset to only those pixels owned by a shape we're interested in
@@ -214,6 +214,146 @@ rasterize_check_coverage <<- function(shapes, template_raster, field, ..., link_
     stop(message)
   }
   return(result)
+}
+
+#update the simple polygon fx to remove unnecessary pieces and use SF to speedup process
+load_simple_polygon <<- function(gaul_list, buffer, tolerance = 0.2,
+                                 subset_only = F, makeplots = F, 
+                                 raking = F, shapefile_version = 'current', testing=F) {
+  
+  # Make a new simple_poly
+  # count the vertices of a SpatialPolygons object, with one feature
+  # TODO can be supplanted by mapview::npts() for sf
+  vertices <- function(x) sum(sapply(x@polygons[[1]]@Polygons, function(y) nrow(y@coords)))
+  
+  if (testing) {
+    message("Opening master shapefile...")
+    master_shape_old <- readOGR(get_admin_shapefile(
+      admin_level = 0, raking = raking,
+      version = shapefile_version
+    ))
+    master_shape_old@data$ADM0_CODE <- as.numeric(as.character(master_shape_old@data$ADM0_CODE))
+    subset_shape_old <- master_shape_old[master_shape_old@data$ADM0_CODE %in% gaul_list, ]
+  }
+  
+  # ~~~~~~~~~~~~~~~~~
+  # load data
+  message("Opening master shapefile...")
+  master_shape <- get_admin_shapefile(admin_level = 0, raking = raking, version = shapefile_version) %>% read_sf
+  
+  #TODO learn how to shift entire fx to sf paradigm
+  subset_shape <- master_shape[master_shape$ADM0_CODE %in% gaul_list,]
+  subset_shape <- subset_shape %>% as_Spatial #for now, just convert it back into SPDF
+  
+  if (subset_only) {
+    
+    list(subset_shape=subset_shape,spoly_spdf=NULL) %>% return
+    
+  } else {
+    
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    message('Making a super-low-complexity map outline for INLA mesh creation')
+    
+    
+    message('Full polygon vertices: ', vertices(subset_shape))
+    #message('Full polygon vertices: ', npts(subset_shape))
+    
+    if (testing) vertices(subset_shape_old) == npts(subset_shape)
+    
+    # Merge everything together (where intersecting)
+    af <- gUnaryUnion(subset_shape)
+    #af <- st_union(subset_shape)
+    
+    # Initial simplification
+    af_simple <- gSimplify(af, tol = tolerance, topologyPreserve = TRUE)
+    #af_simple <- st_simplify(af, dTolerance = tolerance, preserveTopology = TRUE)
+    
+    # Remove tiny features
+    # Get all sub polygons and their areas
+    polys <- af_simple@polygons[[1]]@Polygons
+    areas <- sapply(polys, function(x) x@area)
+    
+    # If there is more than one sub polygon, remove the ditzels (many single-country subsets are a single polygon,
+    #   like Uganda, which would break these few lines)
+    if(length(areas)>1) {
+      # find top 5% by area
+      big_idx <- which(areas > quantile(areas, 0.95))
+      
+      # convert back into a spatialPolygons object
+      spoly <- SpatialPolygons(list(Polygons(polys[big_idx], ID = 1)))
+    }
+    if(length(areas)==1) {
+      spoly <- af_simple
+      big_idx <- 1
+    }
+    
+    # Buffer slightly
+    spoly <- gBuffer(spoly, width = buffer)
+    
+    # simplify again to reduce vertex count
+    spoly <- gSimplify(spoly, tol = tolerance, topologyPreserve = TRUE)
+    
+    # Get list of original polygons
+    polys2 <- af@polygons[[1]]@Polygons
+    
+    # Check if all are within the simple polygon
+    check_if_in_spoly <- function(the_poly, compare_to, the_proj = projection(master_shape)) {
+      the_poly <- SpatialPolygons(list(Polygons(list(the_poly), ID = 1)))
+      projection(the_poly) <- the_proj
+      projection(compare_to) <- the_proj
+      
+      if(suppressWarnings(gIsValid(the_poly)) == F) return(TRUE) #Ignore invalid polygons
+      
+      poly_intersect <- rgeos::gIntersection(the_poly, compare_to)
+      
+      if(is.null(poly_intersect)) {
+        return(FALSE)
+      } else {
+        return(ifelse((raster::area(poly_intersect) == raster::area(the_poly)), TRUE, FALSE))
+      }
+    }
+    
+    over_list <- sapply(polys2, function(x) check_if_in_spoly(x, compare_to = spoly))
+    
+    if (all(over_list) == FALSE) {
+      # Add back in polygons if missed by above procedure (e.g. islands dropped)
+      big_idx <- unique(c(big_idx, which(over_list == F)))
+      spoly <- SpatialPolygons(list(Polygons(polys[big_idx], ID = 1)))
+      spoly <- gBuffer(spoly, width = buffer)
+      spoly <- gSimplify(spoly, tol = tolerance, topologyPreserve = TRUE)
+    }
+    
+    # Now check again with new spoly
+    over_list <- sapply(polys2, function(x) check_if_in_spoly(x, compare_to = spoly))
+    
+    # If still not all enclosed, tolerance probably too high. Return warning
+    if (all(over_list) == FALSE) {
+      number_false = length(over_list[over_list == F])
+      number_total = length(over_list)
+      warning(paste0(number_false, " of ", number_total, " polygons are NOT enclosed within your simple polygon. \n",
+                     "Adjust your buffer and tolerance values."))
+    }
+    
+    # Return results
+    #message('Simplified vertices: ', npts(spoly))
+    message('Simplified vertices: ', vertices(spoly))
+    
+    # plot to check it encloses all of the important bits
+    if(makeplots) plot(spoly)
+    if(makeplots) plot(af, add = TRUE, border = grey(0.5))
+    
+    # turn into an SPDF
+    spoly_spdf <- SpatialPolygonsDataFrame(spoly,
+                                           data = data.frame(ID = 1),
+                                           match.ID = FALSE)
+    
+    # add projection information
+    projection(spoly_spdf) <- projection(master_shape)
+    #projection(spoly_spdf) <- st_crs(master_shape)
+    
+    return(list(subset_shape=subset_shape,spoly_spdf=spoly_spdf))
+  }
 }
 #***********************************************************************************************************************
 
