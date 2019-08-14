@@ -60,6 +60,7 @@ use.sf <- T #set T if you are not having issues with the sf package
 #raw data
 data.dir <- file.path('/share/geospatial/mbg/input_data/')
 raw.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/')
+gbd.dir <- '/ihme/covariates/ubcov/model/st_gpr_library/databases/outliers/air_hap/'
 geomatched.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
 geog.dir <- file.path(j_root, 'WORK/11_geospatial/05_survey shapefile library/codebooks')
 census.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
@@ -96,7 +97,8 @@ vetAssistant <- function(this.nid,
                            'collapse'=collapse.dir,
                            'model'=model.dir,
                            'doc'=doc.dir,
-                           'geog'=geog.dir
+                           'geog'=geog.dir,
+                           'gbd'=gbd.dir
                          ),
                          debug=F) {
   
@@ -164,12 +166,17 @@ vetAssistant <- function(this.nid,
                pattern=paste0(col[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
     fread
 
-  #pull the string combos
-  message(' --------> wash tracking sheet')
+  #pull the wash tracking sheet info
+  message(' ---------> wash tracking sheet')
   wash <- 
   file.path(dirs[['doc']], 'WaSH Tracking Sheet.xlsx') %>% 
     read_xlsx(., sheet='WaSH Vetting Sheet ') %>% 
     as.data.table
+
+  #pull the gbd2017 hap outliers info
+  message(' ----------> gbd outliers sheet')
+  gbd <- file.path(dirs[['gbd']], 'outlier_db.csv') %>% 
+    fread
   
   #subset to the nid and then output info list
   out <- list (
@@ -181,7 +188,8 @@ vetAssistant <- function(this.nid,
     'adm'=adm,
     'drop'=drop,
     'geog'=geog,
-    'wash'=wash
+    'wash'=wash,
+    'gbd'=gbd
   ) %>% 
     lapply(., function(x) x[nid==this.nid]) %>% 
     return

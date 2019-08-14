@@ -33,7 +33,8 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(magrittr, mgsub)
 
 #running interactively?
-debug <- !(is.na(Sys.getenv("RSTUDIO", unset = NA)))
+interactive <- T
+debug <-  ifelse(interactive, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check for IDE
 debug.args <- c('simulate',
                 'command',
                 'args',
@@ -47,6 +48,9 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 '2019_08_08_18_14_46',
                 'total')
+
+#if new vetting activity has occured, need to refresh the local sheet
+new_vetting <- F
 
 #pull args from the job submission if !interactive
 args <- ifelse(debug %>% rep(., length(debug.args)), debug.args, commandArgs()) 
@@ -114,6 +118,9 @@ measure <- args[13]
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
 
+## Assign dir to read vetting information
+doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
+
 ## Create proper year list object
 if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
 
@@ -127,7 +134,6 @@ message(paste0(Regions, '\n'))
 
 ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
 holdouts <- 0
-
 
 ## Combine and summarize aggregated results --------------------------
 
@@ -195,7 +201,7 @@ if (indicator == 'had_diarrhea') {
 # Aggregate data to admin 0 and 1
 dat <- aggregate_input_data(indicator, 
                             indicator_group, 
-                            run_date, 
+                            run_date,
                             Regions,
                             modeling_shapefile_version)
 
@@ -204,8 +210,16 @@ stack <- aggregate_child_stackers(indicator,
                                   indicator_group, 
                                   run_date, 
                                   Regions,
-                                  modeling_shapefile_version)
+                                  modeling_shapefile_version,
+                                  pop_measure='total')
 
+##classify datapoints based on HAP vetting
+if (new_vetting) {setwd(doc.dir); googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
+vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='HAP Vetting', skip=1) %>% 
+  as.data.table %>% 
+  .[, .(nid, `HAP Vetting Status`)] #subset to relevant columns
+
+dat <- lapply(dat, function(x) merge(x, vetting, by='nid'))
 
 ## Combine data and stackers with summary results ------------------------------------------
 

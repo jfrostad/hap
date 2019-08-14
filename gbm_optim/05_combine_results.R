@@ -17,16 +17,27 @@ indicators <- c('cooking_fuel_solid')
 
 # space bounds version
 lrnr_type <- 'brt'
-experiment_version <- 'test1_2019-08-06'
+experiment_version <- 'test2'
+experiment_date <- ''
 
 # set directories
 repo  <- file.path('/homes', Sys.info()['user'], '_code/lbd/hap')
 code_dir <- file.path(repo, 'gbm_optim')
 in_dir <- '/share/scratch/tmp/jfrostad/output/gbm_optim/'
+
+# compile most recent run if version not specified
+if (experiment_date == '') experiment_version <- file.path(in_dir, 'brt') %>% 
+  list.files(pattern=experiment_version) %>% 
+  sort(decreasing=T) %>% 
+  .[1]
+
+#specify experiment dirs
 dir_train <- file.path(in_dir, lrnr_type, experiment_version, '/stats_train_output/')
 dir_test <- file.path(in_dir, lrnr_type, experiment_version, '/stats_test_output/')
 dir_model <- file.path(in_dir, lrnr_type, experiment_version, '/stats_output/')
 dir_params <- file.path(in_dir, lrnr_type, experiment_version, '/')
+
+
 
 for (indicator in indicators) {
   message(indicator)

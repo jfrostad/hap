@@ -27,7 +27,7 @@ aggregate_child_stackers <- function(indicator,
                                      run_date,
                                      regions,
                                      modeling_shapefile_version,
-                                     pop_measure = 'a0004t',
+                                     pop_measure,
                                      age = 0,
                                      holdout = 0){
                                  
@@ -89,7 +89,7 @@ aggregate_child_stackers <- function(indicator,
     # Convert raster to data table and clean
     raster_to_dt = function(ras){
       dt <- crop(ras, extent(simple_raster))
-      dt <- data.table(extract(dt, pixel_id))
+      dt <- data.table(raster::extract(dt, pixel_id))
       dt[, pixel_id := pixel_id]
       dt <- melt(dt, id.vars='pixel_id')
       dt[, c('pixel_id', 'variable') := NULL]

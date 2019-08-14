@@ -247,7 +247,17 @@ plot_stackers_by_adm01 <- function(admin_data,
     ad1_dat[, N_label := paste0(nid, ' [#', round(N), ']')]
     
     if (nrow(ad0_dat) != ad1_dat[,.(nid,ADM0_CODE, year)] %>% unique %>% nrow) warning('The number of years of admin 0 data does not match number of years of admin 1 data.')
-
+    
+    # build color scheme for the vetting sheet values
+    # TODO make this code more robust for people who do not have the same schema
+    vetting_colors <- c("Not started"='grey4', 
+                        "Problematic"='darkorange1',
+                        "Completed"='forestgreen',
+                        "Flagged"='firebrick',
+                        "Excluded"='gray71',
+                        "In progress"='indianred2',
+                        "Ready for Review"='indianred2')
+    
     # for each country in the region
     for (admin_id in intersect(get_adm0_codes(reg), mbg[,ADM0_CODE] %>% unique)){
       
@@ -276,9 +286,10 @@ plot_stackers_by_adm01 <- function(admin_data,
         
         if (nrow(ad0_dat[ADM0_CODE == admin_id,])>0) {
           adplot <- adplot + 
-            geom_point(aes(x = year, y = outcome, size = N)) +
+            geom_point(aes(x = year, y = outcome, size = N, fill=`HAP Vetting Status`), shape=21, stroke=0) +
             geom_text_repel(aes(x = year, y = outcome, label = N_label),
-                            size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5)
+                            size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
+            scale_fill_manual(values = vetting_colors)
         }
         
         #print to dev
@@ -339,9 +350,10 @@ plot_stackers_by_adm01 <- function(admin_data,
             
             if (nrow(ad1_dat[ADM1_CODE == a1,])>0) {
               a1_plot <- a1_plot + 
-                geom_point(aes(x = year, y = outcome, size = N)) +
+                geom_point(aes(x = year, y = outcome, size = N, fill=`HAP Vetting Status`), shape=21, stroke=0) +
                 geom_text_repel(aes(x = year, y = outcome, label = N_label),
-                                size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5)
+                                size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
+                scale_fill_manual(values = vetting_colors)
             }
             
             plot(a1_plot)
