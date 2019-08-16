@@ -40,8 +40,8 @@ aggregate_child_stackers <- function(indicator,
   # Load required functions
   library('data.table')
   library('raster')
-  source('/share/code/geospatial/kewiens/ort/mbg_central/fractional_raking_functions.R')
-  source('/share/code/geospatial/kewiens/ort/mbg_central/covariate_functions.R')
+  # source('/share/code/geospatial/kewiens/ort/mbg_central/fractional_raking_functions.R')
+  # source('/share/code/geospatial/kewiens/ort/mbg_central/covariate_functions.R')
   
   # Create empty list to write to
   reg_outputs <- list()

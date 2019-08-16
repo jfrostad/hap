@@ -33,7 +33,8 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, ggwordcloud, 
+require(ggwordcloud)
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, 
                imguR, naniar, readxl, sf, stringr, viridis) 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -306,7 +307,7 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 134753 #set the NID you want to vet
+problem.nid <- 1175 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)
