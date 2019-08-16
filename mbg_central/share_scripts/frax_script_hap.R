@@ -8,7 +8,7 @@
 
 ## Setup ---------------------------------------------------------------------------------------------------
 #detect if running in rstudio IDE
-debug <- T
+debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 if (interactive) {
@@ -19,12 +19,12 @@ if (interactive) {
   indicator <- 'cooking_fuel_solid'
   indicator_group <- 'cooking'
   config_par   <- 'hap_best'
+  cov_par <- 'covs_cooking_dia_wssa'
   holdout <- 0
   age <- 0
-  run_date <- '2019_08_14_13_13_51'
+  run_date <- '2019_08_08_18_14_46'
   measure <- 'prevalence'
-  reg <- 'dia_sssa'
-  cov_par <- paste(indicator_group, reg, sep='_')
+  reg <- 'dia_wssa'
   
 } else {
   
@@ -49,11 +49,12 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
 ## Read config file and save all parameters in memory
+config_filepath <- 'cooking/model/configs/'
 config <- set_up_config(repo            = core_repo,
-                        indicator_group = indicator_group,
-                        indicator       = indicator,
-                        config_name     = paste0('/model/configs/config_', config_par),
-                        covs_name       = paste0('/model/configs/covs_', cov_par))
+                        indicator_group = '',
+                        indicator       = '',
+                        config_name     = paste0(config_filepath, 'config_', config_par),
+                        covs_name       = paste0(config_filepath, cov_par))
 
 # Get the necessary variables out from the config object into global env
 rake_countries <- eval(parse(text = config[V1 == 'rake_countries', V2]))

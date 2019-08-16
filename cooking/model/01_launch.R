@@ -25,7 +25,7 @@ message(indicator)
 
 ## Singularity version
 sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
-which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc8mklrstudioserver1.1.463_v1.simg')
+which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg')
 
 ## Load MBG packages
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
