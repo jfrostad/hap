@@ -200,29 +200,27 @@ summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = '
 
 ## Aggregate data and stackers ------------------------------------------------------
 # Aggregate data to admin 0 and 1
-dat <- lapply(Regions,
-              function(x) 
-                aggregate_input_data(reg=x,
-                                     indicator, 
-                                     indicator_group, 
-                                     run_date,
-                                     modeling_shapefile_version, 
-                                     build=F)) %>% 
+dat <- lapply(Regions,function(x) 
+  aggregate_input_data(reg=x,
+                       indicator, 
+                       indicator_group, 
+                       run_date,
+                       modeling_shapefile_version, 
+                       build=F)
+  ) %>% 
   rbindlist
 
 # Aggregate stackers to admin 0 and 1
-stack <- lapply(Regions,
-                function(x) 
-                  aggregate_child_stackers(reg=x,
-                                           indicator, 
-                                           indicator_group, 
-                                           run_date, 
-                                           modeling_shapefile_version,
-                                           pop_measure='total',
-                                           build=F)) %>% 
+stack <- lapply(Regions, function(x) 
+  aggregate_child_stackers(reg=x,
+                           indicator, 
+                           indicator_group, 
+                           run_date, 
+                           modeling_shapefile_version,
+                           pop_measure='total',
+                           build=F)
+  ) %>% 
   rbindlist
-
-
 
 ## Combine data and stackers with summary results ------------------------------------------
 
@@ -275,50 +273,6 @@ mbg <- merge(mbg, dat,
 # save
 write.csv(mbg, paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers.csv' ))
 
-# # Load unraked estimates
-# mbg <- list(
-#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv') %>% 
-#     fread %>%
-#     .[, lvl := 'adm0'],
-#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv') %>% 
-#     fread %>%
-#     .[, lvl := 'adm1']
-#   )  %>% 
-#   rbindlist
-# 
-# # # Load raked estimates
-# # if (indicator == 'had_diarrhea') {
-# #   mbg_raked <- list(fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_raked_prevalence_summary.csv')),
-# #                     fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_prevalence_summary.csv')))
-# #   names(mbg_raked) <- c('ad0', 'ad1')
-# # }
-# 
-# # Combine
-# for (a in c('ad0', 'ad1')) {
-#   
-#   # raked results
-#   if (indicator == 'had_diarrhea') {
-#     rake_cols <- c('mean', 'upper', 'lower', 'cirange')
-#     setnames(mbg_raked[[a]], rake_cols, paste0(rake_cols, '_raked'))
-#     mbg[[a]] <- merge(mbg[[a]], mbg_raked[[a]], 
-#                       by = names(mbg[[a]])[grep('ADM|region|year|pop', names(mbg[[a]]))],
-#                       all.x = T)
-#   }
-#   
-#   # stackers
-#   mbg[[a]] <- merge(mbg[[a]], stack[[a]],
-#                     by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
-#                     all.x = T)
-#   
-#   # data
-#   mbg[[a]] <- merge(mbg[[a]], dat[[a]],
-#                     by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
-#                     all.x = T)
-#   
-#   # save
-#   write.csv(mbg[[a]], paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers_', a, '.csv' ))
-# }
-
 ##classify datapoints based on HAP vetting
 if (new_vetting) {setwd(doc.dir); googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
 vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='HAP Vetting', skip=1) %>% 
@@ -327,6 +281,17 @@ vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(s
 
 #merge onto data
 dat <- merge(dat, vetting, by='nid')
+
+#define colorscale
+# build color scheme for the vetting sheet values
+# TODO make this code more robust for people who do not have the same schema
+vetting_colors <- c("Not started"='grey4', 
+                    "Problematic"='darkorange1',
+                    "Completed"='forestgreen',
+                    "Flagged"='firebrick',
+                    "Excluded"='gray71',
+                    "In progress"='indianred2',
+                    "Ready for Review"='indianred2')
 
 
 ## Plot stackers and covariates ------------------------------------------------------
@@ -346,15 +311,20 @@ if (use_stacking_covs) {
   
   # plot stackers over time aggregated to admins
   message('Making time series plots for stackers by admin unit')
-  plot_stackers_by_adm01(admin_data = mbg,
-                         indicator, 
-                         indicator_group, 
-                         run_date, 
-                         Regions,
-                         measure = measure,
-                         raked = ifelse(indicator == 'had_diarrhea', T, F),
-                         credible_interval = 0.95,
-                         N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000))
+  stack <- lapply(Regions, function(x) 
+    plot_stackers_by_adm01(reg=x,
+                           admin_data=mbg,
+                           indicator, 
+                           indicator_group, 
+                           run_date, 
+                           measure=measure,
+                           raked=ifelse(indicator == 'had_diarrhea', T, F),
+                           credible_interval = 0.95,
+                           N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
+                           vetting_colorscale = vetting_colors,
+                           debug=T)
+  )
+  
 }
 
 stop("this is all so far")
