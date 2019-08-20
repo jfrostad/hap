@@ -7,8 +7,28 @@
 # source('/homes/jfrostad/_code/lbd/hap/mbg_central/share_scripts/frax_script_hap.R') 
 
 ## Setup ---------------------------------------------------------------------------------------------------
+# runtime configuration
+if (Sys.info()["sysname"] == "Linux") {
+  j_root <- "/home/j/"
+  h_root <- file.path("/ihme/homes", Sys.info()["user"])
+  
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
+  ## Load libraries and  MBG project functions.
+  .libPaths(package_lib)
+  
+  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
+  Sys.setlocale(category = "LC_ALL", locale = "C")
+  
+} else {
+  j_root <- "J:"
+  h_root <- "H:"
+}
+
+#load external packages
+pacman::p_load(data.table, dplyr, mgsub, raster, sf, fasterize, fst)
+
 #detect if running in rstudio IDE
-debug <- F
+debug <- T
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 if (interactive) {
@@ -16,14 +36,14 @@ if (interactive) {
   ## Set repo location, indicator group, and some arguments
   user <- 'jfrostad'
   core_repo <- "/homes/jfrostad/_code/lbd/hap"
-  indicator <- 'cooking_fuel_solid'
   indicator_group <- 'cooking'
+  indicator <- 'cooking_fuel_solid'
   config_par   <- 'hap_best'
   holdout <- 0
   age <- 0
-  run_date <- '2019_08_08_18_14_46'
+  run_date <- '2019_08_16_10_51_08'
   measure <- 'prevalence'
-  reg <- 'dia_wssa'
+  reg <- 'dia_sssa'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {
@@ -47,6 +67,32 @@ if (interactive) {
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
+
+#use your own diacritics fx, due to inscrutable error
+#note: requires mgsub pkg
+#TODO submit PR
+fix_diacritics <<- function(x) {
+  
+  require(mgsub)
+  
+  #first define replacement patterns as a named list
+  defs <-
+    list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', 
+         '??'='C', '??'='E', '??'='E','??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', 
+         '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U','??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', 
+         '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c','??'='e', '??'='e', '??'='e', 
+         '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
+         '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y', '??'='Ss')
+  
+  #then force conversion to UTF-8 and replace with non-diacritic character
+  enc2utf8(x) %>% 
+    mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
+    return
+  
+}
+
+## Load custom post-estimation functions
+file.path(core_repo, 'post_estimation/_lib', 'aggregate_inputs.R') %>% source
 
 ## Read config file and save all parameters in memory
 config_filepath <- 'cooking/model/configs/'
@@ -151,11 +197,10 @@ message('Countries not to rake subnationally: ', countries_not_to_subnat_rake)
 
 
 ## Load GBD estimates -------------------------------------------------------------------------------------
-
+#TODO is this piece necessary? doesnt seem that GBD does anything if not raking
 rake_to_path <- '/share/geospatial/kewiens/diarrhea_raking/'
 gbd <- as.data.table(read.csv(paste0(rake_to_path, 'gbd_',  measure, '.csv'), stringsAsFactors = FALSE))
 setnames(gbd, c('location_id', 'year_id', 'val'), c('name', 'year', 'mean'))
-
 
 ## Load cell pred and populations -----------------------------------------------------------------
 
@@ -184,7 +229,6 @@ load(paste0(outputdir, indicator, '_cell_draws_eb_bin0_', reg, '_', holdout, '.R
 # Load populations
 message('Loading populations')
 gbd_pops <- prep_gbd_pops_for_fraxrake(pop_measure = pop_measure, reg = reg, year_list = year_list, gbd_round_id = 5)
-
 
 ## Rake and aggregate -----------------------------------------------------------------
 
@@ -370,11 +414,28 @@ if (grepl('eti', measure)) {
   
 }
 
+## Aggregate data and stackers ------------------------------------------------------
+message('Aggregating data and stackers for lineplots')
+# Aggregate data to admin 0 and 1
+dat <- aggregate_input_data(reg,
+                            indicator, 
+                            indicator_group, 
+                            run_date,
+                            modeling_shapefile_version,
+                            build=T)
 
+# Aggregate stackers to admin 0 and 1
+stack <- aggregate_child_stackers(reg,
+                                  indicator, 
+                                  indicator_group, 
+                                  run_date, 
+                                  modeling_shapefile_version,
+                                  pop_measure='total',
+                                  build=T)
 ## Finish up -----------------------------------------------------------------
 
 ## Write a file to mark done
 write(NULL, file = paste0(outputdir, '/fin_', pathaddin))
 
 ## All done
-message(paste0('Done with post-estimation and aggregation for ', reg))
+message('Done with post-estimation and aggregation for ', reg)

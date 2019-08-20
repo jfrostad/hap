@@ -591,18 +591,41 @@ out_dir <- file.path(tmp_dir, 'output', 'bobby_tifs')
 
 #global link info
 global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', shapefile) #TODO make official
+tmp_link_dir <- '/share/scratch/tmp/fwlt'
 #read in link_table
 global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>%  as.data.table
+global_link_table <- file.path(tmp_link_dir, "link_table_full_world.rds") %>% readRDS %>%  as.data.table
 #read in id_raster
 global_id_raster <- file.path(global_link_dir, 'lbd_full_id_raster.rds') %>% readRDS
+global_id_raster <- file.path(tmp_link_dir, 'lbd_full_id_raster.rds') %>% readRDS
 
 ## load in region list
 region_list <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
   fread %>% 
-  .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+  .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] %>%  #merge on ad0 code
+  #need to cleanup the loc names for merge
+  .[, country := location_name] %>% 
+  .[country=='Brunei', country := 'Brunei Darussalam'] %>% 
+  .[country %like% 'Cote', country := 'C\355\307te d\'Ivoire'] %>% 
+  .[country=='Iran', country := 'Iran  (Islamic Republic of)'] %>% 
+  #.[country=='Kosovo', country := ''] %>% #not present
+  .[country=='Laos', country := 'Lao People\'s Democratic Republic'] %>% 
+  .[country=='Macedonia', country := 'The former Yugoslav Republic of Macedonia'] %>% 
+  .[country=='North Korea', country := 'Dem People\'s Rep of Korea'] %>% 
+  .[country=='South Korea', country := 'Republic of Korea'] %>% 
+  .[country=='Syria', country := 'Syrian Arab Republic'] %>% 
+  #.[country=='Palestine', country := ''] %>% #not present
+  .[country=='Republic of the Congo', country := 'Congo'] %>% 
+  .[country=='Russia', country := 'Russian Federation'] %>% 
+  .[country=='Tanzania', country := 'United Republic of Tanzania'] %>% 
+  .[country=='The Gambia', country := 'Gambia'] %>% 
+  .[country=='United Kingdom', country := 'U.K. of Great Britain and Northern Ireland'] %>% 
+  .[country=='United States', country := 'United States of America'] %>% 
+  .[country=='Vietnam', country := 'Viet Nam']
+  
 regions <- region_list[Stage %in% c('1', '2a', '2b'), unique(mbg_reg)] #if only using LMICs
 regions <- c(regions, region_list[mbg_reg=='', unique(iso3)]) %>% #if using all
-  .[!(. %in% c('RUS', 'CAN', 'USA', 'GRL'))] %>%  #TODO big boys currently unsupported
+  #.[(. %in% c('RUS', 'CAN', 'USA', 'GRL'))] %>%  #TODO big boys currently unsupported
   sample #try not to hit the bigger regions all at once in mclapply
 
 ## load in bobby's tifs and work on them
@@ -613,7 +636,7 @@ these_rasters <- list.files(data_dir, full.names = T, pattern='.tif') %>%
 ## load in the provided country info and merge on the ad0 code
 country_info <- file.path(data_dir, 'country_info.csv') %>% 
   fread %>% 
-  merge(., region_list[, .(country=location_name, iso3, ADM0_CODE)], by='country', all.y=T) #merge on iso3
+  merge(., region_list[, .(country, iso3, ADM0_CODE)], by='country', all.y=T) #merge on iso3
 
 #***********************************************************************************************************************
 
@@ -735,7 +758,7 @@ regLoop <- function(region, build=T) {
 }
 
 #loop over all regions
-out <- mclapply(regions, regLoop, build=T, mc.cores=1) 
+out <- mclapply(regions, regLoop, build=F, mc.cores=cores) 
 
 #bind results
 out_ad0 <- lapply(out, function(x) x[['ad0']]) %>% 

@@ -38,7 +38,8 @@
 
 # -----------------------------------------------------------------------------------
 # Start function
-plot_stackers_by_adm01 <- function(admin_data,
+plot_stackers_by_adm01 <- function(reg,
+                                   admin_data,
                                    indicator = indicator,
                                    indicator_group = indicator_group,
                                    run_date = run_date,
@@ -47,13 +48,14 @@ plot_stackers_by_adm01 <- function(admin_data,
                                    draws = T,
                                    raked = T,
                                    credible_interval = 0.95,
-                                   N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000)) {
-  # -----------------------------------------------------------------------------------
-  
-  
-  # --------------------------
+                                   N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
+                                   debug=F) {
+    # -----------------------------------------------------------------------------------
+    # Work interactively to build function
+    if (debug) browser()
+    message(paste0('Aggregating input data for: ', reg))
   # Load packages
-  pacman::p_load(data.table, ggplot2, ggthemes, ggrepel, magrittr, raster, rgeos, rgdal, sp)
+  pacman::p_load(data.table, ggplot2, ggthemes, ggrepel, magrittr, raster, rgeos, rgdal, sp, sf)
   # --------------------------
   
   # # ------------------------------------------------------------------------------------------------------------------------
@@ -324,11 +326,9 @@ plot_stackers_by_adm01 <- function(admin_data,
         for(a1 in unique(a1_gd$ADM1_CODE)){
           
           ad1name <- a1_gd[ADM1_CODE==a1, ADM1_NAME] %>% unique
-          
+
           # check for NA's
-          check <- mbg[ADM1_NAME == ad1name]
-          
-          if (check$value %>% mean %>% is.na %>% all) {
+          if (mbg[ADM1_NAME == ad1name, value] %>% mean %>% is.na %>% all) {
             
             write(paste0(ad1name, ' in ', adname, '; '), 
                   file = paste0(outputdir, 'diagnostic_plots/ad1_missing_estimates.txt'),
@@ -339,7 +339,7 @@ plot_stackers_by_adm01 <- function(admin_data,
             # make an admin 1 plot of the stackers and whatnot
             maxval <- max(c(a1_gd[ADM1_CODE==a1,upper], adm0[ADM0_CODE == admin_id,value], ad1_dat[ADM1_CODE == a1,outcome]), na.rm = TRUE)
             
-            a1_plot <- ggplot(data = ad1_dat[ADM1_CODE == a1,]) + 
+            a1_plot <- ggplot(a1_gd[ADM1_CODE==a1,]) + 
               geom_line(data = a1_gd[ADM1_CODE==a1,], aes(x = year, y = value, color = var_name), size = 1.2) +
               geom_ribbon(data = a1_gd[ADM1_CODE==a1 & variable == 'Unraked',], 
                           aes(x = year, ymin = lower, ymax = upper), na.rm = TRUE, alpha = 0.2, fill = 'indianred3') + 
@@ -350,8 +350,10 @@ plot_stackers_by_adm01 <- function(admin_data,
             
             if (nrow(ad1_dat[ADM1_CODE == a1,])>0) {
               a1_plot <- a1_plot + 
-                geom_point(aes(x = year, y = outcome, size = N, fill=`HAP Vetting Status`), shape=21, stroke=0) +
-                geom_text_repel(aes(x = year, y = outcome, label = N_label),
+                geom_point(data=ad1_dat[ADM1_CODE == a1,],
+                           aes(x = year, y = outcome, size = N, fill=`HAP Vetting Status`), shape=21, stroke=0) +
+                geom_text_repel(data = ad1_dat[ADM1_CODE == a1,],
+                                aes(x = year, y = outcome, label = N_label),
                                 size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
                 scale_fill_manual(values = vetting_colors)
             }

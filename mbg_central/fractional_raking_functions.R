@@ -1797,7 +1797,10 @@ prep_gbd_pops_for_fraxrake <- function(pop_measure = "a0004t", reg, year_list, .
 #' @return A list with objects: "simple_raster", "simple_polygon", "subset_shape", "new_simple_raster", "new_simple_polygon", "new_subset_shape"
 #'
 #' @export
-prep_shapes_for_raking <- function(reg, modeling_shapefile_version, raking_shapefile_version, field = "loc_id") {
+prep_shapes_for_raking <- function(reg, modeling_shapefile_version, raking_shapefile_version, field = "loc_id",
+                                   testing=F) {
+  
+  require(sf)
   
   ## Load simple polygon template to model over (in GADM SPACE)
   gaul_list <- get_adm0_codes(reg, shapefile_version = raking_shapefile_version)
@@ -1830,9 +1833,15 @@ prep_shapes_for_raking <- function(reg, modeling_shapefile_version, raking_shape
   
   location_metadata <- get_location_code_mapping(shapefile_version = raking_shapefile_version)
   location_metadata <- location_metadata[, c("GAUL_CODE", "loc_id")]
+
+  if (testing) {
+    shapefile_old <- readOGR(shapefile_path, stringsAsFactors = FALSE, GDAL1_integer64_policy = TRUE)
+    shapefile_old <- shapefile_old[shapefile_old$ADM0_CODE %in% gaul_list, ]
+  }
   
-  shapefile <- readOGR(shapefile_path, stringsAsFactors = FALSE, GDAL1_integer64_policy = TRUE)
-  shapefile <- shapefile[shapefile$ADM0_CODE %in% gaul_list, ]
+  shapefile <- read_sf(shapefile_path) %>% 
+  #TODO learn how to shift entire fx to sf paradigm
+    .[.$ADM0_CODE %in% gaul_list,] %>% as_Spatial #for now, just convert it back into SPDF
   
   # merge on loc_ids for making simple raster
   shapefile <- sp::merge(shapefile, location_metadata, by.x = "ADM0_CODE", by.y = "GAUL_CODE", all.x = T)

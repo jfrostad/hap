@@ -30,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(magrittr, mgsub)
+pacman::p_load(googledrive, magrittr, mgsub)
 
 #running interactively?
 interactive <- T
@@ -44,13 +44,13 @@ debug.args <- c('simulate',
                 'cooking_fuel_solid',
                 'config_hap_best',
                 'cooking/model/configs/',
-                'covs_cooking_dia_se_asia',
+                'covs_cooking_dia_sssa',
                 'cooking/model/configs/',
-                '2019_08_14_13_14_40',
+                '2019_08_16_10_51_08',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
-new_vetting <- F
+new_vetting <- T
 
 #pull args from the job submission if !interactive
 args <- ifelse(debug %>% rep(., length(debug.args)), debug.args, commandArgs()) 
@@ -82,6 +82,8 @@ lapply(file.path(core_repo,
 #note: requires mgsub pkg
 #TODO submit PR
 fix_diacritics <<- function(x) {
+  
+  require(mgsub)
   
   #first define replacement patterns as a named list
   defs <-
@@ -152,66 +154,170 @@ combine_aggregation(rd       = run_date,
 # summarize admins
 summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
 
-# combine raked results
-message('Combining raked aggregated results')
-if (indicator == 'had_diarrhea') {
-  combine_aggregation(rd       = run_date,
-                      indic    = indicator,
-                      ig       = indicator_group,
-                      ages     = 0,
-                      regions  = Regions,
-                      holdouts = holdouts,
-                      raked    = T,
-                      measure  = measure,
-                      delete_region_files = F,
-                      metrics = 'rates')
-  
-  # summarize admins
-  summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
-}
+# # combine raked results
+# message('Combining raked aggregated results')
+# if (indicator == 'had_diarrhea') {
+#   combine_aggregation(rd       = run_date,
+#                       indic    = indicator,
+#                       ig       = indicator_group,
+#                       ages     = 0,
+#                       regions  = Regions,
+#                       holdouts = holdouts,
+#                       raked    = T,
+#                       measure  = measure,
+#                       delete_region_files = F,
+#                       metrics = 'rates')
+#   
+#   # summarize admins
+#   summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
+# }
 
 
 ## Set Brazil to admin 1 for diarrhea --------------------------
 
-if (indicator == 'had_diarrhea') {
-  
-  # load files
-  ad1 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_', measure, '_summary.csv'))
-  ad2 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
-  ad <- merge(ad2, ad1, by = names(ad1)[grep('ADM|region|year', names(ad1))])
-  
-  # set brazil to admin 1
-  braz <- ad[ADM0_NAME == 'Brazil']
-  braz[, mean := mean.y]
-  braz[, upper := upper.y]
-  braz[, lower := lower.y]
-  braz[, cirange := cirange.y]
-  braz[, pop := pop.x]
-  braz[, grep('.x|.y', names(braz)) := NULL]
-  
-  # bind back to admin 2 file and save
-  ad2 <- ad2[ADM0_NAME != 'Brazil']
-  ad2 <- rbindlist(list(ad2, braz), use.names = T)
-  write.csv(ad2, paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
-}
+# if (indicator == 'had_diarrhea') {
+#   
+#   # load files
+#   ad1 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_', measure, '_summary.csv'))
+#   ad2 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
+#   ad <- merge(ad2, ad1, by = names(ad1)[grep('ADM|region|year', names(ad1))])
+#   
+#   # set brazil to admin 1
+#   braz <- ad[ADM0_NAME == 'Brazil']
+#   braz[, mean := mean.y]
+#   braz[, upper := upper.y]
+#   braz[, lower := lower.y]
+#   braz[, cirange := cirange.y]
+#   braz[, pop := pop.x]
+#   braz[, grep('.x|.y', names(braz)) := NULL]
+#   
+#   # bind back to admin 2 file and save
+#   ad2 <- ad2[ADM0_NAME != 'Brazil']
+#   ad2 <- rbindlist(list(ad2, braz), use.names = T)
+#   write.csv(ad2, paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
+# }
 
 
 ## Aggregate data and stackers ------------------------------------------------------
-
 # Aggregate data to admin 0 and 1
-dat <- aggregate_input_data(indicator, 
-                            indicator_group, 
-                            run_date,
-                            Regions,
-                            modeling_shapefile_version)
+dat <- lapply(Regions,
+              function(x) 
+                aggregate_input_data(reg=x,
+                                     indicator, 
+                                     indicator_group, 
+                                     run_date,
+                                     modeling_shapefile_version, 
+                                     build=F)) %>% 
+  rbindlist
 
 # Aggregate stackers to admin 0 and 1
-stack <- aggregate_child_stackers(indicator, 
-                                  indicator_group, 
-                                  run_date, 
-                                  Regions,
-                                  modeling_shapefile_version,
-                                  pop_measure='total')
+stack <- lapply(Regions,
+                function(x) 
+                  aggregate_child_stackers(reg=x,
+                                           indicator, 
+                                           indicator_group, 
+                                           run_date, 
+                                           modeling_shapefile_version,
+                                           pop_measure='total',
+                                           build=F)) %>% 
+  rbindlist
+
+
+
+## Combine data and stackers with summary results ------------------------------------------
+
+# Load and combine estimates
+mbg <- list(
+  paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv') %>% 
+    fread %>%
+    .[, lvl := 'adm0'],
+  paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv') %>% 
+    fread %>%
+    .[, lvl := 'adm1']
+)  %>% 
+  rbindlist(use.names=T, fill=T)
+
+# raked results
+if (indicator == 'had_diarrhea') {
+  mbg_raked <- list(
+    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_0_raked', measure, '_summary.csv')) %>% 
+      fread %>%
+      .[, lvl := 'adm0'],
+    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_1_raked', measure, '_summary.csv')) %>%
+      fread %>%
+      .[, lvl := 'adm1']
+  )  %>% 
+    rbindlist(use.names=T, fill=T)
+}
+
+# Combine all
+# raked results
+if (indicator == 'had_diarrhea') {
+  #modify colnames
+  c('mean', 'upper', 'lower', 'cirange') %>% 
+    setnames(mbg_raked, ., paste0(., '_raked'))
+  
+  mbg <- merge(mbg, mbg_raked, 
+               by = names(mbg) %>% .[grep('ADM|region|year|pop|lvl', .)],
+               all.x = T)
+}
+
+# stackers
+mbg <- merge(mbg, stack,
+             by =  names(mbg) %>% .[grep('CODE|year|lvl', .)],
+             all.x = T)
+
+# data
+mbg <- merge(mbg, dat,
+             by = names(mbg) %>% .[grep('CODE|year|lvl', .)],
+             all.x = T)
+
+# save
+write.csv(mbg, paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers.csv' ))
+
+# # Load unraked estimates
+# mbg <- list(
+#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv') %>% 
+#     fread %>%
+#     .[, lvl := 'adm0'],
+#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv') %>% 
+#     fread %>%
+#     .[, lvl := 'adm1']
+#   )  %>% 
+#   rbindlist
+# 
+# # # Load raked estimates
+# # if (indicator == 'had_diarrhea') {
+# #   mbg_raked <- list(fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_raked_prevalence_summary.csv')),
+# #                     fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_prevalence_summary.csv')))
+# #   names(mbg_raked) <- c('ad0', 'ad1')
+# # }
+# 
+# # Combine
+# for (a in c('ad0', 'ad1')) {
+#   
+#   # raked results
+#   if (indicator == 'had_diarrhea') {
+#     rake_cols <- c('mean', 'upper', 'lower', 'cirange')
+#     setnames(mbg_raked[[a]], rake_cols, paste0(rake_cols, '_raked'))
+#     mbg[[a]] <- merge(mbg[[a]], mbg_raked[[a]], 
+#                       by = names(mbg[[a]])[grep('ADM|region|year|pop', names(mbg[[a]]))],
+#                       all.x = T)
+#   }
+#   
+#   # stackers
+#   mbg[[a]] <- merge(mbg[[a]], stack[[a]],
+#                     by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
+#                     all.x = T)
+#   
+#   # data
+#   mbg[[a]] <- merge(mbg[[a]], dat[[a]],
+#                     by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
+#                     all.x = T)
+#   
+#   # save
+#   write.csv(mbg[[a]], paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers_', a, '.csv' ))
+# }
 
 ##classify datapoints based on HAP vetting
 if (new_vetting) {setwd(doc.dir); googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
@@ -219,47 +325,8 @@ vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(s
   as.data.table %>% 
   .[, .(nid, `HAP Vetting Status`)] #subset to relevant columns
 
-dat <- lapply(dat, function(x) merge(x, vetting, by='nid'))
-
-## Combine data and stackers with summary results ------------------------------------------
-
-# Load unraked estimates
-mbg <- list(fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv')),
-            fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv')))  
-names(mbg) <- c('ad0', 'ad1')
-
-# Load raked estimates
-if (indicator == 'had_diarrhea') {
-  mbg_raked <- list(fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_raked_prevalence_summary.csv')),
-                    fread(paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_prevalence_summary.csv')))
-  names(mbg_raked) <- c('ad0', 'ad1')
-}
-
-# Combine
-for (a in c('ad0', 'ad1')) {
-  
-  # raked results
-  if (indicator == 'had_diarrhea') {
-    rake_cols <- c('mean', 'upper', 'lower', 'cirange')
-    setnames(mbg_raked[[a]], rake_cols, paste0(rake_cols, '_raked'))
-    mbg[[a]] <- merge(mbg[[a]], mbg_raked[[a]], 
-                      by = names(mbg[[a]])[grep('ADM|region|year|pop', names(mbg[[a]]))],
-                      all.x = T)
-  }
-  
-  # stackers
-  mbg[[a]] <- merge(mbg[[a]], stack[[a]],
-                    by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
-                    all.x = T)
-  
-  # data
-  mbg[[a]] <- merge(mbg[[a]], dat[[a]],
-                    by = names(mbg[[a]])[grep('CODE|year', names(mbg[[a]]))],
-                    all.x = T)
-  
-  # save
-  write.csv(mbg[[a]], paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers_', a, '.csv' ))
-}
+#merge onto data
+dat <- merge(dat, vetting, by='nid')
 
 
 ## Plot stackers and covariates ------------------------------------------------------

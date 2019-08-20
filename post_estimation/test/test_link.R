@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 04/29/2019
 # Purpose: Run correlation calculations vs various covariates for TIF files that bobby is using
-# source('/homes/jfrostad/_code/lbd/hap/post_estimation/test/bobby_tifs.R') 
+# source('/homes/jfrostad/_code/lbd/hap/post_estimation/test/test_link.R') 
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -221,6 +221,8 @@ load_simple_polygon <<- function(gaul_list, buffer, tolerance = 0.2,
                                  subset_only = F, makeplots = F, 
                                  raking = F, shapefile_version = 'current', testing=F) {
   
+  require(sf)
+  
   # Make a new simple_poly
   # count the vertices of a SpatialPolygons object, with one feature
   # TODO can be supplanted by mapview::npts() for sf
@@ -379,14 +381,17 @@ out_dir <- file.path(tmp_dir, 'output', 'bobby_tifs')
 
 #global link info
 global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', shapefile_version) #TODO make official
+tmp_link_dir <- '/share/scratch/tmp/fwlt'
 #read in link_table
 global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>%  as.data.table
+global_link_table <- file.path(tmp_link_dir, "link_table_full_world.rds") %>% readRDS %>%  as.data.table
 #read in id_raster
 global_id_raster <- file.path(global_link_dir, 'lbd_full_id_raster.rds') %>% readRDS
+global_id_raster <- file.path(tmp_link_dir, 'lbd_full_id_raster.rds') %>% readRDS
 #***********************************************************************************************************************
 
 # ---CALCULATE----------------------------------------------------------------------------------------------------------
-reg <- 'ALB'
+reg <- 'CAN'
 coastal_fix <- T
 message('loading simple raster & populations')
 
