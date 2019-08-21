@@ -322,17 +322,14 @@ if (use_stacking_covs) {
   # plot stackers over time aggregated to admins
   message('Making time series plots for stackers by admin unit')
   lapply(Regions, function(x) 
-    plot_stackers_by_adm01(reg=x,
-                           admin_data=mbg,
-                           indicator, 
-                           indicator_group, 
-                           run_date, 
-                           measure=measure,
-                           raked=raked,
-                           credible_interval = 0.95,
-                           N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
-                           vetting_colorscale = vetting_colors,
-                           debug=T)
+    stacker_time_series_plots(reg=x,
+                              dt=mbg,
+                              indicator, 
+                              indicator_group, 
+                              run_date, 
+                              raked=raked,
+                              vetting_colorscale = vetting_colors,
+                              debug=F)
   )
   
 }

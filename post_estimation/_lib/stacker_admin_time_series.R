@@ -180,9 +180,7 @@ stacker_time_series_plots <- function(reg,
       
       #reset ylims
       maxval <- (plot_dt[,.(upper, value, input_mean)] %>% max) + .05 #add 5% buffer
-      
-      browser()
-      
+
       # build a palette with sufficient colors by sampling from colorbrewer
       admin_N <- uniqueN(plot_dt$ADM1_NAME)
       colors <- brewer.pal.info[brewer.pal.info$category == 'qual' & brewer.pal.info$colorblind==T,]
