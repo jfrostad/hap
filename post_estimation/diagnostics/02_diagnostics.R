@@ -30,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(googledrive, magrittr, mgsub)
+pacman::p_load(data.table, magrittr, mgsub)
 
 #running interactively?
 interactive <- T
@@ -51,6 +51,9 @@ debug.args <- c('simulate',
 
 #if new vetting activity has occured, need to refresh the local sheet
 new_vetting <- T
+
+#is this a raked model?
+raked <- F
 
 #pull args from the job submission if !interactive
 args <- ifelse(debug %>% rep(., length(debug.args)), debug.args, commandArgs()) 
@@ -127,7 +130,7 @@ doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
 
 ## Get regions that have successfully completed through aggregation step
-Regions <- list.files(outputdir, pattern = paste0(ifelse(indicator == 'had_diarrhea', measure, 'unraked'),'*_admin_draws'))
+Regions <- list.files(outputdir, pattern = paste0(ifelse(raked, measure, 'unraked'),'*_admin_draws'))
 Regions <- gsub('.*eb_bin0_', '', Regions)
 for (r in 1:length(Regions)) Regions[[r]] <- substr(Regions[[r]], start = 1, stop = nchar(Regions)[[r]]-8)
 Regions <- unique(Regions)
@@ -147,7 +150,7 @@ combine_aggregation(rd       = run_date,
                     ages     = 0,
                     regions  = Regions,
                     holdouts = holdouts,
-                    raked    = F,
+                    raked    = raked,
                     delete_region_files = F,
                     metrics = 'rates')
 
@@ -155,22 +158,22 @@ combine_aggregation(rd       = run_date,
 summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
 
 # # combine raked results
-# message('Combining raked aggregated results')
-# if (indicator == 'had_diarrhea') {
-#   combine_aggregation(rd       = run_date,
-#                       indic    = indicator,
-#                       ig       = indicator_group,
-#                       ages     = 0,
-#                       regions  = Regions,
-#                       holdouts = holdouts,
-#                       raked    = T,
-#                       measure  = measure,
-#                       delete_region_files = F,
-#                       metrics = 'rates')
-#   
-#   # summarize admins
-#   summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
-# }
+message('Combining raked aggregated results')
+if (raked) {
+  combine_aggregation(rd       = run_date,
+                      indic    = indicator,
+                      ig       = indicator_group,
+                      ages     = 0,
+                      regions  = Regions,
+                      holdouts = holdouts,
+                      raked    = raked,
+                      measure  = measure,
+                      delete_region_files = F,
+                      metrics = 'rates')
+
+  # summarize admins
+  summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
+}
 
 
 ## Set Brazil to admin 1 for diarrhea --------------------------
@@ -236,7 +239,7 @@ mbg <- list(
   rbindlist(use.names=T, fill=T)
 
 # raked results
-if (indicator == 'had_diarrhea') {
+if (raked) {
   mbg_raked <- list(
     paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_0_raked', measure, '_summary.csv')) %>% 
       fread %>%
@@ -250,7 +253,7 @@ if (indicator == 'had_diarrhea') {
 
 # Combine all
 # raked results
-if (indicator == 'had_diarrhea') {
+if (raked) {
   #modify colnames
   c('mean', 'upper', 'lower', 'cirange') %>% 
     setnames(mbg_raked, ., paste0(., '_raked'))
@@ -274,13 +277,20 @@ mbg <- merge(mbg, dat,
 write.csv(mbg, paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers.csv' ))
 
 ##classify datapoints based on HAP vetting
-if (new_vetting) {setwd(doc.dir); googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
+#update vetting sheet if necessary
+#original authorization must be done locally (doesnt seem to work in IDE and must be interactively done)
+if (new_vetting) {
+  setwd(doc.dir) 
+  googledrive::drive_auth(cache='drive.httr-oauth')
+  googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)
+}
+#read in vetting sheet
 vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='HAP Vetting', skip=1) %>% 
   as.data.table %>% 
-  .[, .(nid, `HAP Vetting Status`)] #subset to relevant columns
+  .[, .(nid, vetting=`HAP Vetting Status`)] #subset to relevant columns
 
 #merge onto data
-dat <- merge(dat, vetting, by='nid')
+mbg <- merge(mbg, vetting, by='nid', all.x=T)
 
 #define colorscale
 # build color scheme for the vetting sheet values
@@ -311,14 +321,14 @@ if (use_stacking_covs) {
   
   # plot stackers over time aggregated to admins
   message('Making time series plots for stackers by admin unit')
-  stack <- lapply(Regions, function(x) 
+  lapply(Regions, function(x) 
     plot_stackers_by_adm01(reg=x,
                            admin_data=mbg,
                            indicator, 
                            indicator_group, 
                            run_date, 
                            measure=measure,
-                           raked=ifelse(indicator == 'had_diarrhea', T, F),
+                           raked=raked,
                            credible_interval = 0.95,
                            N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
                            vetting_colorscale = vetting_colors,
@@ -374,8 +384,8 @@ if (length(Regions) == 14) {
   file.path(core_repo, 'diagnostics/06_plot_global_map.R') %>% source
   
   # set arguments
-  raked_map <- ifelse(indicator == 'had_diarrhea', T, F)
-  raked_measure_map <- ifelse(indicator == 'had_diarrhea', measure, NULL)
+  raked_map <- raked
+  raked_measure_map <- ifelse(raked, measure, NULL)
   map_years <- c(2000, 2005, 2010, 2017)
   map_levels <- c('admin1', 'admin2')
   

@@ -38,25 +38,25 @@
 
 # -----------------------------------------------------------------------------------
 # Start function
-plot_stackers_by_adm01 <- function(reg,
-                                   admin_data,
-                                   indicator = indicator,
-                                   indicator_group = indicator_group,
-                                   run_date = run_date,
-                                   regions = Regions,
-                                   measure = 'prevalence',
-                                   draws = T,
-                                   raked = T,
-                                   credible_interval = 0.95,
-                                   N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
-                                   vetting_colorscale = NULL,
-                                   debug=F) {
+stacker_time_series_plots <- function(reg,
+                                      dt,
+                                      indicator = indicator,
+                                      indicator_group = indicator_group,
+                                      run_date = run_date,
+                                      #regions = Regions,
+                                      #measure = 'prevalence',
+                                      #draws = T,
+                                      raked = T,
+                                      #credible_interval = 0.95,
+                                      #N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
+                                      vetting_colorscale = NULL,
+                                      debug=F) {
   # -----------------------------------------------------------------------------------
   # Work interactively to build function
   if (debug) browser()
   message(paste0('Aggregating input data for: ', reg))
   # Load packages
-  pacman::p_load(data.table, ggplot2, ggthemes, ggrepel, magrittr, raster, rgeos, rgdal, sp, sf)
+  pacman::p_load(data.table, ggplot2, ggthemes, ggrepel, magrittr, raster, RColorBrewer, rgeos, rgdal, sp, sf)
   # --------------------------
 
   # ------------------------------------------------------------------------------------------------------------------------
@@ -68,7 +68,7 @@ plot_stackers_by_adm01 <- function(reg,
   imagedir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/')
 
   # subset input data
-  dt <- admin_data[region == reg]
+  dt <- dt[region == reg]
   # load submodel names
   config <- fetch_from_rdata(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'config')
   
@@ -85,11 +85,6 @@ plot_stackers_by_adm01 <- function(reg,
     
   } else submodels <- trimws(strsplit(config[V1 == 'stacked_fixed_effects',V2], '+', fixed = T)[[1]])
 
-  
-  # set naming
-  if (raked) varnames <- data.table(variable = c(submodels, 'Unraked', 'Raked'), var_name = c(submodels, 'Unraked', 'Raked'))
-  else varnames <- data.table(variable = c(submodels, 'Unraked'), var_name = c(submodels, 'Unraked'))
-  
   # load coefficients
   mod <- lapply(paste0(outputdir, indicator, '_model_eb_bin0_',reg,'_0.RData'), 
                function(x) fetch_from_rdata(x, 'res_fit'))
@@ -104,36 +99,19 @@ plot_stackers_by_adm01 <- function(reg,
   }
   
   # get unraked results and reshape long
-  mbg <- dt[, c('lvl', 'ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'mean', 'lower', 'upper', submodels), with = F]
-  mbg <- melt(mbg, id.vars = c('lvl', 'ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'lower', 'upper'), variable.factor = F)
-  mbg[variable == 'mean', variable := 'Unraked']
+  mbg <- melt(dt, variable.factor = F,
+              measure.vars = c(submodels, 'mean', 
+                               ifelse(raked, 'mean_raked', NA) %>% #account for possibility of raked values
+                                 na.omit) 
+              )
+
+  #merge on coefficients
+  #also rename stacker results, to make the colors match up later (we want mean to be alphabetically first)
+  mbg <- merge(mbg, coefs, by.x = c('variable', 'region'), by.y = c('child', 'region'), all.x = T)
+  mbg[!is.na(coef), variable := paste('stk:', variable, round(coef, 2))]
   
-  if (raked) {
-    # get unraked admin1 results and reshape long
-    mbg_raked <- dt[, c('lvl', 'ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'mean_raked', 'lower_raked', 'upper_raked', submodels), with = F]
-    mbg_raked <- melt(mbg_raked, id.vars = c('lvl', 'ADM0_CODE', 'ADM0_NAME', 'ADM1_CODE', 'ADM1_NAME', 'year', 'lower_raked', 'upper_raked'), variable.factor = F)
-    mbg_raked[variable == 'mean_raked', variable:= 'Raked']
-    
-    # add to data
-    mbg <- rbindlist(list(mbg, mbg_raked), use.names = TRUE)
-    rm(mbg_raked)
-  }
-  
-  # # get unraked admin0 results  and reshape long
-  # adm0 <- ad0_data[, c('ADM0_CODE', 'ADM0_NAME', 'year', 'mean', 'lower', 'upper', submodels), with = F]
-  # adm0 <- melt(adm0, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'year', 'lower', 'upper'), variable.factor = F)
-  # adm0[variable == 'mean', variable:= 'Unraked']
-  # 
-  # if (raked) {
-  #   # get raked admin0 results and reshape long
-  #   adm0_raked <- dt[lvl=='adm1', c('ADM0_CODE', 'ADM0_NAME', 'year', 'mean_raked', 'lower_raked', 'upper_raked', submodels), with = F]
-  #   adm0_raked <- melt(adm0_raked, id.vars = c('ADM0_CODE', 'ADM0_NAME', 'year', 'lower_raked', 'upper_raked'), variable.factor = F)
-  #   adm0_raked[variable == 'mean_raked', variable:= 'Raked']
-  #   
-  #   # add to data
-  #   adm0 <- rbindlist(list(adm0, adm0_raked), use.names = TRUE)
-  #   rm(adm0_raked)
-  # }
+  #add NID label to sample sizes
+  mbg[!is.na(input_ss), N_label := paste0(nid, ' [#', round(input_ss), ']')]
   # ------------------------------------------------------------------------------------------------------------------------
   
   
@@ -143,143 +121,120 @@ plot_stackers_by_adm01 <- function(reg,
   
   # create pdf to write to
   dir.create(paste0(outputdir, 'diagnostic_plots/'))
-  pdf(paste0(outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, '.pdf'), height = 10, width =14)
-  
-  #TODO repetitive coding structure, apply function over admin_data list instead of using 2 data.tables??
-  
-  # load and clean the aggregated data that went into the model
-  ad0_dat <- ad0_data[!is.na(input_mean)]
-  setnames(ad0_dat, c('input_mean', 'input_ss'), c('outcome', 'N'))
-  ad1_dat <- ad1_data[!is.na(input_mean)]
-  setnames(ad1_dat, c('input_mean', 'input_ss'), c('outcome', 'N'))
-  
-  # add breaks for plotting points in proportion to N
-  minn <- min(c(ad0_dat$N,ad1_dat$N))
-  maxn <- max(c(ad0_dat$N,ad1_dat$N))
-  
-  # plot the sample size
-  # ad0_dat[, Ncut := cut(N, N_breaks) %>% round]
-  # ad1_dat[, Ncut := cut(N, N_breaks)  %>% round]
+  pdf(paste0(outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, '.pdf'), height = 10, width = 14)
 
-  # add NID label to sample size plots
-  ad0_dat[, N_label := paste0(nid, ' [#', round(N), ']')]
-  ad1_dat[, N_label := paste0(nid, ' [#', round(N), ']')]
+  # test data structure
+  if (nrow(dt[lvl=='adm0' & !is.na(input_mean)]) != dt[lvl=='adm0' & !is.na(input_mean), .(nid,ADM0_CODE, year)] %>% uniqueN) {
+    warning('The number of years of admin 0 data does not match number of years of admin 1 data.')
+  }
   
-  if (nrow(ad0_dat) != ad1_dat[,.(nid,ADM0_CODE, year)] %>% unique %>% nrow) warning('The number of years of admin 0 data does not match number of years of admin 1 data.')
-  
-  # for each country in the region
-  for (admin_id in intersect(get_adm0_codes(reg), mbg[,ADM0_CODE] %>% unique)){
+  # build custom function to create timeseries plot suite
+  timePlot <- function(admin_id, dt, this_lvl,
+                       year_start=2000, year_end=2017) {
+
+    #subset data
+    this_codevar <- this_lvl %>% toupper %>% paste0(., '_CODE')
+    this_namevar <- this_lvl %>% toupper %>% paste0(., '_NAME')
+    plot_dt <- dt[lvl==this_lvl & get(this_codevar) == admin_id,]
     
-    adname <- unique(mbg[ADM0_CODE == admin_id, ADM0_NAME])
-    message(adname)
+    adname <- plot_dt[, get(this_namevar)] %>% unique
     
-    if (nrow(adm0[ADM0_CODE == admin_id & !is.na(value)]) == 0) message(paste0('Skipping ', adname, ' plot because there are not estimates here'))
+    # time series plot
+    if (na.omit(plot_dt, cols='value') %>% nrow == 0) message(paste0('Skipping ', adname, ' , no estimates!'))
     else {
       
-      a0_gd <- adm0[ADM0_CODE == admin_id,] %>% 
-        .[, ADM0_NAME := NULL] %>% 
-        merge(., coefs[region == reg, ], by.x = 'variable', by.y = 'child', all.x = T) %>% 
-        merge(., varnames) %>% 
-        .[!is.na(coef), var_name := paste(var_name, round(coef, 2)) ]
+      message('Plotting ', adname)
       
-      # make an admin 0 plot of the stackers and whatnot
-      maxval <- max(c(adm0[ADM0_CODE == admin_id,upper], adm0[ADM0_CODE == admin_id,value], ad0_dat[ADM0_CODE == admin_id,outcome]), na.rm = TRUE)
+      # set ylims
+      maxval <- (plot_dt[,.(upper, value, input_mean)] %>% max) + .05 #add 5% buffer
       
-      adplot <- ggplot(data = ad0_dat[ADM0_CODE == admin_id]) + 
-        geom_line(data = a0_gd, aes(x = year, y = value, color = var_name), size = 1.2) +
-        geom_ribbon(data = a0_gd[variable == 'Unraked'], aes(x = year, ymin = lower, ymax = upper), na.rm = TRUE, alpha = 0.2, fill = 'indianred3') + 
+      #create plot
+      plot <- ggplot(data = plot_dt[variable == 'mean']) + 
+        geom_point(aes(x = year, y = input_mean, size = input_ss, fill=vetting), shape=21, stroke=0) +
+        geom_text_repel(aes(x = year, y = input_mean, label = N_label),
+                        size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
+        geom_line(data = plot_dt, aes(x = year, y = value, color = variable), size = 1.2) +
+        geom_ribbon(data = , aes(x = year, ymin = lower, ymax = upper), na.rm = TRUE, alpha = 0.2, fill = 'indianred3') +
+        xlim(year_start, year_end) +
         ylim(0, maxval) +
         scale_color_brewer(palette = 'Set1') +
-        ggtitle(paste(toupper(indicator), " Model Results for", adname, 'in', reg)) + 
-        theme_bw()
-      
-      if (nrow(ad0_dat[ADM0_CODE == admin_id,])>0) {
-        adplot <- adplot + 
-          geom_point(aes(x = year, y = outcome, size = N, fill=`HAP Vetting Status`), shape=21, stroke=0) +
-          geom_text_repel(aes(x = year, y = outcome, label = N_label),
-                          size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
-          scale_fill_manual(values = vetting_colorscale)
-      }
+        scale_fill_manual('Vetting Status', values = vetting_colorscale) +
+        scale_size_continuous('N', range=c(2,7)) +
+        labs(title=paste("Model Results for", adname, ' (', reg, ')'),
+             subtitle = paste0('Indicator=', indicator),
+             x='Year',
+             y='Proportion') + 
+        theme_minimal()
       
       #print to dev
-      plot(adplot)
-      
-      # make an admin 1 plot by child model
-      a1_gd <- mbg[ADM0_CODE == admin_id,]
-      
-      a1_gd <- merge(a1_gd, coefs[region == reg, ], by.x = 'variable', by.y = 'child', all.x = T)
-      a1_gd <- merge(a1_gd, varnames)
-      a1_gd[, ADM1_NAME := as.character(ADM1_NAME)]
-      
-      a1_gd[!is.na(coef), var_name := paste(var_name, round(coef, 2)) ]
-      maxval <- max(c(a1_gd[ADM0_CODE == admin_id,upper], adm0[ADM0_CODE == admin_id,value], ad1_dat[ADM0_CODE == admin_id,outcome]), na.rm = TRUE)
-      childplot <- ggplot(a1_gd, aes(x = year, y = value, color = ADM1_NAME)) + 
-        geom_line() + 
-        facet_wrap(~var_name) + 
-        ylim(0, max(a1_gd[ADM0_CODE == admin_id,value])) +
-        ggtitle(paste(toupper(indicator), " Model Results for", adname, 'at admin 1 level')) +
-        theme(legend.position="bottom") +
-        theme_bw()
-      
-      if (nrow(ad0_dat[ADM0_CODE == admin_id,])>0) {
-        childplot <- childplot + 
-          geom_point(data = ad1_dat[ADM0_CODE == admin_id,], mapping = aes(x = year, y = outcome, size = N)) +
-          scale_size_continuous(breaks = N_breaks, limits = c(head(N_breaks, n = 1), tail(N_breaks, n = 1)))
-      }
-      
-      plot(childplot)
-      
-      # make a plot per admin 1
-      for(a1 in unique(a1_gd$ADM1_CODE)){
-        
-        ad1name <- a1_gd[ADM1_CODE==a1, ADM1_NAME] %>% unique
-
-        # check for NA's
-        if (mbg[ADM1_NAME == ad1name, value] %>% mean %>% is.na %>% all) {
-          
-          write(paste0(ad1name, ' in ', adname, '; '), 
-                file = paste0(outputdir, 'diagnostic_plots/ad1_missing_estimates.txt'),
-                append = TRUE)
-          
-        } else {
-
-          # make an admin 1 plot of the stackers and whatnot
-          maxval <- max(c(a1_gd[ADM1_CODE==a1,upper], adm0[ADM0_CODE == admin_id,value], ad1_dat[ADM1_CODE == a1,outcome]), na.rm = TRUE)
-          
-          a1_plot <- ggplot(a1_gd[ADM1_CODE==a1,]) + 
-            geom_line(data = a1_gd[ADM1_CODE==a1,], aes(x = year, y = value, color = var_name), size = 1.2) +
-            geom_ribbon(data = a1_gd[ADM1_CODE==a1 & variable == 'Unraked',], 
-                        aes(x = year, ymin = lower, ymax = upper), na.rm = TRUE, alpha = 0.2, fill = 'indianred3') + 
-            ylim(0, maxval) +
-            scale_color_brewer(palette = 'Set1') +
-            ggtitle(paste(toupper(indicator), ' Model Results for:',ad1name,'|',adname, '|', a1)) +
-            theme_bw()
-          
-          if (nrow(ad1_dat[ADM1_CODE == a1,])>0) {
-            a1_plot <- a1_plot + 
-              geom_point(data=ad1_dat[ADM1_CODE == a1,],
-                         aes(x = year, y = outcome, size = N, fill='black'), shape=21, stroke=0) +
-              geom_text_repel(data = ad1_dat[ADM1_CODE == a1,],
-                              aes(x = year, y = outcome, label = N_label),
-                              size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
-              if (!is.null(vetting_colorscale)) {
-                a1_plot <- a1_plot +
-                  geom_point(data=ad1_dat[ADM1_CODE == a1,],
-                             aes(x = year, y = outcome, size = N, fill=`HAP Vetting Status`), shape=21, stroke=0) +
-                scale_fill_manual(values = vetting_colorscale)
-              }
-          }
-          
-          plot(a1_plot)
-          
-        }
-        
-      }
+      print(plot)
       
     }
+      
+
+    # make an admin 1 plot by child model
+    if (this_lvl=='adm0') {
+      
+      #subset data
+      plot_dt <- mbg[lvl=='adm1' & get(this_codevar) == admin_id,]
+      
+      #reset ylims
+      maxval <- (plot_dt[,.(upper, value, input_mean)] %>% max) + .05 #add 5% buffer
+      
+      browser()
+      
+      # build a palette with sufficient colors by sampling from colorbrewer
+      admin_N <- uniqueN(plot_dt$ADM1_NAME)
+      colors <- brewer.pal.info[brewer.pal.info$category == 'qual' & brewer.pal.info$colorblind==T,]
+      colors <- mapply(brewer.pal, colors$maxcolors, rownames(colors)) %>% unlist
+      if (admin_N>length(colors)) colors <- sample(colors, admin_N, replace=T)
+      else sample(colors, admin_N)
+
+      childplot <- ggplot(plot_dt, aes(x = year, y = value, color = ADM1_NAME)) + 
+        geom_point(data = plot_dt, mapping = aes(x = year, y = input_mean, size = input_ss)) +
+        geom_line() + 
+        facet_wrap(~variable) + 
+        xlim(year_start, year_end) +
+        ylim(0, maxval) +
+        scale_color_manual(values=colors) +
+        scale_size_continuous('N', range=c(2,7)) +
+        labs(title=paste("Model Results for", adname, 'at admin 1 level'),             
+             x='Year',
+             y='Proportion') +
+        theme_minimal() +
+        theme(legend.position="bottom")
+
+        print(childplot)
+        
+    }
+    
+    return(NULL) #no need to return anything
+
+  }
+  
+  # build custom function to loop over each ADM0
+  countryLoop <- function(country, dt) {
+
+    #first create the country level plots
+    timePlot(admin_id=country, this_lvl='adm0', dt=dt)
+    
+    #then create the ad1 plots
+    # for each ad1 in the country
+    dt[ADM0_CODE==country, ADM1_CODE] %>% 
+      unique %>% 
+      lapply(., timePlot, this_lvl='adm1', dt=dt)
+    
+    return(NULL) #no need to return anything
     
   }
   
+  
+  # for each country in the region
+  mbg[, ADM0_CODE] %>% 
+    unique %>% 
+    intersect(., get_adm0_codes(reg)) %>%
+    lapply(., countryLoop, dt=mbg)
+
   dev.off()
   message(paste0('Plots saved at ', outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, '.pdf'))
 

@@ -28,7 +28,7 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(data.table, dplyr, mgsub, raster, sf, fasterize, fst)
 
 #detect if running in rstudio IDE
-debug <- T
+debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 if (interactive) {
