@@ -121,7 +121,7 @@ vetAssistant <- function(this.nid,
     list.files(full.names = T, pattern='.csv') %>% 
     .[. %like% this.nid] %>% 
     #added second check against survey name in case of nids that are subsets of other, longer nids
-    .[. %like% cb[nid==this.nid, survey_name]] %>% 
+    .[. %like% cb[nid==this.nid, ihme_loc_id]] %>% 
     fread
   
   #pull the collapsed data
@@ -309,10 +309,10 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 7387 #set the NID you want to vet
+problem.nid <- 151313 #set the NID you want to vet
 
 #build the vetting object
-info <- vetAssistant(problem.nid, debug=T)
+info <- vetAssistant(problem.nid)
 
 #display available files
 str(info)
