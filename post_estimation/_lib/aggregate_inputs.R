@@ -33,11 +33,12 @@ aggregate_input_data <- function(reg,
   # Set-up
   # Set arguments
   output_dir <- file.path('/share/geospatial/mbg', indicator_group, 
-                         indicator, 'output', run_date, '/pred_derivatives/admin_summaries/')
-  dir.create(output_dir) # create if first run
+                         indicator, 'output', run_date, '/pred_derivatives/admin_summaries/') %T>% 
+    dir.create # create if first run
+  output_file <- paste0(output_dir,  '/', reg, "adm_input_data.fst")
   
   # Save files if not already produced once
-  if (build | !(paste0(output_dir,  '/', reg, "adm_input_data.fst") %>% file.exists)) {
+  if (build | !(output_file %>% file.exists)) {
     # ------------------------------------------------------------------------------
     # Load necessary objects
     
@@ -71,13 +72,15 @@ aggregate_input_data <- function(reg,
     input_data[, ADM1_CODE := raster::extract(a1_raster, input_data[, .(longitude, latitude)])]
     input_data[, ADM0_CODE := raster::extract(a0_raster, input_data[, .(longitude, latitude)])]
     
+    browser()
+    
     # Summarize input data by admin 0 IDs
     a0_input <- copy(input_data) %>% 
       setkeyv(., c('nid', 'year', 'ADM0_CODE')) %>% 
       .[, input_mean := weighted.mean(prop, sum_of_sample_weights*weight), by = key(.)] %>% 
       .[, input_ss := sum(weight*N), by = key(.)] %>% 
       unique(., by=key(.)) %>% 
-      .[, .(nid, year, ADM0_CODE, input_mean, input_ss)] %>% 
+      .[, .(ihme_loc_id, nid, year, ADM0_CODE, input_mean, input_ss)] %>% 
       .[, lvl := 'adm0']
     
     # Summarize input data by admin 1 IDs                                  
@@ -86,17 +89,17 @@ aggregate_input_data <- function(reg,
       .[, input_mean := weighted.mean(prop, sum_of_sample_weights*weight), by = key(.)] %>% 
       .[, input_ss := sum(weight*N), by = key(.)] %>% 
       unique(., by=key(.)) %>% 
-      .[, .(nid, year, ADM0_CODE, ADM1_CODE, input_mean, input_ss)] %>% 
+      .[, .(ihme_loc_id, nid, year, ADM0_CODE, ADM1_CODE, input_mean, input_ss)] %>% 
       .[, lvl := 'adm1']
   
   # Save regional data to single DT
     list(a0_input, a1_input) %>% 
     rbindlist(use.names=T, fill=T) %>% 
-    write_fst(., path=paste0(output_dir,  '/', reg, "adm_input_data.fst")) %T>%
+    write_fst(., path=output_file) %T>%
     return
   # ----------------------------------------------------------------------------------------------------------------
   # otherwise just read them in and return to preserve pipeline
-  } else paste0(output_dir,  '/', reg, "adm_input_data.fst") %>% read_fst(., as.data.table=T) %>% return
+  } else read_fst(output_file, as.data.table=T) %>% return
 
 }
 # -----------------------------------------------------------------------------------
@@ -143,11 +146,12 @@ aggregate_child_stackers <- function(reg,
   
   # Set arguments
   output_dir <- file.path('/share/geospatial/mbg', indicator_group, 
-                          indicator, 'output', run_date, '/pred_derivatives/admin_summaries/')
-  dir.create(output_dir) # create if first run
+                          indicator, 'output', run_date, '/pred_derivatives/admin_summaries/') %T>% 
+    dir.create # create if first run
+  output_file <- paste0(output_dir,  '/', reg, "adm_input_stackers.fst")
   # --------------------------------------------------------------------------------------
   # Save files if not already produced once
-  if (build | !(paste0(output_dir,  '/', reg, "adm_input_stackers.fst") %>% file.exists)) {
+  if (build | !(output_file %>% file.exists)) {
   # ---------------------------------------------------------------------------------------------------------------
     # Load rasters and stackers
     
@@ -270,11 +274,11 @@ aggregate_child_stackers <- function(reg,
     # Save regional data to single DT
     list(a0_stackers, a1_stackers) %>% 
       rbindlist(use.names=T, fill=T) %>% 
-      write_fst(., path=paste0(output_dir,  '/', reg, "adm_input_stackers.fst")) %T>%
+      write_fst(., path=output_file) %T>%
       return
     # ----------------------------------------------------------------------------------------------------------------
     # otherwise just read them in and return to preserve pipeline
-  } else paste0(output_dir,  '/', reg, "adm_input_stackers.fst") %>% read_fst(., as.data.table=T) %>% return
+  } else read_fst(output_file, as.data.table=T) %>% return
   
 }
 # -----------------------------------------------------------------------------------

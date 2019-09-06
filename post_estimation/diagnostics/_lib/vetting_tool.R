@@ -120,6 +120,8 @@ vetAssistant <- function(this.nid,
     file.path(dirs[['raw']]) %>% 
     list.files(full.names = T, pattern='.csv') %>% 
     .[. %like% this.nid] %>% 
+    #added second check against survey name in case of nids that are subsets of other, longer nids
+    .[. %like% cb[nid==this.nid, survey_name]] %>% 
     fread
   
   #pull the collapsed data
@@ -171,7 +173,7 @@ vetAssistant <- function(this.nid,
   message(' ---------> wash tracking sheet')
   wash <- 
   file.path(dirs[['doc']], 'WaSH Tracking Sheet.xlsx') %>% 
-    read_xlsx(., sheet='WaSH Vetting Sheet ') %>% 
+    read_xlsx(., sheet='WaSH Tracking Sheet') %>% 
     as.data.table
 
   #pull the gbd2017 hap outliers info
@@ -307,10 +309,10 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 13719 #set the NID you want to vet
+problem.nid <- 7387 #set the NID you want to vet
 
 #build the vetting object
-info <- vetAssistant(problem.nid)
+info <- vetAssistant(problem.nid, debug=T)
 
 #display available files
 str(info)

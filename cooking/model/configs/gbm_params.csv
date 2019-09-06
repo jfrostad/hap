@@ -24,3 +24,8 @@ cooking_fuel_solid,MNG,0.5,3,6,12,4041,0.011779,NA
 cooking_fuel_solid,NGA,0.5,3,5,10,772,0.010068,NA
 cooking_fuel_solid,PAK,0.5,3,6,11,5252,0.037334,NA
 cooking_fuel_solid,ZWE,0.5,3,6,11,400,0.01398,NA
+cooking_fuel_solid,dia_sssa-zaf,0.8,3,5,16,8000,0.106372789,8072019
+cooking_fuel_solid,ZAF,0.8,3,5,16,8000,0.106372789,8072019
+cooking_fuel_solid,dia_se_asia-vnm-tha,0.8,3,4,14,7507,0.029332234,8072019
+cooking_fuel_solid,VNM,0.8,3,4,14,7507,0.029332234,8072019
+cooking_fuel_solid,THA,0.8,3,4,14,7507,0.029332234,8072019

@@ -30,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(data.table, magrittr, mgsub)
+pacman::p_load(data.table, fasterize, magrittr, mgsub)
 
 #running interactively?
 interactive <- T
@@ -287,7 +287,7 @@ if (new_vetting) {
 #read in vetting sheet
 vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='HAP Vetting', skip=1) %>% 
   as.data.table %>% 
-  .[, .(nid, vetting=`HAP Vetting Status`)] #subset to relevant columns
+  .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] #subset to relevant columns
 
 #merge onto data
 mbg <- merge(mbg, vetting, by='nid', all.x=T)
@@ -298,14 +298,12 @@ mbg <- merge(mbg, vetting, by='nid', all.x=T)
 vetting_colors <- c("Not started"='grey4', 
                     "Problematic"='darkorange1',
                     "Completed"='forestgreen',
-                    "Flagged"='firebrick',
+                    "Flagged"='purple1',
                     "Excluded"='gray71',
                     "In progress"='indianred2',
                     "Ready for Review"='indianred2')
 
-
 ## Plot stackers and covariates ------------------------------------------------------
-
 message('Making time series plots for stackers by admin unit')
 dir.create(paste0(outputdir, '/diagnostic_plots/'))
 
@@ -328,7 +326,7 @@ if (use_stacking_covs) {
                               indicator_group, 
                               run_date, 
                               raked=raked,
-                              vetting_colorscale = vetting_colors,
+                              vetting_colorscale=vetting_colors,
                               debug=F)
   )
   

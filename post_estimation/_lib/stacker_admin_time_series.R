@@ -43,12 +43,7 @@ stacker_time_series_plots <- function(reg,
                                       indicator = indicator,
                                       indicator_group = indicator_group,
                                       run_date = run_date,
-                                      #regions = Regions,
-                                      #measure = 'prevalence',
-                                      #draws = T,
                                       raked = T,
-                                      #credible_interval = 0.95,
-                                      #N_breaks = c(0, 10, 50, 100, 500, 1000, 2000, 4000),
                                       vetting_colorscale = NULL,
                                       debug=F) {
   # -----------------------------------------------------------------------------------
@@ -71,6 +66,9 @@ stacker_time_series_plots <- function(reg,
   dt <- dt[region == reg]
   # load submodel names
   config <- fetch_from_rdata(paste0(imagedir, 'pre_run_tempimage_', run_date, '_bin0_', reg, '_0.RData'), 'config')
+  
+  #load geographic information to help ID out of country points (artifact of frax aggregation)
+  lookup <- fread('/home/j/WORK/11_geospatial/10_mbg/stage_master_list.csv')
   
   # check to see if new stacking was used
   contains_object <- function(file, obj){
@@ -110,8 +108,14 @@ stacker_time_series_plots <- function(reg,
   mbg <- merge(mbg, coefs, by.x = c('variable', 'region'), by.y = c('child', 'region'), all.x = T)
   mbg[!is.na(coef), variable := paste('stk:', variable, round(coef, 2))]
   
+  #ID out of country points using lookup info
+  mbg <- merge(mbg, lookup[, .(iso3, ADM0_NAME=location_name)], by='ADM0_NAME')
+  mbg[, border_data := iso3 != svy_iso3]
+  mbg[, iso3_label := '']
+  mbg[border_data==T, iso3_label := paste0(svy_iso3, ': ')]
+  
   #add NID label to sample sizes
-  mbg[!is.na(input_ss), N_label := paste0(nid, ' [#', round(input_ss), ']')]
+  mbg[!is.na(input_ss), N_label := paste0(iso3_label, nid, ' [#', round(input_ss), ']')]
   # ------------------------------------------------------------------------------------------------------------------------
   
   
@@ -138,7 +142,7 @@ stacker_time_series_plots <- function(reg,
     plot_dt <- dt[lvl==this_lvl & get(this_codevar) == admin_id,]
     
     adname <- plot_dt[, get(this_namevar)] %>% unique
-    
+
     # time series plot
     if (na.omit(plot_dt, cols='value') %>% nrow == 0) message(paste0('Skipping ', adname, ' , no estimates!'))
     else {
@@ -150,15 +154,15 @@ stacker_time_series_plots <- function(reg,
       
       #create plot
       plot <- ggplot(data = plot_dt[variable == 'mean']) + 
-        geom_point(aes(x = year, y = input_mean, size = input_ss, fill=vetting), shape=21, stroke=0) +
+        geom_point(aes(x = year, y = input_mean, size = input_ss)) +
+
         geom_text_repel(aes(x = year, y = input_mean, label = N_label),
-                        size=5, segment.colour = 'gray', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
+                        size=5, segment.colour = 'grey17', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
         geom_line(data = plot_dt, aes(x = year, y = value, color = variable), size = 1.2) +
         geom_ribbon(data = , aes(x = year, ymin = lower, ymax = upper), na.rm = TRUE, alpha = 0.2, fill = 'indianred3') +
         xlim(year_start, year_end) +
         ylim(0, maxval) +
         scale_color_brewer(palette = 'Set1') +
-        scale_fill_manual('Vetting Status', values = vetting_colorscale) +
         scale_size_continuous('N', range=c(2,7)) +
         labs(title=paste("Model Results for", adname, ' (', reg, ')'),
              subtitle = paste0('Indicator=', indicator),
@@ -166,6 +170,15 @@ stacker_time_series_plots <- function(reg,
              y='Proportion') + 
         theme_minimal()
       
+      #add vetting colors to points if scheme is provided
+      if(!is.null(vetting_colorscale)) {
+        
+        plot <- plot + 
+          geom_point(aes(x = year, y = input_mean, size = input_ss, fill=vetting), shape=21, stroke=0) +
+          scale_fill_manual('Vetting Status', values = vetting_colorscale)
+        
+      }
+
       #print to dev
       print(plot)
       
@@ -190,6 +203,10 @@ stacker_time_series_plots <- function(reg,
 
       childplot <- ggplot(plot_dt, aes(x = year, y = value, color = ADM1_NAME)) + 
         geom_point(data = plot_dt, mapping = aes(x = year, y = input_mean, size = input_ss)) +
+        #label border datapoints with their svy iso3
+        geom_text_repel(data = plot_dt[border_data==T],
+                        aes(x = year, y = input_mean, label = svy_iso3),
+                        size=5, segment.colour = 'grey17', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
         geom_line() + 
         facet_wrap(~variable) + 
         xlim(year_start, year_end) +

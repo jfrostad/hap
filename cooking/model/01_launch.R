@@ -25,7 +25,7 @@ message(indicator)
 
 ## Singularity version
 sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
-which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.1gcc9mklrstudioserver1.2.1555_v5.simg')
+which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg')
 
 ## Load MBG packages
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
@@ -243,6 +243,9 @@ for(i in 1:nrow(loopvars)){
   if (region_cores > 9) region_rt <- '16:00:00:00'
   region_mem <- region_cores*24 #TODO qpid dawg
   
+  # set thread options
+  threads <- ifelse(region_cores>12, 2, 6)
+  
   # make a qsub string
   qsub <- make_qsub_share(age           = loopvars[i,2],
                           reg           = as.character(loopvars[i,1]),
@@ -259,7 +262,7 @@ for(i in 1:nrow(loopvars)){
                           code          = parallel_script,
                           addl_job_name = paste0(indicator, '_', as.character(loopvars[i,1]), '_parallel'),
                           singularity   = which_sing,
-                          singularity_opts = list(SET_OMP_THREADS=6, SET_MKL_THREADS=6))
+                          singularity_opts = list(SET_OMP_THREADS=threads, SET_MKL_THREADS=threads))
   
   message(qsub) #for posterity
   
