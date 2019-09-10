@@ -957,21 +957,21 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # set specific arguments
-measure         <- 'total'
+measure         <- 'prevalence'
 jname           <- paste('agg', reg, indicator, sep = '_')
 
 # set memory by region
 individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
-mymem <- 120
+mymem <- 200
 if (as.logical(individual_countries) & reg != 'IND') mymem <- 50
-if(r == 'dia_malay' | r == 'dia_name') mymem <- 150
-if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') mymem <- 180
-if(r == 'dia_s_america') mymem <- 240
+if(r == 'dia_malay' | r == 'dia_name') mymem <- 225
+if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') mymem <- 250
+if(r == 'dia_s_america') mymem <- 300
 
 # set up qsub
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
                   '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
-                  '-l fthread=2 -l h_rt=00:12:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+                  '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
 r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
 script <- file.path(repo, 'mbg_central/share_scripts/frax_script_hap.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 

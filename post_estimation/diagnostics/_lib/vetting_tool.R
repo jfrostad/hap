@@ -122,7 +122,7 @@ vetAssistant <- function(this.nid,
     .[. %like% this.nid] %>% 
     #added second check against survey name in case of nids that are subsets of other, longer nids
     .[. %like% cb[nid==this.nid, ihme_loc_id]] %>% 
-    fread
+    { if(length(.)>0) fread(.) else NA }
   
   #pull the collapsed data
   message(' ---> collapsed data')
@@ -162,13 +162,16 @@ vetAssistant <- function(this.nid,
 
   #pull the geographies info
   message(' --------> geographies info')
+  if (nrow(col[nid==this.nid])==0) geog <- NA
+  else {
   geog <-
     file.path(dirs[['geog']]) %>% 
     #get survey series from the collapsed data
     list.files(full.names = T, 
                pattern=paste0(col[nid==this.nid, survey_series %>% unique], '.csv')) %>% 
-    fread
-
+    { if(length(.)>0) fread(.) else NA }
+  }
+  
   #pull the wash tracking sheet info
   message(' ---------> wash tracking sheet')
   wash <- 
@@ -194,8 +197,11 @@ vetAssistant <- function(this.nid,
     'wash'=wash,
     'gbd'=gbd
   ) %>% 
-    lapply(., function(x) x[nid==this.nid]) %>% 
-    return
+    lapply(., function(x) {
+      if (is.data.table(x)) x[nid==this.nid]
+      else x
+    }
+  ) %>% return
 }
 
 
@@ -309,7 +315,7 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 151313 #set the NID you want to vet
+problem.nid <- 20875 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)

@@ -40,8 +40,8 @@ manual_date <- "2018_12_18" #set this value to use a manually specified extract 
 collapse_date <- "2019_07_31" #which data of collapse to use if not rerunning
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- T #set to TRUE if you have new data and want to recollapse
-run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
+run_collapse <- F #set to TRUE if you have new data and want to recollapse
+run_resample <- F #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 new_vetting <- F #set to TRUE to refresh the vetting diagnostic
 #***********************************************************************************************************************
@@ -318,11 +318,14 @@ vars <- names(cooking) %>% .[. %like% 'cooking']
 #convert to count space
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
 
+#shapefile issues: document here shapefiles that cause resample_polygons to fail
+shapefile_issues <- c()
+shapefile_issues_nids <- cooking[shapefile %in% shapefile_issues, unique(nid)]
+
 #TODO, current only able to resample stage1/2 countries
 cooking <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])] %>% 
   setnames(.,  c('lat', 'long'), c('latitude', 'longitude')) %>% #mbg formatting requirement
-  .[!(shapefile %like% "PRY_central_wo_asuncion")] %>%  #TODO investigate this shapefile issue
-  .[!(shapefile %like% "zmb_adm3_nid_14063")] #TODO investigate this shapefile issue
+  .[!(shapefile %in% shapefile_issues)] #TODO investigate this shapefile issue
 
 #resample the polygons using internal fx
 #TODO potentially worth parallelizing by region?
@@ -376,6 +379,21 @@ file.path(share.model.dir, 'cooking_fuel_dirty.csv') %>% write.csv(dt, file=., r
 file.path(share.model.dir, 'cooking_fuel_clean.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_fuel_clean.csv') %>% write.csv(dt, file=., row.names=F)
 #***********************************************************************************************************************************
+ 
+#---ID PROBLEM SURVEYS--------------------------------------------------------------------------------------------------
+#identify any surveys that did not make it through the pipeline but were codebooked for cooking_fuel
+codebooked_nids <- codebook[!is.na(cooking_fuel) & ihme_loc_id %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3]), nid] %>% unique
+missing_nids <- codebooked_nids %>% .[!(. %in% unique(dt$nid))]
+
+#update user to NIDs that need to be added to tracking sheet
+tracking <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='HAP Tracking', skip=1) %>% as.data.table
+
+message('These NIDs need to be added to the tracking sheet:\n')
+missing_nids %>% 
+  .[!(. %in% unique(tracking$nid))] %>% 
+  cat(., sep='\n')
+#***********************************************************************************************************************************
+ 
 #---MERGE CSV's of PROBLEMATIC SURVEYS----------------------------------------------------------------------------------------------
 #merging: new geographies to match, cooking fuel missing strings, dropped clusters 
 

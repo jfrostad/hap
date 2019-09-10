@@ -34,8 +34,8 @@ aggregate_input_data <- function(reg,
   # Set arguments
   output_dir <- file.path('/share/geospatial/mbg', indicator_group, 
                          indicator, 'output', run_date, '/pred_derivatives/admin_summaries/') %T>% 
-    dir.create # create if first run
-  output_file <- paste0(output_dir,  '/', reg, "adm_input_data.fst")
+    dir.create(recursive=T) # create if first run
+  output_file <- paste0(output_dir,  '/', reg, "_adm_input_data.fst")
   
   # Save files if not already produced once
   if (build | !(output_file %>% file.exists)) {
@@ -71,9 +71,7 @@ aggregate_input_data <- function(reg,
     input_data <- input_data[country %in% lookup[gadm_geoid %in% gaul_list, iso3]]
     input_data[, ADM1_CODE := raster::extract(a1_raster, input_data[, .(longitude, latitude)])]
     input_data[, ADM0_CODE := raster::extract(a0_raster, input_data[, .(longitude, latitude)])]
-    
-    browser()
-    
+
     # Summarize input data by admin 0 IDs
     a0_input <- copy(input_data) %>% 
       setkeyv(., c('nid', 'year', 'ADM0_CODE')) %>% 
@@ -147,8 +145,8 @@ aggregate_child_stackers <- function(reg,
   # Set arguments
   output_dir <- file.path('/share/geospatial/mbg', indicator_group, 
                           indicator, 'output', run_date, '/pred_derivatives/admin_summaries/') %T>% 
-    dir.create # create if first run
-  output_file <- paste0(output_dir,  '/', reg, "adm_input_stackers.fst")
+    dir.create(recursive=T) # create if first run
+  output_file <- paste0(output_dir,  '/', reg, "_adm_input_stackers.fst")
   # --------------------------------------------------------------------------------------
   # Save files if not already produced once
   if (build | !(output_file %>% file.exists)) {

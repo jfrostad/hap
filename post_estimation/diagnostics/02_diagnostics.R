@@ -30,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(data.table, fasterize, magrittr, mgsub)
+pacman::p_load(data.table, fasterize, fst, magrittr, mgsub)
 
 #running interactively?
 interactive <- T
@@ -46,11 +46,11 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_dia_sssa',
                 'cooking/model/configs/',
-                '2019_08_16_10_51_08',
+                '2019_09_06_11_40_40',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
-new_vetting <- T
+new_vetting <- F
 
 #is this a raked model?
 raked <- F
