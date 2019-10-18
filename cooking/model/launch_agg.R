@@ -18,7 +18,7 @@ if (interactive) {
                                 'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
                                 'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
   #regions <- 'dia_chn_mng'
-  run_date                 <- '2019_08_16_10_51_08'
+  run_date                 <- '2019_09_16_23_24_14'
   makeholdout              <- F
   
 } else {

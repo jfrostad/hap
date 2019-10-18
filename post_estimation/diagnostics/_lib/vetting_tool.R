@@ -62,7 +62,7 @@ use.sf <- T #set T if you are not having issues with the sf package
 data.dir <- file.path('/share/geospatial/mbg/input_data/')
 raw.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/')
 gbd.dir <- '/ihme/covariates/ubcov/model/st_gpr_library/databases/outliers/air_hap/'
-geomatched.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
+pe.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
 geog.dir <- file.path(j_root, 'WORK/11_geospatial/05_survey shapefile library/codebooks')
 census.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
 doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
@@ -96,6 +96,7 @@ vetAssistant <- function(this.nid,
                          dirs=list (
                            'raw'=raw.dir, #by default these dirs can be pulled from global namespace
                            'collapse'=collapse.dir,
+                           'pe'=pe.dir,
                            'model'=model.dir,
                            'doc'=doc.dir,
                            'geog'=geog.dir,
@@ -122,7 +123,7 @@ vetAssistant <- function(this.nid,
     .[. %like% this.nid] %>% 
     #added second check against survey name in case of nids that are subsets of other, longer nids
     .[. %like% cb[nid==this.nid, ihme_loc_id]] %>% 
-    { if(length(.)>0) fread(.) else NA }
+    { if(length(.)>0) fread(.) else 'No extraction present!' }
   
   #pull the collapsed data
   message(' ---> collapsed data')
@@ -132,6 +133,15 @@ vetAssistant <- function(this.nid,
     sort(., decreasing=T) %>% 
     .[1] %>% #pull most recent collapsed data 
     read.fst(., as.data.table=T) 
+  
+  #TODO
+  #if collapse is broken, check the post-extract file
+  # if (nrow(col[nid==this.nid])==0) {
+  #   pe <- 
+  #     file.path(dirs[['pe']]) %>% 
+  #     list.files(full.names = T, pattern='.fst') %>% 
+  #     sort(., decreasing=T) %>% 
+  #     .[1]
   
   #pull the model input data
   message(' ----> mbg input data') 
@@ -162,7 +172,7 @@ vetAssistant <- function(this.nid,
 
   #pull the geographies info
   message(' --------> geographies info')
-  if (nrow(col[nid==this.nid])==0) geog <- NA
+  if (nrow(col[nid==this.nid])==0) geog <- 'Cannot autopull geographies because collapse is broken.'
   else {
   geog <-
     file.path(dirs[['geog']]) %>% 
@@ -315,7 +325,7 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 20875 #set the NID you want to vet
+problem.nid <- 7387 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)

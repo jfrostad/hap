@@ -23,7 +23,7 @@ stacking_cores,5
 test,FALSE
 test_pct,5
 transform,inverse-logit
-stacked_fixed_effects,gam + enet + gbm
+stacked_fixed_effects,gam + enet + xgboost
 other_weight,
 use_child_country_fes,FALSE
 gbm_tc,3
@@ -64,8 +64,8 @@ z_list,0
 zcol,z_column_default_blank
 scale_gaussian_variance_N,TRUE
 xg_model_tune,TRUE
-modeling_shapefile_version,2019_08_01
-raking_shapefile_version,2019_08_01
+modeling_shapefile_version,2019_09_10
+raking_shapefile_version,2019_09_10
 subnational_raking,TRUE
 gam_knots,6
 ctry_re_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"

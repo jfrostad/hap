@@ -6,7 +6,7 @@ extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
 redownload <- F #update the codebook from google drive
 cluster <- TRUE #running on cluster true/false
 geos <- TRUE #running on geos nodes true/false
-cores <- 10
+cores <- 3
 #FOR THE CLUSTER:
 #qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
 #source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract_census.R')
@@ -35,13 +35,19 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 message("Getting common column names")
 if (topic == "hap" & geos){
-  #get the most recent pt and poly feathers and parse them for column names
-  pt <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% list.files(pattern="points", full.names=T) %>% grep(pattern=".feather$", value=T)
-  pt <- pt[length(pt)] %>% feather_metadata
-  poly <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% list.files(pattern="points", full.names=T) %>% grep(pattern=".feather$", value=T)
-  poly <- poly[length(poly)] %>% feather_metadata
-  pt_names <- pt[3] %>% unlist %>% names %>% gsub(pattern="types.", replacement="")
-  poly_names <- poly[3] %>% unlist %>% names %>% gsub(pattern="types.", replacement="")
+  #get the most recent pt and poly files and parse them for column names
+  pt_names <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% 
+    list.files(pattern="points", full.names=T) %>% 
+    grep(pattern=".fst$", value=T) %>% 
+    .[length(.)] %>% 
+    read_fst(., from = 1, to = 2) %>% 
+    names
+  poly_names <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% 
+    list.files(pattern="poly", full.names=T) %>% 
+    grep(pattern=".fst$", value=T) %>% 
+    .[length(.)] %>% 
+    read_fst(., from = 1, to = 2) %>% 
+    names
   noms <- c(pt_names, poly_names) %>% unique
 } else{
   message("The error you're about to get has to do with the fact that you're not running on geos and/or you're not prepping hap data.")

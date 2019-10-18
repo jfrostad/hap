@@ -7,6 +7,33 @@
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~ SETUP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## Setup -------------------------------------------------------------------------
+
+## clear environment
+rm(list=ls())
+
+# runtime configuration
+if (Sys.info()["sysname"] == "Linux") {
+  j_root <- "/home/j/"
+  h_root <- file.path("/ihme/homes", Sys.info()["user"])
+  
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
+  ## Load libraries and  MBG project functions.
+  .libPaths(package_lib)
+  
+  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
+  Sys.setlocale(category = "LC_ALL", locale = "C")
+  
+} else {
+  j_root <- "J:"
+  h_root <- "H:"
+}
+
+#load external packages
+#TODO request adds to lbd singularity
+pacman::p_load(fasterize, fst, mgsub, mlr)
+
+
 #detect if running in rstudio IDE
 debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
@@ -16,9 +43,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'dia_sssa'
+  reg                      <- 'VNM'
   age                      <- 0
-  run_date                 <- "2019_08_07_10_58_03"
+  run_date                 <- "2019_10_16_14_53_16"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'

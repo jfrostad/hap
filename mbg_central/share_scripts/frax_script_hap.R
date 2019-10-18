@@ -28,7 +28,7 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(data.table, dplyr, mgsub, raster, sf, fasterize, fst)
 
 #detect if running in rstudio IDE
-debug <- T
+debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 if (interactive) {
@@ -41,9 +41,9 @@ if (interactive) {
   config_par   <- 'hap_best'
   holdout <- 0
   age <- 0
-  run_date <- '2019_09_06_11_40_40'
+  run_date <- '2019_09_16_23_24_14'
   measure <- 'prevalence'
-  reg <- 'dia_se_asia'
+  reg <- 'dia_mid_east'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {

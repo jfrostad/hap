@@ -44,13 +44,13 @@ debug.args <- c('simulate',
                 'cooking_fuel_solid',
                 'config_hap_best',
                 'cooking/model/configs/',
-                'covs_cooking_dia_sssa',
+                'covs_cooking_VNM',
                 'cooking/model/configs/',
-                '2019_09_06_11_40_40',
+                '2019_10_16_20_55_18',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
-new_vetting <- F
+new_vetting <- T
 
 #is this a raked model?
 raked <- F
@@ -285,7 +285,7 @@ if (new_vetting) {
   googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)
 }
 #read in vetting sheet
-vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='HAP Vetting', skip=1) %>% 
+vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='1. Vetting', skip=1) %>% 
   as.data.table %>% 
   .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] #subset to relevant columns
 

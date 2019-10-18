@@ -40,10 +40,10 @@ manual_date <- "2018_12_18" #set this value to use a manually specified extract 
 collapse_date <- "2019_07_31" #which data of collapse to use if not rerunning
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- F #set to TRUE if you have new data and want to recollapse
-run_resample <- F #set to TRUE if you have new data and want to rerun polygon resampling
+run_collapse <- T #set to TRUE if you have new data and want to recollapse
+run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
-new_vetting <- F #set to TRUE to refresh the vetting diagnostic
+new_vetting <- T #set to TRUE to refresh the vetting diagnostic
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -305,8 +305,8 @@ if (run_collapse) {
 # ---DATA EXCLUSION-----------------------------------------------------------------------------------------------------
 #exclude datapoints based on HAP vetting
 setwd(doc.dir)
-if (new_vetting) {setwd(doc.dir); drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
-vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='HAP Vetting', skip=1) %>% as.data.table
+if (new_vetting) {setwd(doc.dir); googledrive::drive_auth(cache='drive.httr-oauth'); drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
+vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='1. Vetting', skip=1) %>% as.data.table
 excluded_nids <- vetting[`HAP Vetting Status`=='Excluded', nid] %>% unique #get list of excluded points
 cooking <- cooking[!(nid %in% excluded_nids)] #remove any excluded datapoints
 #***********************************************************************************************************************
@@ -319,11 +319,11 @@ vars <- names(cooking) %>% .[. %like% 'cooking']
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
 
 #shapefile issues: document here shapefiles that cause resample_polygons to fail
-shapefile_issues <- c()
+shapefile_issues <- c('IRQ_ADM3_2019_OCHA', 'TLS_regions')
 shapefile_issues_nids <- cooking[shapefile %in% shapefile_issues, unique(nid)]
 
 #TODO, current only able to resample stage1/2 countries
-cooking <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])] %>% 
+dt <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])] %>% 
   setnames(.,  c('lat', 'long'), c('latitude', 'longitude')) %>% #mbg formatting requirement
   .[!(shapefile %in% shapefile_issues)] #TODO investigate this shapefile issue
 
@@ -331,18 +331,18 @@ cooking <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])
 #TODO potentially worth parallelizing by region?
 if (run_resample) {
   
-  pt <- cooking[polygon==T] %>% #only pass the poly rows to the fx, pts are dropping
+  pt <- dt[polygon==T] %>% #only pass the poly rows to the fx, pts are dropping
     resample_polygons(data = .,
                       cores = 20,
                       indic = vars,
                       density = 0.001,
-                      gaul_list = lapply(unique(cooking$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique) %>% 
+                      gaul_list = lapply(unique(dt$iso3) %>% tolower, get_adm0_codes) %>% unlist %>% unique) %>% 
     .[, pseudocluster := NULL] #redundant
 
 } else stop('run_resample=FALSE, cannot save model data')
 
 #combine all points
-dt <- list(cooking[polygon==F], pt) %>% 
+dt <- list(dt[polygon==F], pt) %>% 
   rbindlist(use.names=T, fill=T) %>% 
   .[polygon==F, weight := 1 ] #weights are produced by the resample polygons fx
 
@@ -382,11 +382,11 @@ file.path(share.model.dir, 'cooking_fuel_clean.csv') %>% write.csv(dt, file=., r
  
 #---ID PROBLEM SURVEYS--------------------------------------------------------------------------------------------------
 #identify any surveys that did not make it through the pipeline but were codebooked for cooking_fuel
-codebooked_nids <- codebook[!is.na(cooking_fuel) & ihme_loc_id %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3]), nid] %>% unique
+codebooked_nids <- codebook[!is.na(cooking_fuel) & ihme_loc_id %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3]) & year_start > 2000, nid] %>% unique
 missing_nids <- codebooked_nids %>% .[!(. %in% unique(dt$nid))]
 
 #update user to NIDs that need to be added to tracking sheet
-tracking <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='HAP Tracking', skip=1) %>% as.data.table
+tracking <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='2. Tracking', skip=1) %>% as.data.table
 
 message('These NIDs need to be added to the tracking sheet:\n')
 missing_nids %>% 

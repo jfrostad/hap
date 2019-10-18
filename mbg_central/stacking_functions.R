@@ -542,13 +542,23 @@ fit_xgboost_child_model <- function(df,
     # Set grid search as default unless filepath is provided
     if(is.null(hyperparameter_filepath)){
       message("Tuning with default hyperparameter settings")
+
       xg_grid <- expand.grid(nrounds = 100,
-                             max_depth = c(4, 6, 8, 10, 12),
-                             eta = (3:8) / 100,
-                             colsample_bytree = .5,
-                             min_child_weight = 1,
-                             subsample = 1,
+                             max_depth = c(2, 4, 6, 8),
+                             eta = seq(0.02, 0.2, by = .04),
+                             colsample_bytree = seq(.4, 1, by=.2),
+                             min_child_weight = seq(1, 5, by=2),
+                             subsample = seq(.1, 1, by=.1),
                              gamma = 0)
+
+      #use MLR pkg to make param grids
+      xg_grid <- makeParamSet(makeIntegerParam('nrounds', lower=100L, upper=500L),
+                              makeIntegerParam("max_depth", lower=2L, upper=10L),
+                              makeNumericParam("min_child_weight", lower = 1L, upper = 5L),
+                              makeNumericParam("subsample", lower = 0.1, upper = 1),
+                              makeNumericParam("colsample_bytree", lower = 0.5, upper = 1),
+                              makeDiscreteParam('gamma', 0))
+
     } else {
       message("Selecting pre-specified hyperparameter grid")
       hyperparam <- fread(hyperparameter_filepath)
@@ -563,22 +573,32 @@ fit_xgboost_child_model <- function(df,
                              gamma = 0)
 
     }
+
+    # Specify the training folds using NID to account for dependence and prevent overfitting
+    folds <- groupKFold(df$nid, k = 5) 
+    
     # Set cross validation options, default to 5 times repeated 5-fold cross validation
     # Selection function is "oneSE" to pick simplest model within one standard error of minimum
     train_control <- trainControl(selectionFunction = "oneSE",
                                   method = "repeatedcv",
                                   number = 5,
-                                  repeats = 5)
+                                  repeats = 5,
+                                  index = folds,
+                                  returnResamp = 'all',
+                                  savePredictions = 'all')
+
     # Fit model
-    xg_fit <- train(form,
-                    data = df,
-                    trControl = train_control,
-                    verbose = F,
-                    tuneGrid = xg_grid,
-                    metric = "RMSE",
-                    method = "xgbTree",
-                    objective = objective_function,
-                    weights = df$xg_weight)
+    xg_fit <- caret::train(form,
+                           data = df,
+                           trControl = train_control,
+                           verbose = F,
+                           tuneGrid = xg_grid,
+                           metric = "RMSE",
+                           method = "xgbTree",
+                           objective = objective_function,
+                           weights = df$xg_weight)
+
+    browser()
 
     # Save model fit object for future use
     saveRDS(xg_fit, paste0(outputdir, 'stackers/xg_fit_', region, ".RDS"))
@@ -644,15 +664,15 @@ fit_xgboost_child_model <- function(df,
                                       savePredictions = "final")
 
   message("Fitting xgboost on final tuned hyperparameters")
-  xg_fit_final <- train(form,
-                        data = df,
-                        trControl = train_control_final,
-                        verbose = F,
-                        tuneGrid = xg_grid_final,
-                        metric = "RMSE",
-                        method = "xgbTree",
-                        objective = objective_function,
-                        weights = df$xg_weight)
+  xg_fit_final <- caret::train(form,
+                               data = df,
+                               trControl = train_control_final,
+                               verbose = F,
+                               tuneGrid = xg_grid_final,
+                               metric = "RMSE",
+                               method = "xgbTree",
+                               objective = objective_function,
+                               weights = df$xg_weight)
 
   # Plot the covariate importance of final model
   cov_plot <-

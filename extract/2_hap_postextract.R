@@ -19,7 +19,7 @@ rm(list=ls())
 
 #Define values
 topic <- "hap"
-extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
+extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja', 'kel15')
 redownload <- T #update the codebook from google drive
 cluster <- T #running on cluster true/false
 geos <- T #running on geos nodes true/false
@@ -133,7 +133,10 @@ write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feat
 #also return a list of all the NIDs that are present in the codebook but not in the extracted topics
 #subset to make sure they are not stage3 or <2000
 message('writing csv of broken extractions')
-codebook.nids <- codebook[!(year_end < 2000 | ihme_loc_id %in% stages[Stage==3, iso3]), nid] %>% unique
+codebook.nids <- codebook[!(year_end < 2000 | 
+                              ihme_loc_id %in% stages[Stage %in% c('2x', '3'), iso3] | 
+                              is.na(cooking_fuel) |
+                              is.na(hh_size)), nid] %>% unique
 broken_extractions <- codebook.nids[!(codebook.nids %in% unique(topics$nid))]
 write.csv(broken_extractions, paste0(folder_out, "/broken_extractions.csv"), na="", row.names=F)
 
@@ -281,17 +284,18 @@ if (topic == "hap"){
 #all[!is.na(latitude) & is.na(lat), lat := latitude]
 #all[!is.na(longitude) & is.na(long), long := longitude]
 
-#Save
-# message("Saving as .Rdata")
-# save(all, file=paste0(folder_out, "/", today, ".Rdata"))
-#message("Saving as .csv")
-#write.csv(all, file=paste0(folder_out, "/", today, ".csv"))
-
 #Create & export a list of all surveys that have not yet been matched & added to the geo codebooks
 message("Exporting a list of surveys that need to be geo matched")
-gnid <- unique(geo$nid)
-fix <- subset(all, !(all$nid %in% gnid))
-fix_collapse <- distinct(fix[,c("nid", "iso3", "year_start", "survey_name"), with=T])
-fix_collapse <- merge(fix_collapse, stages, by="iso3", all.x=T)
-fix_outpath <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/new_geographies_to_match.csv")
-write.csv(fix_collapse, fix_outpath, row.names=F, na="")
+# # gnid <- unique(geo$nid)
+# # fix <- subset(all, !(all$nid %in% gnid))
+# fix <- all[!(nid %in% unique(geo$nid))]
+# fix_collapse <- distinct(fix[,c("nid", "iso3", "year_start", "survey_name"), with=T])
+# fix_collapse <- distinct(fix[,c("nid", "iso3", "year_start", "survey_name"), with=T])
+# fix_collapse <- merge(fix_collapse, stages, by="iso3", all.x=T)
+
+all[!(nid %in% unique(geo$nid))] %>% 
+  .[, .(nid, iso3, year_start, survey_name)] %>% 
+  distinct %>% 
+  merge(., stages, by='iso3', all.x=T) %>% 
+  write.csv(., file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched", topic, "new_geographies_to_match.csv"), 
+            row.names=F, na="")
