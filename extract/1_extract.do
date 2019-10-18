@@ -68,7 +68,7 @@ init, topics(`topics')
 local outpath = "`l'/LU_GEOSPATIAL/ubCov_extractions/hap/"
 
 //Troublemakers
-local array 4514 4664 4962 5801 4549 //come back to this one: error=variables ihme_loc_id admin_1 do not uniquely identify observations in the using data 
+local array 15451 //come back to this one: error=variables ihme_loc_id admin_1 do not uniquely identify observations in the using data 
 local array 5110 // come back to this one: error=variable hv109 not found
 local array 4723 // come back to this one: error=Indicator Check || Requisite input vars (sweight) do not exist in dataset || design || pweight_admin_1 (cont)
 local array 4651 // come back to this one: error=Indicator Check || Requisite input vars (hv239) do not exist in dataset || hap || cooking_type 
@@ -79,7 +79,7 @@ local array 4651 // come back to this one: error=Indicator Check || Requisite in
 //local array 5767 6177 4531 4690 4989 5405 5554 5945 6015 6100 6184 4857 5266 5567 5892 6253 4658 4810 5411 5697 5821 6021 6338 4628 4538 4817 5062 5320 5704 6028 6192 6345 6373 5898 6259 4510 5905 5773 4996 5615 6352 4603 5272 6268 4577 6198 5951 4581 4608 4864 5279 5574 4696 5003 5327 5622 5958 6380 4613 4941 5418 5780 6109 5828 5010 5069 5482 4704 6272 5286 4825 5016 5451 5837 6278 4618 4898 5334 5711 6035 6387 6360 6250 6396 6397 6403 6439 6410 6452 6457 6430 6447 6404 6443 6445 6419 6468 6495 6517 6528 6473 6500 6503 6514 6536 6532 6508 6521 6489 6511 6464 6476 6483 6524
 //local array 7887 7663 7502 7671 7979 7506 7510 7675 7738 7741 7743 8074 7515 7747 7982 7679 8078 7751 7988 7519 8083 7891 7527 7755 7895 7531 7760 7535 7764 7667 7900 7539 7992 7768 7904 7772 7543 8186 8088 8129 7683 7777 7847 7908 7997 7547 7687 7551 7782 8189 7555 7559 7786 8196 8003 8004 7567 7791 12063 10638 10123 5996 4643 6096 6426 6432 10471
 
-local array 11675
+local array 5624
 
 
 //fill me in with the ubcov_ids you want to run
@@ -89,8 +89,10 @@ foreach number in `array'{
     tostring year_start, gen(year)
     tostring year_end, gen(end_year)
     tostring nid, gen(nid_n)
+	format geospatial_id %15.13f
     local filename = ihme_loc_id + "_" + survey_name + "_" + year + "_" + end_year + "_" + nid_n
     local filename = subinstr("`filename'", "/", "_",.)
+	do "`j'/WORK/11_geospatial/07_data extraction/hap/hap_recodes.do"
     drop year end_year nid_n
     cd  `outpath'
     outsheet using "`filename'.csv", comma names replace
