@@ -49,6 +49,7 @@ stacker_time_series_plots <- function(reg,
   # -----------------------------------------------------------------------------------
   # Work interactively to build function
   if (debug) browser()
+
   message(paste0('Aggregating input data for: ', reg))
   # Load packages
   pacman::p_load(data.table, ggplot2, ggthemes, ggrepel, magrittr, raster, RColorBrewer, rgeos, rgdal, sp, sf)
@@ -95,6 +96,14 @@ stacker_time_series_plots <- function(reg,
     mod <- lapply(mod, function(x) data.table(child = submodels, coef = x$summary.random$covar$mean))
     coefs <- rbindlist(lapply(seq(reg), function(x) mod[[x]][,region:=reg[x]]))
   }
+  
+  #linear combination of stacker columns by coefficient
+  dt$stack <- 0
+  for (stacker in submodels){
+    dt$stack<- dt[,..stacker]*coefs[child == stacker,coef] + dt$stack
+  }
+  submodels <- c(submodels, 'stack')
+
   
   # get unraked results and reshape long
   mbg <- melt(dt, variable.factor = F,

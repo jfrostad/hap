@@ -371,7 +371,7 @@ dt[, point := !polygon]
 #save into MDG dir
 #save each one for modelling in ordinal space
 file.path(share.model.dir, 'cooking_fuel_solid.RDS') %>% saveRDS(dt, file=.)
-file.path(share.model.dir, 'cooking_fuel_solid.csv') %>% write.csv(dt, file=., row.names=F)
+file.path(share.model.dir, ' ') %>% write.csv(dt, file=., row.names=F)
 file.path(share.model.dir, 'cooking_fuel_kerosene.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_fuel_kerosene.csv') %>% write.csv(dt, file=., row.names=F)
 file.path(share.model.dir, 'cooking_fuel_dirty.RDS') %>% saveRDS(dt, file=.)

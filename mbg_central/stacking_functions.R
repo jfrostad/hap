@@ -506,9 +506,15 @@ fit_xgboost_child_model <- function(df,
                                     covariates = all_fixed_effects,
                                     weight_column = 'weight',
                                     xg_model_tune = TRUE,
-                                    hyperparameter_filepath = NULL){
+                                    xg_grid = NA,
+                                    xg_ensemble_corr = .5,
+                                    build_ensemble = F,
+                                    hyperparameter_filepath = NULL,
+                                    debug=F) {
 
-  load_R_packages(c("xgboost", "caret"))
+  load_R_packages(c("xgboost", "caret", 'ggrepel', 'caretEnsemble'))
+  
+  if (debug) browser()
 
   # Create stacking directory to save results
   stack_dir <- paste0(outputdir, "stackers/")
@@ -531,35 +537,17 @@ fit_xgboost_child_model <- function(df,
   # If gaussian indicator make objective function linear
   if (indicator_family == "gaussian") objective_function = "reg:linear"
 
-  if(xg_model_tune == F & is.null(hyperparameter_filepath)){
+  if (xg_model_tune == F & is.null(hyperparameter_filepath)) {
     stop("If you are not tuning xgboost you must provide a filepath to chosen hyperparameters./n
          Look at the hyperparameter_filepath argument to this function")
   }
 
-  if (xg_model_tune == T){
+  if (xg_model_tune == T) {
     message("Model tuning xgboost")
 
     # Set grid search as default unless filepath is provided
-    if(is.null(hyperparameter_filepath)){
-      message("Tuning with default hyperparameter settings")
-
-      xg_grid <- expand.grid(nrounds = 100,
-                             max_depth = c(2, 4, 6, 8),
-                             eta = seq(0.02, 0.2, by = .04),
-                             colsample_bytree = seq(.4, 1, by=.2),
-                             min_child_weight = seq(1, 5, by=2),
-                             subsample = seq(.1, 1, by=.1),
-                             gamma = 0)
-
-      #use MLR pkg to make param grids
-      xg_grid <- makeParamSet(makeIntegerParam('nrounds', lower=100L, upper=500L),
-                              makeIntegerParam("max_depth", lower=2L, upper=10L),
-                              makeNumericParam("min_child_weight", lower = 1L, upper = 5L),
-                              makeNumericParam("subsample", lower = 0.1, upper = 1),
-                              makeNumericParam("colsample_bytree", lower = 0.5, upper = 1),
-                              makeDiscreteParam('gamma', 0))
-
-    } else {
+    if(is.null(hyperparameter_filepath)) message("Tuning with default hyperparameter settings")
+    else {
       message("Selecting pre-specified hyperparameter grid")
       hyperparam <- fread(hyperparameter_filepath)
 
@@ -579,120 +567,474 @@ fit_xgboost_child_model <- function(df,
     
     # Set cross validation options, default to 5 times repeated 5-fold cross validation
     # Selection function is "oneSE" to pick simplest model within one standard error of minimum
-    train_control <- trainControl(selectionFunction = "oneSE",
-                                  method = "repeatedcv",
-                                  number = 5,
-                                  repeats = 5,
-                                  index = folds,
-                                  returnResamp = 'all',
-                                  savePredictions = 'all')
+    
+    if (xg_grid %>% is.na) {
+      # Try using an adaptive random search instead of a cartesian grid, should be more efficient
+      train_control <- trainControl(selectionFunction = "oneSE",
+                                    method = "adaptive_cv",
+                                    search = "random",
+                                    adaptive = list(min = 5, alpha = 0.05, 
+                                                    method = "gls", complete = TRUE),
+                                    number = 5,
+                                    repeats = 5,
+                                    index = folds,
+                                    returnResamp = 'all',
+                                    savePredictions = 'all')
+  
+      
+      # Fit model
+      xg_fit <- train(form,
+                      data = df,
+                      trControl = train_control,
+                      verbose = F,
+                      tuneLength = 25, #tune for 25 runs 
+                      metric = "RMSE",
+                      method = "xgbTree",
+                      objective = objective_function,
+                      weights = df$xg_weight)
+    } else {
+      
+      #use provided cartesian grid to search
+      train_control <- trainControl(selectionFunction = "oneSE",
+                                    method = "repeatedcv",
+                                    number = 5,
+                                    repeats = 5,
+                                    index = folds,
+                                    returnResamp = 'all',
+                                    savePredictions = 'all')
+      
+      # Fit model
+      xg_fit <- train(form,
+                      data = df,
+                      trControl = train_control,
+                      verbose = F,
+                      tuneGrid = xg_grid,
+                      metric = "RMSE",
+                      method = "xgbTree",
+                      objective = objective_function,
+                      weights = df$xg_weight)
+    }
+    
+    # find the 2nd best model (balance between lowest correlation to best and highest RMSE)
+    # first pull out the relevant objects from the tuning object
+    best_tune <- xg_fit$bestTune %>% as.data.table %>% setkey
+    message('Found best tune, with parameters: \n')
+      summary(best_tune)
+      
+    tune_cols <- key(best_tune) #capture all the tuning params as a col vector
+    preds <- xg_fit$pred %>% as.data.table %>% setkeyv(., tune_cols)
+    samps <- xg_fit$resample %>% as.data.table %>% setkeyv(., c(tune_cols, 'Resample'))
+    
+    #pull out the best preds
+    best_preds <- preds[best_tune] %>% setkeyv(., key(samps)) # isolate the predictions from best model
+    preds <- preds[!best_tune] %>% setkeyv(., key(samps))  # all other predictions
+    
+    #merge on the preds and calculate the correlation to the best model
+    preds <- merge(preds, best_preds[, .(rowIndex, Resample, best_pred=pred)], by=c('rowIndex', 'Resample'))
+    preds[, model_id := .GRP, by=tune_cols]
+    setkey(preds, model_id, Resample) #key on the model ID and fold
+    preds[, cor := corSpearman(pred, best_pred), by=key(preds)]
+    preds[, pooled_cor := corSpearman(pred, best_pred), by=model_id]
+    
+    #add the samp scores to the preds
+    preds <- merge(preds, samps, by=key(samps)) 
+    
+    #return the results for each model/fold
+    results <- preds[, .(Resample, model_id, cor, pooled_cor, RMSE)] %>% unique(., by=key(.))
+    results[, pooled_rmse := sqrt(sum(RMSE^2, na.rm=T)/5), by=model_id] #calculate the pooled rmse
+    
+    #choose the best model based on having lowest pooled rmse below the pooled cor cutoff
+    results[, second_best := 0]
+    second_best_model_id <- NA
+    
+    #look for a second best model that satisfies the selected correlation cutoff
+    while (second_best_model_id %>% is.na) {
+      
+      message('Searching for second best model using correlation cutoff of ', xg_ensemble_corr)
+      min_rmse <- results[pooled_cor<xg_ensemble_corr, min(pooled_rmse)]
+      
+      # if the min_rmse is >150% of avg. or there is none below cutoff (=is inf.), look again w/ +.05 corr
+      if (min_rmse > mean(results$pooled_rmse)*1.5 | is.infinite(min_rmse)) xg_ensemble_corr <- xg_ensemble_corr + 0.05
+      else {
+        results[pooled_rmse == min_rmse, `:=` (second_best=1, label=model_id)]
+        second_best_model_id <- results[second_best==1, model_id %>% max]
+        message('Found second best tune: #', second_best_model_id, '\nRMSE=',min_rmse)
+      }
+      
+    }
+    
+    #extract the tune settings from the selected second best model
+    second_best_tune <- preds[model_id==second_best_model_id, names(best_tune), with=F][1]
+    message('Second best tune, has parameters: \n')
+      summary(second_best_tune)
+    
+    #rbind the aggregated results too for graphing
+    agg_results <- results[, .(Resample='pooled', model_id=model_id,
+                               cor=pooled_cor, RMSE=pooled_rmse, second_best=second_best, label=label)] %>% 
+      unique(., by='model_id') %>% 
+      list(., results) %>% 
+      rbindlist(use.names = T, fill = T)
+    
+    #graph the results
+    plot <- ggplot(agg_results, aes(x=cor, y=RMSE, label=label)) +
+      geom_point() +
+      geom_vline(xintercept = xg_ensemble_corr, color='red') +
+      geom_text_repel(nudge_y = .25, nudge_x=.75) +
+      facet_wrap(~Resample) +
+      theme_minimal()
+    
+    ggsave(filename = paste0(stack_dir, region, '_xg_ensemble.png'),
+       plot = plot)
 
-    # Fit model
-    xg_fit <- caret::train(form,
-                           data = df,
-                           trControl = train_control,
-                           verbose = F,
-                           tuneGrid = xg_grid,
-                           metric = "RMSE",
-                           method = "xgbTree",
-                           objective = objective_function,
-                           weights = df$xg_weight)
-
-    browser()
-
-    # Save model fit object for future use
+    # Save model fit objects for future use
     saveRDS(xg_fit, paste0(outputdir, 'stackers/xg_fit_', region, ".RDS"))
 
-    # Create plot showing which hyperparameters were selected
-    cv_index <- length(xg_fit$control$index)
-    xg_fit$results <-
-      xg_fit$results %>%
-      mutate(RMSE_low  = RMSE - (RMSESD / sqrt(cv_index)),
-             RMSE_high = RMSE + (RMSESD / sqrt(cv_index)))
-
-    gg1 <-
-      ggplot(xg_fit$results,
-             aes(x = eta,
-                 y = RMSE,
-                 color = factor(max_depth),
-                 shape = factor(max_depth))) +
-      geom_line() +
-      geom_point() +
-      xlim(range(xg_fit$results$eta)[1], range(xg_fit$results$eta)[2]) +
-      labs(x = "Learning rate") +
-      facet_wrap(~ nrounds) +
-      theme_bw() +
-      scale_color_discrete("Max Tree Depth") +
-      scale_shape_discrete("Max Tree Depth")
-
-    error_width <- diff(range(xg_fit$results$eta)) / 50
-
-    gg1 <- gg1 +
-      geom_errorbar(data = xg_fit$results[oneSE(xg_fit$results, "RMSE", cv_index, F),],
-                    aes(x = eta, ymin = RMSE_low, ymax = RMSE_high),
-                    alpha = 0.8,
-                    width = error_width,
-                    size = 0.5,
-                    color = "black")
-
-    ggsave(filename = paste0(stack_dir, region, '_hyperparameter.png'),
-           plot = gg1)
-
     # Save the best parameters to csv file
-    write.csv(xg_fit$bestTune, paste0(stack_dir, 'xgboost_best_tune_', region, '.csv'))
+    write.csv(best_tune, paste0(stack_dir, 'xgboost_best_tune_', region, '.csv'))
+    write.csv(second_best_tune, paste0(stack_dir, 'xgboost_second_best_tune_', region, '.csv'))
+  
   }
+  
+  # if selected, build the ensemble using caretEnsemble
+  if (build_ensemble) {
 
-  if (xg_model_tune == T) {
-    # Extract best parameters
-    xg_best_tune <- read.csv(paste0(stack_dir, 'xgboost_best_tune_', region, '.csv'))
-  } else {
-    # Extract best parameters from filepath
-    xg_best_tune <- read.csv(hyperparameter_filepath)
-  }
-
-  # Define grid search and
-  xg_grid_final <- expand.grid(nrounds = xg_best_tune$nrounds,
-                               max_depth = xg_best_tune$max_depth,
-                               eta = xg_best_tune$eta,
-                               colsample_bytree = .5,
-                               min_child_weight = 1,
-                               subsample = 1,
-                               gamma = 0)
-
+  message('building xgb ensemble')
+  #set up control for the ensemble model
   train_control_final <- trainControl(method = "cv",
                                       number = 5,
                                       savePredictions = "final")
+  
+  #build ensemble
+  xg_ensemble <- caretList(form,
+                           data = df,
+                           trControl = train_control_final,
+                           tuneList = list(xgbTree=caretModelSpec(method="xgbTree", tuneGrid=best_tune),
+                                           xgbTree=caretModelSpec(method="xgbTree", tuneGrid=second_best_tune)),
+                           metric = "RMSE",
+                           objective = objective_function,
+                           weights = df$xg_weight)
 
-  message("Fitting xgboost on final tuned hyperparameters")
-  xg_fit_final <- caret::train(form,
-                               data = df,
-                               trControl = train_control_final,
-                               verbose = F,
-                               tuneGrid = xg_grid_final,
-                               metric = "RMSE",
-                               method = "xgbTree",
-                               objective = objective_function,
-                               weights = df$xg_weight)
+  greedy_ensemble <- caretEnsemble(
+    xg_ensemble,
+    metric="RMSE",
+    trControl=train_control_final)
+  
+  summary(greedy_ensemble)
 
-  # Plot the covariate importance of final model
-  cov_plot <-
-    ggplot(varImp(xg_fit_final, scale = FALSE)) +
-    labs(x = "Covariate", y = "Relative Importance") +
-    theme_bw()
-  ggsave(filename = paste0(stack_dir, region, '_covariate_importance.png'),
-         plot = cov_plot)
+  #Plot variable importance ---------------------------------------------
+  pdf(file=paste0(stack_dir, region, '_xgb_ensemble_covariate_importance.pdf'),
+      height=8, width=12)
+    lapply(greedy_ensemble$models, function(x) varImp(x) %>% plot)
+  dev.off()
 
   # Extract out of sample and in sample predictions
-  df[, 'xgboost_cv_pred'   := arrange(xg_fit_final$pred, rowIndex)[,"pred"]]
-  df[, 'xgboost_full_pred' := predict(xg_fit_final, df)]
+  df[, 'xgboost_cv_pred'   := arrange(greedy_ensemble$ens_model$pred, rowIndex)[,"pred"]]
+  df[, 'xgboost_full_pred' := predict(greedy_ensemble, df)]
 
   # Name model for later use in making stack rasters
-  xg_fit_final$model_name <- "xgboost"
+  greedy_ensemble$model_name <- "xgboost_ensemble"
+  
 
   xgboost <- list(dataset = df[, c('xgboost_cv_pred', 'xgboost_full_pred')],
-                  xgboost = xg_fit_final)
+                  xgboost = greedy_ensemble)
+
+  #otherwise, return both the child models for ensembling in MBG
+  } else {
+    
+    train_control_final <- trainControl(method = "cv",
+                                        number = 5,
+                                        savePredictions = "final")
+    
+    message("Fitting xgboost on final tuned hyperparameters")
+    xg_fit_final <- train(form,
+                          data = df,
+                          trControl = train_control_final,
+                          verbose = F,
+                          tuneGrid = best_tune,
+                          metric = "RMSE",
+                          method = "xgbTree",
+                          objective = objective_function,
+                          weights = df$xg_weight)
+    xg_fit_final_2 <- train(form,
+                            data = df,
+                            trControl = train_control_final,
+                            verbose = F,
+                            tuneGrid = second_best_tune,
+                            metric = "RMSE",
+                            method = "xgbTree",
+                            objective = objective_function,
+                            weights = df$xg_weight)
+
+    #Plot variable importance ---------------------------------------------
+    pdf(file=paste0(stack_dir, region, '_covariate_importance.pdf'),
+        height=8, width=12)
+      lapply(list(xg_fit_final, xg_fit_final_2), function(x) varImp(x) %>% plot)
+    dev.off()
+    
+    # Extract out of sample and in sample predictions
+    df[, 'xgboost_cv_pred'   := arrange(xg_fit_final$pred, rowIndex)[,"pred"]]
+    df[, 'xgboost_full_pred' := predict(xg_fit_final, df)]
+    df[, 'xgboost2_cv_pred'   := arrange(xg_fit_final_2$pred, rowIndex)[,"pred"]]
+    df[, 'xgboost2_full_pred' := predict(xg_fit_final_2, df)]
+    
+    # Name model for later use in making stack rasters
+    xg_fit_final$model_name <- "xgboost"
+    xg_fit_final_2$model_name <- "xgboost2"
+    
+    
+    xgboost <- list(
+      xgboost <- list(dataset = df[, .(xgboost_cv_pred, xgboost_full_pred)],
+                      xgboost = xg_fit_final),
+      xgboost2 <- list(dataset = df[, .(xgboost2_cv_pred, xgboost2_full_pred)],
+                       xgboost2 = xg_fit_final_2)
+    )
+  
+  }
+  
   return(xgboost)
+  
 }
+
+
+#fetch covariate layer
+#given a raster-like object and a period, returns the appropriate layer, assuming chronological order
+fetch_covariate_layer = function(ras, period = 1){
+  if(class(ras) == 'RasterBrick' | class(ras) == "RasterStack"){
+    return(ras[[period]])
+  } else{
+    return(ras)
+  }
+}
+
+# fit_xgb_child_models <- function(df,
+#                                  indicator = indicator,
+#                                  indicator_family = "binomial",
+#                                  outputdir,
+#                                  region,
+#                                  covariates = all_fixed_effects,
+#                                  weight_column = 'weight',
+#                                  xg_model_tune = TRUE,
+#                                  xg_ensemble_corr = .6,
+#                                  hyperparameter_filepath = NULL){
+#   
+#   load_R_packages(c("xgboost", "caret", 'ggrepel'))
+#   #load_R_packages(c("xgboost", "caret", 'caretEnsemble'))
+#   
+#   # Create stacking directory to save results
+#   stack_dir <- paste0(outputdir, "stackers/")
+#   dir.create(stack_dir, showWarnings = F)
+#   
+#   # Create model formula
+#   df <- as.data.table(df)
+#   setnames(df, indicator, "indicator")
+#   form <- as.formula(paste0('indicator ~ ', covariates))
+#   
+#   # Create custom weight column for xgboost, weight * sample size
+#   df[, xg_weight := get(weight_column) * N]
+#   
+#   # Make sure to model in prevalence space if binomial
+#   if (indicator_family == "binomial"){
+#     df[, indicator := indicator / N]
+#     objective_function = "reg:logistic"
+#   }
+#   
+#   # If gaussian indicator make objective function linear
+#   if (indicator_family == "gaussian") objective_function = "reg:linear"
+#   
+#   if (xg_model_tune == F & is.null(hyperparameter_filepath)) {
+#     stop("If you are not tuning xgboost you must provide a filepath to chosen hyperparameters./n
+#          Look at the hyperparameter_filepath argument to this function")
+#   }
+#   
+#   if (xg_model_tune == T) {
+#     message("Model tuning xgboost")
+#     
+#     # Set grid search as default unless filepath is provided
+#     if(is.null(hyperparameter_filepath)) message("Tuning with default hyperparameter settings")
+#     else {
+#       message("Selecting pre-specified hyperparameter grid")
+#       hyperparam <- fread(hyperparameter_filepath)
+#       
+#       # Define grid search from the pre-specified hyperparameter settings
+#       xg_grid <- expand.grid(nrounds = hyperparam$nrounds,
+#                              max_depth = eval(parse(text=hyperparam$max_depth)),
+#                              eta = eval(parse(text=hyperparam$eta)),
+#                              colsample_bytree = .5,
+#                              min_child_weight = 1,
+#                              subsample = 1,
+#                              gamma = 0)
+#       
+#     }
+#     
+#     # Specify the training folds using NID to account for dependence and prevent overfitting
+#     folds <- groupKFold(df$nid, k = 5) 
+#     
+#     # Set cross validation options, default to 5 times repeated 5-fold cross validation
+#     # Selection function is "oneSE" to pick simplest model within one standard error of minimum
+#     train_control <- trainControl(selectionFunction = "oneSE",
+#                                   method = "repeatedcv",
+#                                   number = 5,
+#                                   repeats = 5,
+#                                   index = folds,
+#                                   returnResamp = 'all',
+#                                   savePredictions = 'all')
+#     
+#     # Fit model
+#     xg_fit <- train(form,
+#                            data = df,
+#                            trControl = train_control,
+#                            verbose = F,
+#                            tuneGrid = xg_grid,
+#                            metric = "RMSE",
+#                            method = "xgbTree",
+#                            objective = objective_function,
+#                            weights = df$xg_weight)
+#     
+#     # find the 2nd best model (balance between lowest correlation to best and highest RMSE)
+#     # first pull out the relevant objects from the tuning object
+#     best_tune <- xg_fit$bestTune %>% as.data.table %>% setkey
+#     message('Found best tune, with parameters: \n')
+#     summary(best_tune)
+#     
+#     tune_cols <- key(best_tune) #capture all the tuning params as a col vector
+#     preds <- xg_fit$pred %>% as.data.table %>% setkeyv(., tune_cols)
+#     samps <- xg_fit$resample %>% as.data.table %>% setkeyv(., c(tune_cols, 'Resample'))
+#     
+#     #pull out the best preds
+#     best_preds <- preds[best_tune] %>% setkeyv(., key(samps)) # isolate the predictions from best model
+#     preds <- preds[!best_tune] %>% setkeyv(., key(samps))  # all other predictions
+#     
+#     #merge on the preds and calculate the correlation to the best model
+#     preds <- merge(preds, best_preds[, .(rowIndex, Resample, best_pred=pred)], by=c('rowIndex', 'Resample'))
+#     preds[, model_id := .GRP, by=tune_cols]
+#     setkey(preds, model_id, Resample) #key on the model ID and fold
+#     preds[, cor := corSpearman(pred, best_pred), by=key(preds)]
+#     preds[, pooled_cor := corSpearman(pred, best_pred), by=model_id]
+#     
+#     #add the samp scores to the preds
+#     preds <- merge(preds, samps, by=key(samps)) 
+#     
+#     #return the results for each model/fold
+#     results <- preds[, .(Resample, model_id, cor, pooled_cor, RMSE)] %>% unique(., by=key(.))
+#     results[, pooled_rmse := sqrt(sum(RMSE^2)/5), by=model_id] #calculate the pooled rmse
+#     
+#     #choose the best model based on having lowest pooled rmse below the pooled cor cutoff
+#     results[, second_best := 0]
+#     second_best_model_id <- NA
+#     
+#     #look for a second best model that satisfies the selected correlation cutoff
+#     while (second_best_model_id %>% is.na) {
+#       
+#       message('Searching for second best model using correlation cutoff of ', xg_ensemble_corr)
+#       min_rmse <- results[pooled_cor<xg_ensemble_corr, min(pooled_rmse)]
+#       
+#       # if the min_rmse is >150% of avg. or there is none below cutoff (=is inf.), look again w/ +.05 corr
+#       if (min_rmse > mean(results$pooled_rmse)*1.5 | is.infinite(min_rmse)) xg_ensemble_corr <- xg_ensemble_corr + 0.05
+#       else {
+#         results[pooled_rmse == min_rmse, `:=` (second_best=1, label=model_id)]
+#         second_best_model_id <- results[second_best==1, model_id %>% max]
+#         message('Found second best tune: #', second_best_model_id, '\nRMSE=',min_rmse)
+#       }
+#       
+#     }
+#     
+#     #extract the tune settings from the selected second best model
+#     second_best_tune <- preds[model_id==second_best_model_id, names(best_tune), with=F][1]
+#     message('Second best tune, has parameters: \n')
+#     summary(second_best_tune)
+#     
+#     #rbind the aggregated results too for graphing
+#     agg_results <- results[, .(Resample='pooled', model_id=model_id,
+#                                cor=pooled_cor, RMSE=pooled_rmse, second_best=second_best, label=label)] %>% 
+#       unique(., by='model_id') %>% 
+#       list(., results) %>% 
+#       rbindlist(use.names = T, fill = T)
+#     
+#     #graph the results
+#     plot <- ggplot(agg_results, aes(x=cor, y=RMSE, label=label)) +
+#       geom_point() +
+#       geom_vline(xintercept = xg_ensemble_corr, color='red') +
+#       geom_text_repel(nudge_y = .25, nudge_x=.75) +
+#       facet_wrap(~Resample) +
+#       theme_minimal()
+#     
+#     ggsave(filename = paste0(stack_dir, region, '_xg_ensemble.png'),
+#            plot = plot)
+#     
+#     # Save model fit objects for future use
+#     saveRDS(xg_fit, paste0(outputdir, 'stackers/xg_fit_', region, ".RDS"))
+#     
+#     # Save the best parameters to csv file
+#     write.csv(best_tune, paste0(stack_dir, 'xgboost_best_tune_', region, '.csv'))
+#     write.csv(second_best_tune, paste0(stack_dir, 'xgboost_second_best_tune_', region, '.csv'))
+#     
+#   }
+#   
+#   # 
+#   #   if (xg_model_tune == T) {
+#   #     # Extract best parameters
+#   #     xg_best_tune <- read.csv(paste0(stack_dir, 'xgboost_best_tune_', region, '.csv'))
+#   #   } else {
+#   #     # Extract best parameters from filepath
+#   #     xg_best_tune <- read.csv(hyperparameter_filepath)
+#   #   }
+#   
+#   # Define grid search and
+#   # xg_grid_final <- expand.grid(nrounds = xg_best_tune$nrounds,
+#   #                              max_depth = xg_best_tune$max_depth,
+#   #                              eta = xg_best_tune$eta,
+#   #                              colsample_bytree = .5,
+#   #                              min_child_weight = 1,
+#   #                              subsample = 1,
+#   #                              gamma = 0)
+#   
+#   train_control_final <- trainControl(method = "cv",
+#                                       number = 5,
+#                                       savePredictions = "final")
+# 
+#   message("Fitting xgboost on final tuned hyperparameters")
+#   xg_fit_final <- train(form,
+#                                data = df,
+#                                trControl = train_control_final,
+#                                verbose = F,
+#                                tuneGrid = best_tune,
+#                                metric = "RMSE",
+#                                method = "xgbTree",
+#                                objective = objective_function,
+#                                weights = df$xg_weight)
+#   xg_fit_final_2 <- train(form,
+#                                  data = df,
+#                                  trControl = train_control_final,
+#                                  verbose = F,
+#                                  tuneGrid = second_best_tune,
+#                                  metric = "RMSE",
+#                                  method = "xgbTree",
+#                                  objective = objective_function,
+#                                  weights = df$xg_weight)
+#   
+#   # Plot variable importance ---------------------------------------------
+#   # pdf(file=paste0(stack_dir, region, '_covariate_importance.pdf'),
+#   #     height=8, width=12)
+#   #   lapply(greedy_ensemble$models, function(x) varImp(x) %>% plot)
+#   # dev.off()
+#   
+#   # Extract out of sample and in sample predictions
+#   df[, 'xgboost_cv_pred'   := arrange(xg_fit_final$pred, rowIndex)[,"pred"]]
+#   df[, 'xgboost_full_pred' := predict(xg_fit_final, df)]
+#   df[, 'xgboost2_cv_pred'   := arrange(xg_fit_final_2$pred, rowIndex)[,"pred"]]
+#   df[, 'xgboost2_full_pred' := predict(xg_fit_final_2, df)]
+#   
+#   # Name model for later use in making stack rasters
+#   xg_fit_final$model_name <- "xgboost"
+#   xg_fit_final_2$model_name <- "xgboost2"
+#   
+#   
+#   xgboost <- list(dataset = df[, c('xgboost_cv_pred', 'xgboost_full_pred', 'xgboost2_cv_pred', 'xgboost2_full_pred')],
+#                   xgboost = xg_fit_final,
+#                   xgboost2 = xg_fit_final_2)
+#   return(xgboost)
+# 
+# }
 
 
 #fetch covariate layer
@@ -819,6 +1161,7 @@ predict_model_raster = function(model_call,
 
 
   message(paste0('predicting out:', model_call$model_name))
+  
   #convert the raster objects into a named matrix
   dm = as.data.frame(stack(covariate_layers),xy =T)
 
@@ -841,9 +1184,7 @@ predict_model_raster = function(model_call,
   #drop rows with NA data
   dm = na.omit(dm)
 
-
   #if a gam or a bam
-  #class(model_call)
   if(inherits(model_call, 'gam') | inherits(model_call, 'bam')){
 
     ret_obj = predict(model_call, newdata =dm, type = 'response')
@@ -853,14 +1194,11 @@ predict_model_raster = function(model_call,
         ret_obj = predict(model_call, newdata=dm, n.trees = model_call$n.trees, type = 'response')
 
   } else if(inherits(model_call, 'glmnet')){
+    
     #glmnet is dumb and wants a matrix for new data
-
-
     dm_n = names(dm)
     dm = as.matrix(dm)
     colnames(dm) = dm_n
-
-    #predict(object, newx, s = NULL, type=c("link","response","coefficients","nonzero","class"), exact = FALSE, offset, ...)
 
     ret_obj = predict(model_call, newx = data.matrix(dm[,rownames(model_call$beta)]), s=model_call$cv_1se_lambda, type = 'link')
 
@@ -886,14 +1224,12 @@ predict_model_raster = function(model_call,
     ret_obj = predict(model_call, newdata=dm, type = 'response')
     colnames(ret_obj) ='ret_obj'
 
-  } else if (inherits(model_call, 'train')) {
+  } else if (inherits(model_call, c('train', 'caretEnsemble', 'caretStack'))) {
     # All caret objects use this framework
     ret_obj = predict(model_call, newdata = dm)
-  }
-
+  } 
+  
   #convert back to a raster
-
-  #rasterFromXYZ(xyz, res=c(NA,NA), crs=NA, digits=5)
   ret_obj = cbind(data.frame(rid = dm[,c('rid')]), ret_obj = ret_obj)
 
   #restore to former glory

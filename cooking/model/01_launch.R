@@ -26,6 +26,7 @@ message(indicator)
 ## Singularity version
 sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
 which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg')
+which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v4.simg')
 
 ## Load MBG packages
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
@@ -98,6 +99,15 @@ if (stacked_fixed_effects %like% 'gbm') {
   gbm_cv <- NA
   gbm_tc <- NA
   gbm_bf <- NA
+  
+}
+
+## Set xgboost options
+if (any(grepl('xgboost', stacked_fixed_effects))) {
+  
+  xg_grid_search <- T #set TRUE to search the default grid, FALSE for adaptive random search
+  xg_ensemble <- T #set TRUE in order to build/return an xgboost ensemble using caretensemble
+  xg_second_best <- F #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
   
 }
 

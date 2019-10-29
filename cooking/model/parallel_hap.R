@@ -31,7 +31,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(fasterize, fst, mgsub, mlr)
+pacman::p_load(caretEnsemble, ccaPP, fasterize, fst, mgsub)
 
 
 #detect if running in rstudio IDE
@@ -43,9 +43,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'VNM'
+  reg                      <- 'THA'
   age                      <- 0
-  run_date                 <- "2019_10_16_14_53_16"
+  run_date                 <- "2019_10_25_12_59_45"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -76,6 +76,15 @@ if (interactive) {
     gbm_cv <- NA
     gbm_tc <- NA
     gbm_bf <- NA
+    
+  }
+  
+  ## Set xgboost options
+  if (any(grepl('xgboost', stacked_fixed_effects))) {
+    
+    xg_grid_search <- FALSE #set TRUE to search the default grid, FALSE for adaptive random search
+    xg_ensemble <- F #set TRUE in order to build/return an xgboost ensemble using caretensemble
+    xg_second_best <- T #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
     
   }
   
@@ -124,6 +133,29 @@ sessionInfo()
 message('Loading in required R packages and MBG functions')
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
+
+#use your own diacritics fx, due to inscrutable error
+#note: requires mgsub pkg
+#TODO submit PR
+fix_diacritics <<- function(x) {
+  
+  require(mgsub)
+  
+  #first define replacement patterns as a named list
+  defs <-
+    list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', 
+         '??'='C', '??'='E', '??'='E','??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', 
+         '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U','??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', 
+         '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c','??'='e', '??'='e', '??'='e', 
+         '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
+         '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y', '??'='Ss')
+  
+  #then force conversion to UTF-8 and replace with non-diacritic character
+  enc2utf8(x) %>% 
+    mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
+    return
+  
+}
 
 ## Throw a check for things that are going to be needed later
 message('Looking for things in the config that will be needed for this script to run properly')
@@ -252,7 +284,7 @@ if(as.logical(skiptoinla) == FALSE){
   }
   
   ## if testing, we only keep 1000 or so observations
-  if(test == 1){
+  if (test){
     test_pct <- as.numeric(test_pct)
     
     message(paste0('Test option was set on and the test_pct argument was found at ',test_pct,'% \n
@@ -380,7 +412,6 @@ if(as.logical(skiptoinla) == FALSE){
   ## Stop here if just running covariate selection
   if (covariate_plotting_only == TRUE) stop('You have chosen to stop here to select covariates before running stacking and MBG.')
   
-  
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   ## ~~~~~~~~~~~~~~~~~~~~~~~~ Stacking ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -446,17 +477,25 @@ if(as.logical(skiptoinla) == FALSE){
     # sourcing this script will run the child stackers:
     source(paste0(core_repo, '/mbg_central/share_scripts/run_child_stackers.R'))
     
+    #add in the second best xgboost model to ensemble
+    #TODO this is janky but needs to be done w/o more rewriting the next couple of functions
+    if ('xgboost' %in% child_model_names & !xg_ensemble & xg_second_best) {  
+        child_model_names <- c(child_model_names, 'xgboost2')
+        xgboost2 <- xgboost[[2]]
+        xgboost <- xgboost[[1]]
+    }
+
     ## combine the children models
-    the_data  <- cbind(the_data, do.call(cbind, lapply(lapply(child_model_names, 'get'), function(x) x[[1]])))
-    child_model_objs <- setNames(lapply(lapply(child_model_names, 'get'), function(x) x[[2]]), child_model_names)
-    
+    the_data  <- cbind(the_data, do.call(cbind, lapply(lapply(child_model_names, 'get'), function(x) x[['dataset']])))
+    child_model_objs <- lapply(child_model_names, function(x) get(x) %>% .[[x]]) %>% setNames(., child_model_names) 
+
     ## return the stacked rasters
     stacked_rasters <- make_stack_rasters(covariate_layers = all_cov_layers, #raster layers and bricks
                                           period           = min(period_map[, period_id]):max(period_map[, period_id]),
                                           child_models     = child_model_objs,
                                           indicator_family = indicator_family,
                                           centre_scale_df  = covs_cs_df)
-    
+
     ## plot stackers
     pdf(paste0(outputdir, 'stacker_rasters', pathaddin, '.pdf'))
     for(i in 1:length(stacked_rasters))

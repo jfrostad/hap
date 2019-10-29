@@ -30,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(data.table, fasterize, fst, magrittr, mgsub)
+pacman::p_load(data.table, fasterize, fst, googledrive, magrittr, mgsub)
 
 #running interactively?
 interactive <- T
@@ -46,7 +46,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/',
-                '2019_10_16_20_55_18',
+                '2019_10_28_21_53_23',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
@@ -287,7 +287,8 @@ if (new_vetting) {
 #read in vetting sheet
 vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='1. Vetting', skip=1) %>% 
   as.data.table %>% 
-  .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] #subset to relevant columns
+  .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] %>%  #subset to relevant columns
+  unique(., by=names(.)) #TODO find out why there are duplicates in the sheet
 
 #merge onto data
 mbg <- merge(mbg, vetting, by='nid', all.x=T)
@@ -327,7 +328,7 @@ if (use_stacking_covs) {
                               run_date, 
                               raked=raked,
                               vetting_colorscale=vetting_colors,
-                              debug=F)
+                              debug=T)
   )
   
 }

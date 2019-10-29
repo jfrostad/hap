@@ -49,7 +49,8 @@ if ('gbm' %in% child_model_names) {
 }
 
 #Fit a BRT model with Xgboost (faster than GBM)
-if ('xgboost' %in% child_model_names){
+#TODO cleanup this control flow
+if ('xgboost' %in% child_model_names) {
   tic("Stacking - Xgboost")
 
   if (!exists("xg_model_tune")){
@@ -58,15 +59,29 @@ if ('xgboost' %in% child_model_names){
     hyperparameter_filepath = NULL
   }
 
-  if (xg_model_tune == T & !exists("hyperparameter_filepath")){
+  if (as.logical(xg_model_tune) & xg_grid_search){
     message("Tuning xgboost on default grid search")
     hyperparameter_filepath = NULL
+    xg_grid <- expand.grid(nrounds = 100,
+                           max_depth = c(2, 4, 6, 8),
+                           eta = seq(0.02, 0.2, by = .04),
+                           colsample_bytree = seq(.4, 1, by=.2),
+                           min_child_weight = seq(1, 5, by=2),
+                           subsample = seq(.1, 1, by=.1),
+                           gamma = 0)
+  } else {
+    message("Tuning xgboost with adaptive random search")
+    xg_grid <- NA
+    hyperparameter_filepath = NULL
+    
   }
   
-  if (xg_model_tune == T & exists("hyperparameter_filepath")){
-    message("Tuning xgboost on pre-specified grid search")
-  }
-  
+  # if (xg_model_tune & exists("hyperparameter_filepath")){
+  #   message("Tuning xgboost on pre-specified grid search")
+  #   #TODO
+  # }
+
+  #fit xgboost model
   xgboost <- fit_xgboost_child_model(df = the_data,
                                      covariates = all_fixed_effects,
                                      weight_column = 'weight',
@@ -75,7 +90,10 @@ if ('xgboost' %in% child_model_names){
                                      outputdir = outputdir,
                                      region = reg,
                                      xg_model_tune = xg_model_tune,
+                                     xg_grid = xg_grid,
+                                     build_ensemble = xg_ensemble,
                                      hyperparameter_filepath = hyperparameter_filepath)
+
   toc(log = T)
 }
 
