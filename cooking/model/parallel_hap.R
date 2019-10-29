@@ -81,11 +81,11 @@ if (interactive) {
   
   ## Set xgboost options
   if (any(grepl('xgboost', stacked_fixed_effects))) {
-    
+
     xg_grid_search <- FALSE #set TRUE to search the default grid, FALSE for adaptive random search
     xg_ensemble <- F #set TRUE in order to build/return an xgboost ensemble using caretensemble
     xg_second_best <- T #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
-    
+
   }
   
 } else {
@@ -511,6 +511,7 @@ if(as.logical(skiptoinla) == FALSE){
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
   ## set the fixed effects to use in INLA based on config args
+  #TODO this control flow could be more legible
   if(!as.logical(use_stacking_covs) & !as.logical(use_raw_covs) & !as.logical(use_inla_country_fes)){
     all_fixed_effects <- ''
   }
@@ -535,6 +536,9 @@ if(as.logical(skiptoinla) == FALSE){
   if(as.logical(use_stacking_covs) & as.logical(use_raw_covs) & as.logical(use_inla_country_fes)){
     all_fixed_effects <- paste(stacked_fixed_effects, fixed_effects, paste(names(gaul_code)[2:length(names(gaul_code))], collapse = " + "), sep = " + ")
   }
+  
+  #TODO currently janky but necessary to implement the second xgboost child in the current framework
+  if(xg_second_best) all_fixed_effects <- paste(all_fixed_effects, 'xgboost2', sep = " + ")
   
   ## copy things back over to df
   df <- copy(the_data)
@@ -738,9 +742,8 @@ N       <- df$N                  # N_i - total obs in cluster
 weights <- df$weight
 
 ## catch in case there is no weight column
-if(is.null(weights)){
-  weights = rep(1,nrow(df))
-}
+if(weights %>% is.null) weights = rep(1,nrow(df))
+
 
 tic("MBG - fit model") ## Start MBG - model fit timer
 
@@ -781,7 +784,8 @@ if(!as.logical(skipinla)) {
                          verbose_output   = TRUE,
                          fe_sd_prior      = 1 / 9, ## this actually sets precision!. prec=1/9 -> sd=3
                          pardiso_license  = '/ihme/homes/jfrostad/licenses/pardiso.lic',
-                         omp_strat        = 'pardiso.parallel') 
+                         omp_strat        = 'pardiso.parallel'
+                         ) 
   }
   
   if(fit_with_tmb == TRUE) {

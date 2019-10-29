@@ -102,14 +102,14 @@ if (stacked_fixed_effects %like% 'gbm') {
   
 }
 
-## Set xgboost options
-if (any(grepl('xgboost', stacked_fixed_effects))) {
-  
-  xg_grid_search <- T #set TRUE to search the default grid, FALSE for adaptive random search
-  xg_ensemble <- T #set TRUE in order to build/return an xgboost ensemble using caretensemble
-  xg_second_best <- F #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
-  
-}
+# ## Set xgboost options
+# if (any(grepl('xgboost', stacked_fixed_effects))) {
+#   
+#   xg_grid_search <- T #set TRUE to search the default grid, FALSE for adaptive random search
+#   xg_ensemble <- T #set TRUE in order to build/return an xgboost ensemble using caretensemble
+#   xg_second_best <- F #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
+#   
+# }
 
 # ## Record model parameters in google sheet ORZ Model Tracker
 # library('googlesheets')

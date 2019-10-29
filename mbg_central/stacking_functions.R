@@ -745,7 +745,7 @@ fit_xgboost_child_model <- function(df,
                                         number = 5,
                                         savePredictions = "final")
     
-    message("Fitting xgboost on final tuned hyperparameters")
+    message("Fitting xgboost children on final best/second best tuned hyperparameters")
     xg_fit_final <- train(form,
                           data = df,
                           trControl = train_control_final,
