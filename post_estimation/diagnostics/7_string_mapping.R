@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 09/11/2018 (never forget)
 # Purpose: Exploring data coverage across indicators for hap
-# source("/homes/jfrostad/_code/lbd/hap/diagnostics/7_string_mapping.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/7_string_mapping.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -55,7 +55,7 @@ today <- "2019_03_26" #date of current post-extraction
 #options
 cores <- 10
 new.gbd.results <- F #set T if GBD results have been updated and need to redownload
-new.extracts <- F
+new.extracts <- T
 topic <- "hap"
 this.family <- 'cooking'
 indicators <- c('cooking_fuel', 'cooking_type', 'cooking_type_chimney', 'cooking_location', 

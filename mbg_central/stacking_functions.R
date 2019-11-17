@@ -505,6 +505,7 @@ fit_xgboost_child_model <- function(df,
                                     region,
                                     covariates = all_fixed_effects,
                                     weight_column = 'weight',
+                                    k_folds = 5, #use 5-fold NID crossvalidation by default
                                     xg_model_tune = TRUE,
                                     xg_grid = NA,
                                     xg_ensemble_corr = .5,
@@ -563,19 +564,21 @@ fit_xgboost_child_model <- function(df,
     }
 
     # Specify the training folds using NID to account for dependence and prevent overfitting
-    folds <- groupKFold(df$nid, k = 5) 
+    k_folds <- uniqueN(df$nid) %>% ifelse(.<k_folds, ., k_folds) #make sure that nid count > k
+    folds <- groupKFold(df$nid, k = k_folds) 
     
     # Set cross validation options, default to 5 times repeated 5-fold cross validation
     # Selection function is "oneSE" to pick simplest model within one standard error of minimum
     
     if (xg_grid %>% is.na) {
+      message('Tuning XGBoost using adaptive random search')
       # Try using an adaptive random search instead of a cartesian grid, should be more efficient
       train_control <- trainControl(selectionFunction = "oneSE",
                                     method = "adaptive_cv",
                                     search = "random",
                                     adaptive = list(min = 5, alpha = 0.05, 
                                                     method = "gls", complete = TRUE),
-                                    number = 5,
+                                    number = k_folds,
                                     repeats = 5,
                                     index = folds,
                                     returnResamp = 'all',
@@ -593,11 +596,11 @@ fit_xgboost_child_model <- function(df,
                       objective = objective_function,
                       weights = df$xg_weight)
     } else {
-      
+      message('Tuning XGBoost using cartesian grid search')
       #use provided cartesian grid to search
       train_control <- trainControl(selectionFunction = "oneSE",
                                     method = "repeatedcv",
-                                    number = 5,
+                                    number = k_folds,
                                     repeats = 5,
                                     index = folds,
                                     returnResamp = 'all',
@@ -629,39 +632,55 @@ fit_xgboost_child_model <- function(df,
     best_preds <- preds[best_tune] %>% setkeyv(., key(samps)) # isolate the predictions from best model
     preds <- preds[!best_tune] %>% setkeyv(., key(samps))  # all other predictions
     
+    #add the samp scores to the preds
+    best_preds <- merge(best_preds, samps, by=key(samps))
+    preds <- merge(preds, samps, by=key(samps)) 
+
     #merge on the preds and calculate the correlation to the best model
-    preds <- merge(preds, best_preds[, .(rowIndex, Resample, best_pred=pred)], by=c('rowIndex', 'Resample'))
+    preds <- merge(preds, best_preds[, .(rowIndex, Resample, best_pred=pred, best_rmse=RMSE)], by=c('rowIndex', 'Resample'))
+    preds[, delta_rmse := RMSE-best_rmse]
     preds[, model_id := .GRP, by=tune_cols]
     setkey(preds, model_id, Resample) #key on the model ID and fold
     preds[, cor := corSpearman(pred, best_pred), by=key(preds)]
     preds[, pooled_cor := corSpearman(pred, best_pred), by=model_id]
-    
-    #add the samp scores to the preds
-    preds <- merge(preds, samps, by=key(samps)) 
+    preds[, pooled_rmse := RMSE(pred, obs), by=model_id]
+    preds[, pooled_delta_rmse := pooled_rmse-RMSE(best_preds$pred, best_preds$obs), by=model_id]
     
     #return the results for each model/fold
-    results <- preds[, .(Resample, model_id, cor, pooled_cor, RMSE)] %>% unique(., by=key(.))
-    results[, pooled_rmse := sqrt(sum(RMSE^2, na.rm=T)/5), by=model_id] #calculate the pooled rmse
+    results <- preds[, .(Resample, model_id, cor, pooled_cor, RMSE, pooled_rmse, delta_rmse, pooled_delta_rmse)] %>% 
+      unique(., by=key(.))
+    #results[, pooled_rmse_2 := sqrt(sum(RMSE^2, na.rm=T)/5), by=model_id] #calculate the pooled rmse
     
     #choose the best model based on having lowest pooled rmse below the pooled cor cutoff
     results[, second_best := 0]
     second_best_model_id <- NA
     
-    #look for a second best model that satisfies the selected correlation cutoff
-    while (second_best_model_id %>% is.na) {
-      
-      message('Searching for second best model using correlation cutoff of ', xg_ensemble_corr)
-      min_rmse <- results[pooled_cor<xg_ensemble_corr, min(pooled_rmse)]
-      
-      # if the min_rmse is >150% of avg. or there is none below cutoff (=is inf.), look again w/ +.05 corr
-      if (min_rmse > mean(results$pooled_rmse)*1.5 | is.infinite(min_rmse)) xg_ensemble_corr <- xg_ensemble_corr + 0.05
-      else {
-        results[pooled_rmse == min_rmse, `:=` (second_best=1, label=model_id)]
-        second_best_model_id <- results[second_best==1, model_id %>% max]
-        message('Found second best tune: #', second_best_model_id, '\nRMSE=',min_rmse)
-      }
-      
-    }
+    #use instead, the best model that is below the 10% pooled correlation value
+    #TODO make the .1 a fx argument
+    xg_ensemble_corr <- quantile(results$pooled_cor, probs=.1)
+    results[pooled_delta_rmse == results[pooled_cor < xg_ensemble_corr, pooled_delta_rmse %>% min], 
+            `:=` (second_best=1, label=model_id)]
+    second_best_model_id <- results[second_best==1, model_id %>% max]
+    
+    message('Found second best tune: #', second_best_model_id, '\ndelta RMSE=',
+            results[second_best==1, pooled_delta_rmse %>% max] %>% round(2), 
+            '\n-->model had ', xg_ensemble_corr %>% round(2), ' correlation w/ best')
+    
+    # #look for a second best model that satisfies the selected correlation cutoff
+    # while (second_best_model_id %>% is.na) {
+    #   
+    #   message('Searching for second best model using correlation cutoff of ', xg_ensemble_corr)
+    #   min_rmse <- results[pooled_cor<xg_ensemble_corr, min(pooled_rmse)]
+    #   
+    #   # if the min_rmse is >150% of avg. or there is none below cutoff (=is inf.), look again w/ +.05 corr
+    #   if (min_rmse > mean(results$pooled_rmse)*1.5 | is.infinite(min_rmse)) xg_ensemble_corr <- xg_ensemble_corr + 0.05
+    #   else {
+    #     results[pooled_rmse == min_rmse, `:=` (second_best=1, label=model_id)]
+    #     second_best_model_id <- results[second_best==1, model_id %>% max]
+    #     message('Found second best tune: #', second_best_model_id, '\nRMSE=',min_rmse)
+    #   }
+    #   
+    # }
     
     #extract the tune settings from the selected second best model
     second_best_tune <- preds[model_id==second_best_model_id, names(best_tune), with=F][1]
@@ -670,7 +689,7 @@ fit_xgboost_child_model <- function(df,
     
     #rbind the aggregated results too for graphing
     agg_results <- results[, .(Resample='pooled', model_id=model_id,
-                               cor=pooled_cor, RMSE=pooled_rmse, second_best=second_best, label=label)] %>% 
+                               cor=pooled_cor, RMSE=pooled_delta_rmse, second_best=second_best, label=label)] %>% 
       unique(., by='model_id') %>% 
       list(., results) %>% 
       rbindlist(use.names = T, fill = T)
@@ -695,15 +714,16 @@ fit_xgboost_child_model <- function(df,
   
   }
   
+  #set up control for the ensemble model
+  train_control_final <- trainControl(method = "cv",
+                                      number = k_folds,
+                                      savePredictions = "final")
+  
   # if selected, build the ensemble using caretEnsemble
   if (build_ensemble) {
 
   message('building xgb ensemble')
-  #set up control for the ensemble model
-  train_control_final <- trainControl(method = "cv",
-                                      number = 5,
-                                      savePredictions = "final")
-  
+
   #build ensemble
   xg_ensemble <- caretList(form,
                            data = df,
@@ -740,12 +760,9 @@ fit_xgboost_child_model <- function(df,
 
   #otherwise, return both the child models for ensembling in MBG
   } else {
-    
-    train_control_final <- trainControl(method = "cv",
-                                        number = 5,
-                                        savePredictions = "final")
-    
+
     message("Fitting xgboost children on final best/second best tuned hyperparameters")
+    
     xg_fit_final <- train(form,
                           data = df,
                           trControl = train_control_final,

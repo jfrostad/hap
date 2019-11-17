@@ -33,7 +33,6 @@ if (Sys.info()["sysname"] == "Linux") {
 #TODO request adds to lbd singularity
 pacman::p_load(caretEnsemble, ccaPP, fasterize, fst, mgsub)
 
-
 #detect if running in rstudio IDE
 debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
@@ -45,7 +44,7 @@ if (interactive) {
   ## set arguments
   reg                      <- 'THA'
   age                      <- 0
-  run_date                 <- "2019_10_25_12_59_45"
+  run_date                 <- "2019_10_31_21_21_52"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -82,9 +81,9 @@ if (interactive) {
   ## Set xgboost options
   if (any(grepl('xgboost', stacked_fixed_effects))) {
 
-    xg_grid_search <- FALSE #set TRUE to search the default grid, FALSE for adaptive random search
-    xg_ensemble <- F #set TRUE in order to build/return an xgboost ensemble using caretensemble
-    xg_second_best <- T #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
+    # xg_grid_search <- FALSE #set TRUE to search the default grid, FALSE for adaptive random search
+    # xg_ensemble <- F #set TRUE in order to build/return an xgboost ensemble using caretensemble
+    # xg_second_best <- T #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
 
   }
   
@@ -139,16 +138,14 @@ mbg_setup(package_list = package_list, repos = core_repo)
 #TODO submit PR
 fix_diacritics <<- function(x) {
   
-  require(mgsub)
-  
   #first define replacement patterns as a named list
   defs <-
-    list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', 
-         '??'='C', '??'='E', '??'='E','??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', 
-         '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U','??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', 
-         '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c','??'='e', '??'='e', '??'='e', 
-         '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
-         '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y', '??'='Ss')
+    list('Š'='S', 'š'='s', 'Ž'='Z', 'ž'='z', 'À'='A', 'Á'='A', 'Â'='A', 'Ã'='A', 'Ä'='A', 'Å'='A', 'Æ'='A', 
+         'Ç'='C', 'È'='E', 'É'='E','Ê'='E', 'Ë'='E', 'Ì'='I', 'Í'='I', 'Î'='I', 'Ï'='I', 'Ñ'='N', 'Ò'='O', 
+         'Ó'='O', 'Ô'='O', 'Õ'='O', 'Ö'='O', 'Ø'='O', 'Ù'='U','Ú'='U', 'Û'='U', 'Ü'='U', 'Ý'='Y', 'Þ'='B', 
+         'à'='a', 'á'='a', 'â'='a', 'ã'='a', 'ä'='a', 'å'='a', 'æ'='a', 'ç'='c','è'='e', 'é'='e', 'ê'='e', 
+         'ë'='e', 'ì'='i', 'í'='i', 'î'='i', 'ï'='i', 'ð'='o', 'ñ'='n', 'ò'='o', 'ó'='o', 'ô'='o', 'õ'='o',
+         'ö'='o', 'ø'='o', 'ù'='u', 'ú'='u', 'û'='u', 'ý'='y', 'ý'='y', 'þ'='b', 'ÿ'='y', 'ß'='Ss')
   
   #then force conversion to UTF-8 and replace with non-diacritic character
   enc2utf8(x) %>% 
@@ -178,7 +175,8 @@ record_git_status(core_repo = core_repo, check_core_repo = TRUE)
 #if(grepl("geos", Sys.info()[4])) INLA:::inla.dynload.workaround()
 
 ## cores to use
-cores_to_use <- 6
+cores_to_use <- ifelse(Sys.getenv("OMP_NUM_THREADS")=='', 6, Sys.getenv("OMP_NUM_THREADS"))
+message('Running calculations with, ', cores_to_use, ' cores.')
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -479,7 +477,7 @@ if(as.logical(skiptoinla) == FALSE){
     
     #add in the second best xgboost model to ensemble
     #TODO this is janky but needs to be done w/o more rewriting the next couple of functions
-    if ('xgboost' %in% child_model_names & !xg_ensemble & xg_second_best) {  
+    if ('xgboost' %in% child_model_names & !as.logical(xg_ensemble) & as.logical(xg_second_best)) {  
         child_model_names <- c(child_model_names, 'xgboost2')
         xgboost2 <- xgboost[[2]]
         xgboost <- xgboost[[1]]
@@ -538,7 +536,7 @@ if(as.logical(skiptoinla) == FALSE){
   }
   
   #TODO currently janky but necessary to implement the second xgboost child in the current framework
-  if(xg_second_best) all_fixed_effects <- paste(all_fixed_effects, 'xgboost2', sep = " + ")
+  if(xg_second_best %>% as.logical) all_fixed_effects <- paste(all_fixed_effects, 'xgboost2', sep = " + ")
   
   ## copy things back over to df
   df <- copy(the_data)
@@ -683,6 +681,8 @@ tic("MBG - all") ## Start MBG master timer
 if(as.logical(use_stacking_covs)){
   df[, paste0(child_model_names) := lapply(child_model_names, function(x) get(paste0(x,'_cv_pred')))]
 }
+
+browser()
 
 ## Generate MBG formula for INLA call (will run but not used by TMB)
 mbg_formula <- build_mbg_formula_with_priors(fixed_effects = all_fixed_effects,
@@ -1014,7 +1014,6 @@ if (file.exists(output_file)) {
   file_contents <- read.csv(output_file, stringsAsFactors = F) %>% as.data.table
   df_timer      <- rbind(file_contents, df_timer)
 }
-
 
 # Write a an empty file to indicate done with this parallel script
 write(NULL, file = paste0(outputdir, "/fin_", pathaddin))

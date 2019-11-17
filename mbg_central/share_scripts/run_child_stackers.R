@@ -59,7 +59,7 @@ if ('xgboost' %in% child_model_names) {
     hyperparameter_filepath = NULL
   }
 
-  if (as.logical(xg_model_tune) & xg_grid_search){
+  if (as.logical(xg_model_tune) & as.logical(xg_grid_search)){
     message("Tuning xgboost on default grid search")
     hyperparameter_filepath = NULL
     xg_grid <- expand.grid(nrounds = 100,
@@ -91,10 +91,11 @@ if ('xgboost' %in% child_model_names) {
                                      region = reg,
                                      xg_model_tune = xg_model_tune,
                                      xg_grid = xg_grid,
-                                     build_ensemble = xg_ensemble,
-                                     hyperparameter_filepath = hyperparameter_filepath)
-
+                                     build_ensemble = as.logical(xg_ensemble),
+                                     hyperparameter_filepath = hyperparameter_filepath,
+                                     debug=F)
   toc(log = T)
+  
 }
 
 #fit some nets

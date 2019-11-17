@@ -83,6 +83,9 @@ stacker_time_series_plots <- function(reg,
     submodels <- unlist(lapply(stack, function(x) x$model_name))
     
   } else submodels <- trimws(strsplit(config[V1 == 'stacked_fixed_effects',V2], '+', fixed = T)[[1]])
+  
+  #check relevant xgboost settings
+  if (config[V1 == 'xg_second_best',V2]) submodels <- c(submodels, 'xgboost2')
 
   # load coefficients
   mod <- lapply(paste0(outputdir, indicator, '_model_eb_bin0_',reg,'_0.RData'), 
@@ -239,10 +242,22 @@ stacker_time_series_plots <- function(reg,
   # build custom function to loop over each ADM0
   countryLoop <- function(country, dt) {
 
-    #first create the country level plots
+    #first, make country level dataplots to get a feel for outliers
+    plot <- ggplot(mbg[variable=='mean' & lvl=='adm0']) + 
+      geom_point(mapping=aes(x=year, y=input_mean, color=ADM0_NAME, size=input_ss)) + 
+      geom_line(mapping=aes(x=year, y=value, color=ADM0_NAME)) +
+      scale_size_continuous('N', range=c(2,7)) +
+      labs(title=paste("Region-level MBG Results/Data"),
+           subtitle=reg,
+           x='Year',
+           y='Proportion') +
+      theme_minimal()
+    print(plot)
+    
+    #first, create the country level lineplots
     timePlot(admin_id=country, this_lvl='adm0', dt=dt)
     
-    #then create the ad1 plots
+    #finally, create the ad1 plots
     # for each ad1 in the country
     dt[ADM0_CODE==country, ADM1_CODE] %>% 
       unique %>% 

@@ -74,7 +74,7 @@
                'dia_se_asia-vnm-tha', 'VNM', 'THA')
   
   # large regions
-  #regions <- c('dia_chn_mng', 'dia_s_america')
+  regions <- c('dia_chn_mng', 'dia_s_america', 'dia_wssa')
   
   # testing
   #regions <- c('VNM')

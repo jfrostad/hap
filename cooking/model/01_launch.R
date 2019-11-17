@@ -251,10 +251,10 @@ for(i in 1:nrow(loopvars)){
   if (region_cores < 9) region_rt <- '04:00:00:00'
   if (region_cores < 6) region_rt <- '03:12:00:00'
   if (region_cores > 9) region_rt <- '16:00:00:00'
-  region_mem <- region_cores*24 #TODO qpid dawg
+  region_mem <- region_cores*35 #TODO qpid dawg
   
   # set thread options
-  threads <- ifelse(region_cores>12, 2, 6)
+  threads <- ifelse(region_cores>10, 2, 6)
   
   # make a qsub string
   qsub <- make_qsub_share(age           = loopvars[i,2],
@@ -264,7 +264,7 @@ for(i in 1:nrow(loopvars)){
                           indic         = indicator,
                           saveimage     = TRUE,
                           memory        = region_mem,
-                          cores         = 6,
+                          cores         = threads,
                           run_time      = region_rt,
                           proj          = proj_arg,
                           geo_nodes     = as.logical(use_geos_nodes),
