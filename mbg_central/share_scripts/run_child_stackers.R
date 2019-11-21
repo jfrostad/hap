@@ -60,15 +60,39 @@ if ('xgboost' %in% child_model_names) {
   }
 
   if (as.logical(xg_model_tune) & as.logical(xg_grid_search)){
-    message("Tuning xgboost on default grid search")
+    message("Building sobol sequence grid to tune xgb hyperparameters")
     hyperparameter_filepath = NULL
-    xg_grid <- expand.grid(nrounds = 100,
-                           max_depth = c(2, 4, 6, 8),
-                           eta = seq(0.02, 0.2, by = .04),
-                           colsample_bytree = seq(.4, 1, by=.2),
-                           min_child_weight = seq(1, 5, by=2),
-                           subsample = seq(.1, 1, by=.1),
-                           gamma = 0)
+    
+    # use just a uniform grid
+    # xg_grid <- expand.grid(nrounds = 100,
+    #                        max_depth = c(2, 4, 6, 8),
+    #                        eta = seq(0.02, 0.2, by = .04),
+    #                        colsample_bytree = seq(.4, 1, by=.2),
+    #                        min_child_weight = seq(1, 5, by=2),
+    #                        subsample = seq(.1, 1, by=.1),
+    #                        gamma = 0)
+    
+    gen_sequence <- function(min, max, rounding=4, scalar) {
+      
+      round(min + (max - min) * scalar, rounding) %>% return
+    }
+
+    #TODO make a function where you can use a csv to input the max/mins
+    #use the sobol sequence to generate a quasi random grid
+    #note, scrambling=3 means:  Owen+Faure-Tezuka type of scrambling is applied
+    sobol_scalars <- data.frame(runif.sobol(n = 200, dim = 6, scrambling = 3, seed = 98118, init = TRUE))
+    names(sobol_scalars) <- c("nrounds", 'max_depth', "eta", "colsample_bytree", "min_child_weight", 'subsample')
+    #note that carat returns a bug if this is a dt instead of df
+    xg_grid <- data.frame(nrounds = gen_sequence(min=100, max=500, rounding=0, scalar=sobol_scalars$nrounds), 
+                          max_depth = gen_sequence(min=2, max=8, rounding=0, scalar=sobol_scalars$max_depth),
+                          eta = gen_sequence(min=.02, max=.2, scalar=sobol_scalars$eta),
+                          colsample_bytree = gen_sequence(min=.4, max=1, scalar=sobol_scalars$colsample_bytree),
+                          min_child_weight = gen_sequence(min=1, max=5, scalar=sobol_scalars$min_child_weight),
+                          subsample = gen_sequence(min=.1, max=1, scalar=sobol_scalars$subsample),
+                          gamma = 0)
+                               
+    summary(xg_grid)
+    
   } else {
     message("Tuning xgboost with adaptive random search")
     xg_grid <- NA

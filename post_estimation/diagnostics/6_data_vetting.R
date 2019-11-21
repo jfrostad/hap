@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 06/12/2018
 # Purpose: Collapse data for HAP
-# source("/homes/jfrostad/_code/lbd/hap/diagnostics/6_data_vetting.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/6_data_vetting.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -51,7 +51,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 #options
 cores <- 15
 new.gbd.results <- F #set T if GBD results have been updated and need to redownload
-missing.calc <- F #set T if data has been re-extracted and need to recalculate the missingness vals
+missing.calc <- T #set T if data has been re-extracted and need to recalculate the missingness vals
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------

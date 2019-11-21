@@ -64,9 +64,9 @@ z_list,0
 zcol,z_column_default_blank
 scale_gaussian_variance_N,TRUE
 xg_model_tune,TRUE
-xg_grid_search,FALSE
-xg_ensemble,TRUE
-xg_second_best,FALSE
+xg_grid_search,TRUE
+xg_ensemble,FALSE
+xg_second_best,TRUE
 modeling_shapefile_version,2019_09_10
 raking_shapefile_version,2019_09_10
 subnational_raking,TRUE

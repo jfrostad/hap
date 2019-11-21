@@ -596,8 +596,8 @@ fit_xgboost_child_model <- function(df,
                       objective = objective_function,
                       weights = df$xg_weight)
     } else {
-      message('Tuning XGBoost using cartesian grid search')
-      #use provided cartesian grid to search
+      message('Tuning XGBoost using grid search')
+      #use provided grid to search
       train_control <- trainControl(selectionFunction = "oneSE",
                                     method = "repeatedcv",
                                     number = k_folds,
