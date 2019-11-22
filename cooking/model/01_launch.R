@@ -242,8 +242,8 @@ for(i in 1:nrow(loopvars)){
   if(r == 'NGA' | r == 'PAK' | r == 'KEN' | r == 'ZWE' | r == 'dia_central_asia') region_cores <- 4
   if(r == 'dia_se_asia' | r == 'dia_sssa' | r == 'MNG' | r == 'COD') region_cores <- 6
   if(r == 'dia_malay' | r == 'dia_name' | r == 'dia_wssa-nga' | r == 'dia_afr_horn') region_cores <- 10
-  if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') region_cores <- 12
-  if(r == 'dia_s_america') region_cores <- 16
+  if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia' | r=='dia_s_america-BRA') region_cores <- 12
+  if(r == 'dia_s_america' | r == 'dia_chn_mng' | r == 'dia_wssa') region_cores <- 25
   if(loopvars[i, 3] > 0) region_cores <- round(region_cores*0.8)
   
   # convert cores approximately to memory and run time

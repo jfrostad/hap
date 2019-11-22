@@ -33,7 +33,7 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(ccaPP, fst, mgsub, sf, stringr)
 
 #detect if running in rstudio IDE
-debug <- F
+debug <- T
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 ## if running interactively, set arguments
@@ -44,7 +44,7 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'dia_name-ESH'
+  region <- 'dia_s_america-GUF'
 
 } else {
   
@@ -60,7 +60,11 @@ if (interactive) {
 rr.data.version <- "33" #rr data version
 rr.model.version <-"power2_simsd_source_priors" #rr model version
 rr.functional.form <- "power2" #rr functional form
-format <- T #set T if needing to reformat the cellpreds to long data.table
+format <- F #set T if needing to reformat the cellpreds to long data.table
+
+# collect date
+today <- Sys.Date()
+today <- '2019-11-21' #if using old run
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -162,24 +166,24 @@ raster_to_dt <- function(the_raster,
 
 
 #TODO write documentation
-format_cell_pred <- function(ind_gp,
-                             ind,
-                             rd,
-                             reg,
-                             measure,
-                             pop_measure,
-                             year_start,
-                             year_end,
-                             var_names = ind, # name using ind by default, but can pass custom name
-                             n_draws = 250, #TODO automatically check the config file for 'samples' value?
-                             #matrix_pred_name = NULL,
-                             skip_cols = NULL,
-                             rk = T,
-                             coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
-                             rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
-                             shapefile_version = 'current',
-                             covs=NA, #added fx to bring in covariates and merge
-                             debug=T) {
+link_cell_pred <- function(ind_gp,
+                           ind,
+                           rd,
+                           reg,
+                           measure,
+                           pop_measure,
+                           year_start,
+                           year_end,
+                           var_names = ind, # name using ind by default, but can pass custom name
+                           n_draws = 250, #TODO automatically check the config file for 'samples' value?
+                           #matrix_pred_name = NULL,
+                           skip_cols = NULL,
+                           rk = T,
+                           coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
+                           rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
+                           shapefile_version = 'current',
+                           covs=NA, #added fx to bring in covariates and merge
+                           debug=F) {
   
   message('Beginning formatting for ', reg)
   message('loading simple raster & populations')
@@ -284,24 +288,14 @@ format_cell_pred <- function(ind_gp,
     cell_pred <- cell_pred[, (1:max_n)]
 
     # set cell pred as a data table, and rename things
-    cell_pred <- prep_cell_pred(
+    prep_cell_pred(
       cell_pred = cell_pred,
       cell_ids = link_table[[2]],
       pixel_id = pixel_id,
       covdt = covdt
-    )
-    
-    message('~~>reshape long and formatting')
-    #reshape long draws and key on the pixel ID/draw/year
-    dt <- melt(cell_pred,
-               measure = patterns("V"),
-               variable.name = "draw",
-               value.name = var_names[[i]]) %>% 
-      #toconvert draw col to int instead of V1-250 as a factor
-      #.[, draw := substring(as.character(draw), 2) %>% as.integer] %>% #TODO probably can be done in the reshape?
-      setkey(., pixel_id, draw, year, cell_pred_id, cell_id, pop) %>% #TODO could we get rid of cell_pred_id earlier?
+    ) %>% 
       return
-    
+
   }
   
   #load/format all the cell preds and then merge them together
@@ -342,7 +336,7 @@ format_cell_pred <- function(ind_gp,
 
   #subset to relevant columns and return
   keep_vars <- c('ADM0_CODE', 'ADM1_CODE', 'ADM2_CODE', 
-                 'pixel_id', 'year', 'pop', 'area_fraction', 'draw', unlist(var_names), unlist(covs))
+                 'pixel_id', 'year', 'pop', 'area_fraction', unlist(covs), paste0('V', 1:n_draws))
   cell_pred[, (keep_vars), with=F] %>% 
     return
   
@@ -358,16 +352,28 @@ calcRR <- function(col.n, ratio, exp, exp.cols, curve, curve.n) {
   
 }
 
-#custom function for saving a country level fst file
-saveResults <- function(country, type, dt) {
+#custom function for melting long on draws and then saving a country level fst file
+meltAndSave <- function(country, type, dt, debug=F) {
+  
+  if (debug) browser()
   
   out.path <- sprintf('%s/%s_%s.fst', paste0(outputdir, '/tmp'), country, type)
   
   #write fst file for country if data available for this indicator
   if (dt[ADM0_CODE==country, .N]>0)  {
     
-    message('saving as \n', out.path)
-    write.fst(dt[ADM0_CODE==country], path = out.path); 
+    message('melting adm0=', country, ' dt long on draw')
+    #reshape long draws and key on the pixel ID/draw/year
+    out <- melt(dt[ADM0_CODE==country],
+                measure = patterns("V"),
+                variable.name = "draw",
+                value.name = type) %>% 
+      #toconvert draw col to int instead of V1-250 as a factor
+      #.[, draw := substring(as.character(draw), 2) %>% as.integer] %>% #TODO probably can be done in the reshape?
+      setkey(., pixel_id, draw, year) %>% 
+      write.fst(., path = out.path) #write file in fst format
+    
+    message('saved as \n', out.path)
     
   } else message('no ', type, ' data present for #', country)
   
@@ -405,7 +411,7 @@ if (interactive) {
   #TODO janky fix
   if (region=='dia_name-ESH') {
     hap.region <- 'dia_name'
-  } else if (region=='dia_s_america-GUY') {
+  } else if (region=='dia_s_america-GUF') {
     hap.region <- 'dia_s_america'
   } else hap.region <- region
 
@@ -420,10 +426,6 @@ if (interactive) {
 
 # print out session info so we have it on record
 sessionInfo()
-
-# collect date
-today <- Sys.Date()
-#today <- '2019-11-06' #if using old run
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -478,7 +480,7 @@ toc(log=TRUE)
 
 ## find the adm0s/iso3s of countries in this region
 adm0s <- get_adm0_codes(region, shapefile_version = shapefile)
-countries <- pull_custom_modeling_regions('dia_name') %>% unlist %>% str_split(., pattern='\\+', simplify = T)
+countries <- pull_custom_modeling_regions(region) %>% unlist %>% str_split(., pattern='\\+', simplify = T)
 
 if(format) {
   
@@ -487,10 +489,36 @@ if(format) {
   
   if (length(hap.region)==1) {
     
-    hap.dt <- format_cell_pred(ind_gp = indicator_groups[['hap']],
+    hap.dt <- link_cell_pred(ind_gp = indicator_groups[['hap']],
+                             ind = indicators[['hap']],
+                             rd = run_dates[['hap']],
+                             reg = hap.region,
+                             measure = measures[['hap']],
+                             pop_measure = 'a0004t', #children <5
+                             covs = covs,
+                             n_draws = 100, #reduce the # of draws to speed up processing
+                             year_start = 2000,
+                             year_end = 2017,
+                             rk = rks[['hap']],
+                             shapefile_version = shapefile,
+                             coastal_fix = T,
+                             debug=F)
+    toc(log = TRUE)
+    
+    tic('Saving results at country level with .fst')
+    lapply(adm0s, meltAndSave, type='hap', dt=hap.dt)
+    rm(hap.dt) #save memory
+    toc(log=TRUE)
+    
+  } else {
+  #note that this logic is to accomodate HAP's use of single country models
+    
+    for (subregion in hap.region) {
+      
+      hap.dt <- link_cell_pred(ind_gp = indicator_groups[['hap']],
                                ind = indicators[['hap']],
                                rd = run_dates[['hap']],
-                               reg = hap.region,
+                               reg = subregion,
                                measure = measures[['hap']],
                                pop_measure = 'a0004t', #children <5
                                covs = covs,
@@ -501,36 +529,10 @@ if(format) {
                                shapefile_version = shapefile,
                                coastal_fix = T,
                                debug=F)
-    toc(log = TRUE)
-    
-    tic('Saving results at country level with .fst')
-    lapply(adm0s, saveResults, type='hap', dt=hap.dt)
-    rm(hap.dt) #save memory
-    toc(log=TRUE)
-    
-  } else {
-  #note that this logic is to accomodate HAP's use of single country models
-    
-    for (subregion in hap.region) {
-      
-      hap.dt <- format_cell_pred(ind_gp = indicator_groups[['hap']],
-                                 ind = indicators[['hap']],
-                                 rd = run_dates[['hap']],
-                                 reg = subregion,
-                                 measure = measures[['hap']],
-                                 pop_measure = 'a0004t', #children <5
-                                 covs = covs,
-                                 n_draws = 100, #reduce the # of draws to speed up processing
-                                 year_start = 2000,
-                                 year_end = 2017,
-                                 rk = rks[['hap']],
-                                 shapefile_version = shapefile,
-                                 coastal_fix = T,
-                                 debug=F)
       toc(log = TRUE)
       
       tic('Saving results at country level with .fst')
-      lapply(adm0s, saveResults, type='hap', dt=hap.dt)
+      lapply(adm0s, meltAndSave, type='hap', dt=hap.dt)
       rm(hap.dt) #save memory
       toc(log=TRUE)
       
@@ -539,24 +541,24 @@ if(format) {
   }
   
   tic('Make table for LRI')
-  lri.dt <- format_cell_pred(ind_gp = indicator_groups[['lri']],
-                             ind = indicators[['lri']],
-                             rd = run_dates[['lri']],
-                             reg = region,
-                             measure = measures[['lri']],
-                             pop_measure = 'a0004t', #children <5
-                             covs = covs,
-                             n_draws = 100, #reduce the # of draws to speed up processing
-                             year_start = 2000,
-                             year_end = 2017,
-                             rk = rks[['lri']],
-                             shapefile_version = shapefile,
-                             coastal_fix = T,
-                             debug=F)
+  lri.dt <- link_cell_pred(ind_gp = indicator_groups[['lri']],
+                           ind = indicators[['lri']],
+                           rd = run_dates[['lri']],
+                           reg = region,
+                           measure = measures[['lri']],
+                           pop_measure = 'a0004t', #children <5
+                           covs = covs,
+                           n_draws = 100, #reduce the # of draws to speed up processing
+                           year_start = 2000,
+                           year_end = 2017,
+                           rk = rks[['lri']],
+                           shapefile_version = shapefile,
+                           coastal_fix = T,
+                           debug=F)
   toc(log = TRUE)
   
   tic('Saving results at country level with .fst')
-  lapply(adm0s, saveResults, type='lri', dt=lri.dt)
+  lapply(adm0s, meltAndSave, type='lri', dt=lri.dt)
   rm(lri.dt) #save memory
   toc(log=TRUE)
 
@@ -591,8 +593,8 @@ calcTAP <- function(country, dir,
       #make sure tables have not been re-sorted
       #sample 50 random rows and compare them. they should match in all rows except pixel_id and the indicator
       sampled_ids <- sample(dt$ID, 50)
-      test_result <- all.equal(lri.dt[ID %in% sampled_ids, -c('pixel_id', 'has_lri'), with=F], 
-                               dt[ID %in% sampled_ids, -c('pixel_id', 'cooking_fuel_solid'), with=F])
+      test_result <- all.equal(lri.dt[ID %in% sampled_ids, -c('pixel_id', 'lri'), with=F], 
+                               dt[ID %in% sampled_ids, -c('pixel_id', 'hap'), with=F])
       if(test_result %>% is.character) error <- test_result
     }
     
@@ -606,7 +608,7 @@ calcTAP <- function(country, dir,
     } else {  
       #if no errors, process country  
       #merge tables
-      dt[, has_lri := lri.dt[, has_lri]] %>% 
+      dt[, lri := lri.dt[, lri]] %>% 
         .[, ID := NULL] #no longer needed
         rm(lri.dt) #cleanup
       
@@ -617,7 +619,7 @@ calcTAP <- function(country, dir,
       #calculate the TAP PM2.5/capita values
       message('calculating TAP PM2.5/capita')
       dt[, aap_pm := pop * ihmepm25]
-      dt[, hap_pm := pop * cooking_fuel_solid * hap_excess_pm25]
+      dt[, hap_pm := pop * hap * hap_excess_pm25]
       dt[, tap_pm_capita := (aap_pm + hap_pm) / pop]
       dt[pop==0, tap_pm_capita := 0] #must assume no exposure in zero population cells
       
@@ -634,8 +636,8 @@ calcTAP <- function(country, dir,
       dt[, tap_paf := (tap_rr-1)/tap_rr]
       
       #calculate the LRI attrib to TAP
-      dt[, tap_lri_r := tap_paf * has_lri] #rate
-      dt[, tap_lri_c := tap_paf * has_lri * pop] #count
+      dt[, tap_lri_r := tap_paf * lri] #rate
+      dt[, tap_lri_c := tap_paf * lri * pop] #count
       
       
       message('collapsing draws')

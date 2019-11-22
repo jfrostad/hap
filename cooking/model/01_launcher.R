@@ -66,18 +66,23 @@ regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa', 'dia_afr_horn')
 
 # custom country-specifics
 #regions <- c('dia_sssa-zaf', 'ZAF', 'dia_se_asia-vnm-tha', 'VNM', 'THA')
-regions <- c('dia_afr_horn', 'dia_cssa', 'dia_essa','dia_wssa',
-             'dia_name', 'dia_mid_east',
+regions <- c('dia_afr_horn-YEM-DJI',  
+             'dia_cssa', 'dia_essa',
+             'dia_wssa-NGA', 'NGA',
+             'dia_name+YEM+DJI',
              'dia_mcaca', 'dia_s_america',
-             'dia_central_asia', 'dia_chn_mng', 'dia_malay', 'dia_south_asia',
-             'dia_sssa-zaf', 'ZAF',
-             'dia_se_asia-vnm-tha', 'VNM', 'THA')
+             'dia_central_asia', 'dia_chn_mng', 'MNG',
+             'dia_malay',
+             'dia_sssa-ZAF', 'ZAF',
+             'dia_se_asia-VNM-THA', 'VNM', 'THA',
+             'dia_mid_east-AFG', 'dia_south_asia+AFG')
 
 # large regions
-regions <- c('dia_chn_mng', 'dia_s_america', 'dia_wssa')
+#regions <- c('dia_chn_mng', 'dia_s_america', 'dia_wssa')
 
 # testing
-regions <- c('VNM')
+#regions <- c('VNM')
+#regions <- c('dia_mid_east-AFG', 'dia_south_asia+AFG')
 
 # list indicators
 indics <- 'cooking_fuel_solid'

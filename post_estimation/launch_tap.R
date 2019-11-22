@@ -48,11 +48,16 @@
   regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_sssa', 
                'dia_mcaca', 'dia_s_america-GUY', 'dia_central_asia', 'dia_chn_mng', 
                'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
+  regions <- c('dia_s_america-GUF')
   
 for (region in regions) {
  
-      # set specific arguments
-      mymem           <- '500G'
+      # set memory based on region
+      if (region %in% c('dia_chn_mng', 'dia_s_america=GUY')) { mymem <- '900G'
+      } else if (region == 'dia_wssa') { mymem <- '500G'
+      } else mymem <- '350G'
+      
+      #name job
       jname           <- paste0('tap_', region)
       
       # set up qsub

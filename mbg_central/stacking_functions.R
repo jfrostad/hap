@@ -689,13 +689,13 @@ fit_xgboost_child_model <- function(df,
     
     #rbind the aggregated results too for graphing
     agg_results <- results[, .(Resample='pooled', model_id=model_id,
-                               cor=pooled_cor, RMSE=pooled_delta_rmse, second_best=second_best, label=label)] %>% 
+                               cor=pooled_cor, delta_rmse=pooled_delta_rmse, second_best=second_best, label=label)] %>% 
       unique(., by='model_id') %>% 
       list(., results) %>% 
       rbindlist(use.names = T, fill = T)
     
     #graph the results
-    plot <- ggplot(agg_results, aes(x=cor, y=RMSE, label=label)) +
+    plot <- ggplot(agg_results, aes(x=cor, y=delta_rmse, label=label)) +
       geom_point() +
       geom_vline(xintercept = xg_ensemble_corr, color='red') +
       geom_text_repel(nudge_y = .25, nudge_x=.75) +
