@@ -53,7 +53,7 @@ pop_measure,total
 st_targ,0.05
 target_type,less
 use_geos_nodes,TRUE
-spat_strat,qt
+spat_strat,poly
 temp_strat,prop
 skip.stacking,0
 skip.inla,0
@@ -70,7 +70,7 @@ xg_second_best,TRUE
 modeling_shapefile_version,2019_09_10
 raking_shapefile_version,2019_09_10
 subnational_raking,TRUE
-gam_knots,6
+gam_knots,4
 ctry_re_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
 nugget_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
 theta_prior,"list(prior = 'loggamma', param = c(1, 0.00005))"
@@ -82,3 +82,9 @@ subnat_country_to_get,IND
 use_s2_mesh,TRUE
 s2_mesh_params,"c(50, 500, 1000) "
 use_nid_res,TRUE
+use_space_only_gp,TRUE
+s_gp_int_zero,TRUE
+st_gp_int_zero,FALSE
+use_time_only_gmrf,FALSE
+time_only_gmrf_type,rw2
+spde_prior,list(type='pc')

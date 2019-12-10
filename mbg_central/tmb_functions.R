@@ -309,7 +309,7 @@ build_mbg_data_stack_tmb <- function(d          = df,
   # Set staring values for parameters
   Parameters <- list(alpha_j          = fe_start,  # FE parameters alphas
                      logtau           = -0.5,                           # Matern/AR tau
-                     logkappa         = -0.5,	                       # Matern Range
+                     logkappa         = -0.5,                        # Matern Range
                      trho             = 0.95,                          # temporal rho
                      zrho             = 0.95,                          # 3rd dimension of GP rho (TODO)
                      log_nugget_sigma = -1,                            # log(SD) of the normal nugget term

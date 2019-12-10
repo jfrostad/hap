@@ -40,7 +40,7 @@ manual_date <- "2018_12_18" #set this value to use a manually specified extract 
 collapse_date <- "2019_07_31" #which data of collapse to use if not rerunning
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- T #set to TRUE if you have new data and want to recollapse
+run_collapse <- F #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 new_vetting <- T #set to TRUE to refresh the vetting diagnostic
@@ -308,6 +308,8 @@ setwd(doc.dir)
 if (new_vetting) {setwd(doc.dir); googledrive::drive_auth(cache='drive.httr-oauth'); drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
 vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='1. Vetting', skip=1) %>% as.data.table
 excluded_nids <- vetting[`HAP Vetting Status`=='Excluded', nid] %>% unique #get list of excluded points
+message('Excluding the following NIDs:')
+print(excluded_nids)
 cooking <- cooking[!(nid %in% excluded_nids)] #remove any excluded datapoints
 #***********************************************************************************************************************
 
@@ -319,7 +321,7 @@ vars <- names(cooking) %>% .[. %like% 'cooking']
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
 
 #shapefile issues: document here shapefiles that cause resample_polygons to fail
-shapefile_issues <- c('IRQ_ADM3_2019_OCHA', 'TLS_regions')
+shapefile_issues <- c('IRQ_ADM3_2019_OCHA', 'TLS_regions', 'g2015_2004_2')
 shapefile_issues_nids <- cooking[shapefile %in% shapefile_issues, unique(nid)]
 
 #TODO, current only able to resample stage1/2 countries

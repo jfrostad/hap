@@ -107,7 +107,6 @@ stacker_time_series_plots <- function(reg,
   }
   submodels <- c(submodels, 'stack')
 
-  
   # get unraked results and reshape long
   mbg <- melt(dt, variable.factor = F,
               measure.vars = c(submodels, 'mean', 
@@ -243,8 +242,8 @@ stacker_time_series_plots <- function(reg,
   countryLoop <- function(country, dt) {
 
     #first, make country level dataplots to get a feel for outliers
-    plot <- ggplot(mbg[variable=='mean' & lvl=='adm0']) + 
-      geom_point(mapping=aes(x=year, y=input_mean, color=ADM0_NAME, size=input_ss)) + 
+    plot <- ggplot(dt[variable=='mean' & lvl=='adm0']) + 
+      geom_point(mapping=aes(x=year, y=input_mean, color=ADM0_NAME, size=input_ss, shape=border_data)) + 
       geom_line(mapping=aes(x=year, y=value, color=ADM0_NAME)) +
       scale_size_continuous('N', range=c(2,7)) +
       labs(title=paste("Region-level MBG Results/Data"),

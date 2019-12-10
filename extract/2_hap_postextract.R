@@ -78,8 +78,8 @@ codebook <- codebook[!(survey_name %like% 'IPUMS')]
 #23219 is the same, causing our feather reads to crash.
 #157050 is IND DHS, size issues
 #TODO split the extracts in order to fix the feather reading issue
-codebook <- codebook[!(nid %in% c("234353", "233917", "23219"))]
-codebook <- codebook[nid != 157050]
+#codebook <- codebook[!(nid %in% c("234353", "233917", "23219"))]
+#codebook <- codebook[nid != 157050]
 
 #angola mics based on negative comment about its quality in response to EBF paper (see dia_lri_modelers slack chat) 
 #TODO better to handle using outlier column with notes in the data vetting sheet

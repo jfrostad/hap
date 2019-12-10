@@ -65,14 +65,14 @@ pt_collapse <- packaged[!is.na(lat) & !is.na(long), ]
 #set start_year to int_year for point data
 pt_collapse[, year_experiment := year_start]
 pt_collapse[!is.na(int_year), year_experiment := int_year]
-save(pt_collapse, file=paste0(folder_out, "/points_", today, ".Rdata"))
+#save(pt_collapse, file=paste0(folder_out, "/points_", today, ".Rdata"))
 
 
 message("saving polygons")
 poly_collapse <- packaged[(is.na(lat) | is.na(long)) & !is.na(shapefile) & !is.na(location_code), ]
 #set polygon years to a weighted mean
 poly_collapse[, year_experiment := weighted.mean(int_year, weight=hhweight, na.rm=T), by=c("nid")]
-save(poly_collapse, file=paste0(folder_out, "/poly_", today, ".Rdata"))
+#save(poly_collapse, file=paste0(folder_out, "/poly_", today, ".Rdata"))
 
 
 #TODO look into splitting these files into smaller pieces due to running into this feather bug at high sizes:

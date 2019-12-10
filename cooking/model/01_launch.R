@@ -239,11 +239,11 @@ for(i in 1:nrow(loopvars)){
   # set cores by region
   r <- as.character(loopvars[i,1])
   region_cores <- 8
-  if(r == 'NGA' | r == 'PAK' | r == 'KEN' | r == 'ZWE' | r == 'dia_central_asia') region_cores <- 4
-  if(r == 'dia_se_asia' | r == 'dia_sssa' | r == 'MNG' | r == 'COD') region_cores <- 6
-  if(r == 'dia_malay' | r == 'dia_name' | r == 'dia_wssa-nga' | r == 'dia_afr_horn') region_cores <- 10
-  if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia' | r=='dia_s_america-BRA') region_cores <- 12
-  if(r == 'dia_s_america' | r == 'dia_chn_mng' | r == 'dia_wssa') region_cores <- 25
+  if(r == 'NGA' | r == 'PAK' | r == 'KEN' | r == 'ZWE' | r == 'VNM' | r == 'THA' | r == 'dia_central_asia') region_cores <- 4
+  if(r == 'dia_se_asia-VNM-THA' | r == 'dia_sssa' | r == 'MNG' | r == 'COD') region_cores <- 6
+  if(r == 'dia_malay' | r == 'dia_name') region_cores <- 10
+  if(r =='dia_south_asia' | r=='dia_s_america-BRA' | r == 'dia_afr_horn') region_cores <- 12
+  if(r == 'dia_s_america' | r == 'dia_wssa'| r == 'dia_chn_mng' | r == 'dia_wssa-NGA' | r=='BRA') region_cores <- 25
   if(loopvars[i, 3] > 0) region_cores <- round(region_cores*0.8)
   
   # convert cores approximately to memory and run time
@@ -254,7 +254,7 @@ for(i in 1:nrow(loopvars)){
   region_mem <- region_cores*35 #TODO qpid dawg
   
   # set thread options
-  threads <- ifelse(region_cores>10, 2, 6)
+  threads <- ifelse(region_cores>10, 1, 6)
   
   # make a qsub string
   qsub <- make_qsub_share(age           = loopvars[i,2],

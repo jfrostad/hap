@@ -60,7 +60,7 @@ if (interactive) {
 rr.data.version <- "33" #rr data version
 rr.model.version <-"power2_simsd_source_priors" #rr model version
 rr.functional.form <- "power2" #rr functional form
-format <- F #set T if needing to reformat the cellpreds to long data.table
+format <- T #set T if needing to reformat the cellpreds to long data.table
 
 # collect date
 today <- Sys.Date()
@@ -397,7 +397,7 @@ if (interactive) {
   indicators               <- list(hap='cooking_fuel_solid', 
                                    lri='has_lri')
   run_dates                <- list(hap='2019_09_16_23_24_14', 
-                                   lri='2019_09_16_16_39_00')
+                                   lri='2019_10_23_16_13_17')
   measures                 <- list(hap='count',
                                    lri='count')
   suffixes                 <- list(hap='_eb_bin0_0', 

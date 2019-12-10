@@ -42,9 +42,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'THA'
+  reg                      <- 'VNM'
   age                      <- 0
-  run_date                 <- "2019_10_31_21_21_52"
+  run_date                 <- "2019_11_22_16_16_20"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -682,8 +682,6 @@ if(as.logical(use_stacking_covs)){
   df[, paste0(child_model_names) := lapply(child_model_names, function(x) get(paste0(x,'_cv_pred')))]
 }
 
-browser()
-
 ## Generate MBG formula for INLA call (will run but not used by TMB)
 mbg_formula <- build_mbg_formula_with_priors(fixed_effects = all_fixed_effects,
                                              add_nugget    = use_inla_nugget,
@@ -698,6 +696,9 @@ mbg_formula <- build_mbg_formula_with_priors(fixed_effects = all_fixed_effects,
                                              coefs.sum1    = coefs_sum1,
                                              subnat_RE     = as.logical(use_subnat_res),
                                              subnat_re_prior = subnat_re_prior,
+                                             use_space_only_gp = as.logical(use_space_only_gp),
+                                             use_time_only_gmrf = as.logical(use_time_only_gmrf),
+                                             time_only_gmrf_type = time_only_gmrf_type,
                                              nid_RE        = use_nid_res)
 
 ## If needed, add fake data to make sure INLA estimates all years
@@ -718,8 +719,14 @@ input_data <- build_mbg_data_stack(df            = df, # note that merge (if usi
                                    fixed_effects = all_fixed_effects,
                                    mesh_s        = mesh_s,
                                    mesh_t        = mesh_t, # not currently implemented with tmb
+                                   spde_prior    = spde_prior,
                                    use_ctry_res  = use_inla_country_res,
                                    use_subnat_res  = as.logical(use_subnat_res),
+                                   use_gp = as.logical(use_gp),
+                                   st_gp_int_zero = as.logical(st_gp_int_zero), 
+                                   use_space_only_gp = as.logical(use_space_only_gp),
+                                   s_gp_int_zero = as.logical(s_gp_int_zero),
+                                   use_time_only_gmrf = as.logical(use_time_only_gmrf),
                                    remove_non_subnats = TRUE,
                                    use_nugget    = use_inla_nugget, # implemented with tmb
                                    exclude_cs    = child_model_names, # raw covs will get center scaled here though (see notes above)
@@ -733,8 +740,9 @@ input_data <- build_mbg_data_stack(df            = df, # note that merge (if usi
 
 ## combine all the inputs, other than cs_df these are not used if you are using TMB
 stacked_input  <- input_data[[1]]
-spde           <- input_data[[2]]
+spde           <- input_data[[2]] ## used for space-time gp
 cs_df          <- input_data[[3]]
+spde.sp        <- input_data[[4]] ## used for space only (time stationary) gp
 
 ## Generate other inputs necessary
 outcome <- df[[indicator]] # N+_i - event obs in cluster
@@ -742,8 +750,9 @@ N       <- df$N                  # N_i - total obs in cluster
 weights <- df$weight
 
 ## catch in case there is no weight column
-if(weights %>% is.null) weights = rep(1,nrow(df))
-
+if(is.null(weights)){
+  weights = rep(1,nrow(df))
+}
 
 tic("MBG - fit model") ## Start MBG - model fit timer
 
@@ -850,6 +859,9 @@ pm <- lapply(chunks, function(samp) {
                 coefs.sum1    = coefs_sum1,
                 pred_gp       = as.logical(use_gp),
                 shapefile_version = modeling_shapefile_version,
+                yl            = year_list,
+                use_space_only_gp = as.logical(use_space_only_gp),
+                use_time_only_gmrf = as.logical(use_time_only_gmrf),
                 simple_raster_subnats = simple_raster2,
                 subnat_country_to_get = subnat_country_to_get
     )[[3]]
@@ -862,6 +874,7 @@ pm <- lapply(chunks, function(samp) {
                     sr                   = simple_raster,
                     yl                   = year_list,
                     zl                   = z_list,
+                    use_space_only_gp    = as.logical(use_space_only_gp),
                     covs_list            = cov_list,
                     clamp_covs           = clamp_covs)  # TODO ADD CONFIG
   }
