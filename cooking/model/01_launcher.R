@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_best'
+config_par   <- 'hap_sp_only'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
@@ -69,8 +69,8 @@ regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa', 'dia_afr_horn')
 regions <- c('dia_afr_horn',  
              'dia_cssa',
              'dia_wssa-NGA', 'NGA',
-             'dia_name',
-             'dia_mcaca', 'dia_s_america-BRA', 'BRA',
+             'dia_name-ESH',
+             'dia_mcaca', 'dia_s_america-BRA-GUF', 'BRA',
              'dia_central_asia', 'dia_chn_mng', 'MNG',
              'dia_malay',
              'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',

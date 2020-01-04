@@ -34,7 +34,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load packages
 require(ggwordcloud)
-pacman::p_load(data.table, dplyr, feather, fst, ggrepel, googledrive, 
+pacman::p_load(data.table, dplyr, farver, feather, fst, ggrepel, googledrive, 
                imguR, naniar, readxl, sf, stringr, viridis) 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -146,7 +146,7 @@ vetAssistant <- function(this.nid,
   #pull the model input data
   message(' ----> mbg input data') 
   mod <- 
-    list.files(dirs[['model']], full.names = T) %>% 
+    list.files(dirs[['model']], pattern='.fst', full.names = T) %>% 
     sort(., decreasing=T) %>% 
     .[1] %>% #pull most recent collapsed data 
     read.fst(., as.data.table=T) 
@@ -325,7 +325,7 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 43412 #set the NID you want to vet
+problem.nid <- 303458 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)

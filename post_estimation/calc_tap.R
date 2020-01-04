@@ -33,7 +33,7 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(ccaPP, fst, mgsub, sf, stringr)
 
 #detect if running in rstudio IDE
-debug <- T
+debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 ## if running interactively, set arguments
@@ -44,7 +44,7 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'dia_s_america-GUF'
+  region <- 'dia_essa-SWZ-ZWE-LSO'
 
 } else {
   
@@ -64,7 +64,7 @@ format <- T #set T if needing to reformat the cellpreds to long data.table
 
 # collect date
 today <- Sys.Date()
-today <- '2019-11-21' #if using old run
+#today <- '2019-11-21' #if using old run
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -396,7 +396,7 @@ if (interactive) {
                                    lri='lri')
   indicators               <- list(hap='cooking_fuel_solid', 
                                    lri='has_lri')
-  run_dates                <- list(hap='2019_09_16_23_24_14', 
+  run_dates                <- list(hap='2019_12_18_13_30_12', 
                                    lri='2019_10_23_16_13_17')
   measures                 <- list(hap='count',
                                    lri='count')
@@ -405,15 +405,19 @@ if (interactive) {
   rks                      <- list(hap=F, 
                                    lri=F)
   shapefile                <- '2019_09_10' #NEEDS TO MATCH
-  covs                        <- c('ihmepm25')
-  cov_measures                <- c('mean')
+  covs                        <- c('ihmepm25', 'ghlsurbanicity')
+  cov_measures                <- c('mean', 'mean')
   
-  #TODO janky fix
-  if (region=='dia_name-ESH') {
-    hap.region <- 'dia_name'
-  } else if (region=='dia_s_america-GUF') {
-    hap.region <- 'dia_s_america'
-  } else hap.region <- region
+  # #TODO janky fix
+  # if (region=='dia_name-ESH') {
+  #   hap.region <- 'dia_name'
+  # } else if (region=='dia_sssa') {
+  #   hap.region <- c('dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF')
+  # } else if (region=='dia_s_america-GUF') {
+  #   hap.region <- 'dia_s_america'
+  # } else hap.region <- region
+  
+  hap.region <- region
 
 
 } else {
@@ -444,7 +448,7 @@ j.home.dir <- file.path(j_root,"WORK/05_risk/risks/air_pm")
 rr.dir <- file.path(j.home.dir, 'data/rr/output', paste0(rr.data.version, rr.model.version))
 
 # create outputdir
-outputdir <- paste0('/share/geospatial/mbg/', indicator_groups[[1]], '/pafs/tap_', today, '/')
+outputdir <- paste0('/share/geospatial/mbg/', indicator_groups[[1]], '/pafs/', run_dates['hap'])
   dir.create(paste0(outputdir, '/tmp/'), recursive = T)
 
 # # Make correlation objects ------------------------------------------------------------
@@ -496,7 +500,7 @@ if(format) {
                              measure = measures[['hap']],
                              pop_measure = 'a0004t', #children <5
                              covs = covs,
-                             n_draws = 100, #reduce the # of draws to speed up processing
+                             n_draws = 50, #reduce the # of draws to speed up processing
                              year_start = 2000,
                              year_end = 2017,
                              rk = rks[['hap']],
@@ -522,7 +526,7 @@ if(format) {
                                measure = measures[['hap']],
                                pop_measure = 'a0004t', #children <5
                                covs = covs,
-                               n_draws = 100, #reduce the # of draws to speed up processing
+                               n_draws = 50, #reduce the # of draws to speed up processing
                                year_start = 2000,
                                year_end = 2017,
                                rk = rks[['hap']],
@@ -540,27 +544,27 @@ if(format) {
     
   }
   
-  tic('Make table for LRI')
-  lri.dt <- link_cell_pred(ind_gp = indicator_groups[['lri']],
-                           ind = indicators[['lri']],
-                           rd = run_dates[['lri']],
-                           reg = region,
-                           measure = measures[['lri']],
-                           pop_measure = 'a0004t', #children <5
-                           covs = covs,
-                           n_draws = 100, #reduce the # of draws to speed up processing
-                           year_start = 2000,
-                           year_end = 2017,
-                           rk = rks[['lri']],
-                           shapefile_version = shapefile,
-                           coastal_fix = T,
-                           debug=F)
-  toc(log = TRUE)
-  
-  tic('Saving results at country level with .fst')
-  lapply(adm0s, meltAndSave, type='lri', dt=lri.dt)
-  rm(lri.dt) #save memory
-  toc(log=TRUE)
+  # tic('Make table for LRI')
+  # lri.dt <- link_cell_pred(ind_gp = indicator_groups[['lri']],
+  #                          ind = indicators[['lri']],
+  #                          rd = run_dates[['lri']],
+  #                          reg = region,
+  #                          measure = measures[['lri']],
+  #                          pop_measure = 'a0004t', #children <5
+  #                          covs = covs,
+  #                          n_draws = 100, #reduce the # of draws to speed up processing
+  #                          year_start = 2000,
+  #                          year_end = 2017,
+  #                          rk = rks[['lri']],
+  #                          shapefile_version = shapefile,
+  #                          coastal_fix = T,
+  #                          debug=F)
+  # toc(log = TRUE)
+  # 
+  # tic('Saving results at country level with .fst')
+  # lapply(adm0s, meltAndSave, type='lri', dt=lri.dt)
+  # rm(lri.dt) #save memory
+  # toc(log=TRUE)
 
 } else message('skipping format stage as results are preformatted')
 
@@ -576,41 +580,42 @@ calcTAP <- function(country, dir,
   country_files <- list(hap=sprintf('%s/tmp/%s_hap.fst', dir, country),
                         lri=sprintf('%s/tmp/%s_lri.fst', dir, country))
   existance <- sapply(country_files, file.exists)
+  existance <- existance[1] #TODO only working on HAP at this time
            
   if (existance %>% all) {
   
     #read in the long data.tables for the appropriate country
     message('reading data from: ', country_files)
     dt <- read_fst(country_files[['hap']], as.data.table = T) %>% .[, ID := .I]
-    lri.dt <- read_fst(country_files[['lri']], as.data.table = T)  %>% .[, ID := .I]
+    #lri.dt <- read_fst(country_files[['lri']], as.data.table = T)  %>% .[, ID := .I]
     
     ##TESTS##
     #make sure dimensions match
-    test_result <- (dim(dt)!=dim(lri.dt)) %>% any
-    if(test_result) { 
-      error <- data.table('hap_n'=dt[draw=='V1' & year=='2000', .N], 'lri_n'=lri.dt[draw=='V1' & year=='2000', .N])
-    } else {
-      #make sure tables have not been re-sorted
-      #sample 50 random rows and compare them. they should match in all rows except pixel_id and the indicator
-      sampled_ids <- sample(dt$ID, 50)
-      test_result <- all.equal(lri.dt[ID %in% sampled_ids, -c('pixel_id', 'lri'), with=F], 
-                               dt[ID %in% sampled_ids, -c('pixel_id', 'hap'), with=F])
-      if(test_result %>% is.character) error <- test_result
-    }
-    
-    #if errrors are found, record in output folder and return NULL
-    if(exists('error')) {
-      
-      message(country, ' encountered error: ', error)
-      write.csv(error, file = paste0(dir, '/', country, '_failure.csv'))
-      return(NULL)
-    
-    } else {  
-      #if no errors, process country  
-      #merge tables
-      dt[, lri := lri.dt[, lri]] %>% 
-        .[, ID := NULL] #no longer needed
-        rm(lri.dt) #cleanup
+    # test_result <- (dim(dt)!=dim(lri.dt)) %>% any
+    # if(test_result) { 
+    #   error <- data.table('hap_n'=dt[draw=='V1' & year=='2000', .N], 'lri_n'=lri.dt[draw=='V1' & year=='2000', .N])
+    # } else {
+    #   #make sure tables have not been re-sorted
+    #   #sample 50 random rows and compare them. they should match in all rows except pixel_id and the indicator
+    #   sampled_ids <- sample(dt$ID, 50)
+    #   test_result <- all.equal(lri.dt[ID %in% sampled_ids, -c('pixel_id', 'lri'), with=F], 
+    #                            dt[ID %in% sampled_ids, -c('pixel_id', 'hap'), with=F])
+    #   if(test_result %>% is.character) error <- test_result
+    # }
+    # 
+    # #if errrors are found, record in output folder and return NULL
+    # if(exists('error')) {
+    #   
+    #   message(country, ' encountered error: ', error)
+    #   write.csv(error, file = paste0(dir, '/', country, '_failure.csv'))
+    #   return(NULL)
+    # 
+    # } else {  
+    #   #if no errors, process country  
+    #   #merge tables
+    #   dt[, lri := lri.dt[, lri]] %>% 
+    #     .[, ID := NULL] #no longer needed
+    #     rm(lri.dt) #cleanup
       
     
       #merge on the child HAP excess PM2.5 values for each ad0
@@ -620,30 +625,36 @@ calcTAP <- function(country, dir,
       message('calculating TAP PM2.5/capita')
       dt[, aap_pm := pop * ihmepm25]
       dt[, hap_pm := pop * hap * hap_excess_pm25]
-      dt[, tap_pm_capita := (aap_pm + hap_pm) / pop]
-      dt[pop==0, tap_pm_capita := 0] #must assume no exposure in zero population cells
+      dt[, tap_pm := (aap_pm + hap_pm)]
+      dt[, tap_pc := tap_pm / pop]
+      dt[pop==0, tap_pc := 0] #must assume no exposure in zero population cells
       
-      #calculate the hap proportion
+      #calculate the hap proportion and other key hap indicators
       dt[, hap_pct := hap_pm/(aap_pm+hap_pm)]
+      dt[, dfu := hap]
+      dt[, cfu := 1-dfu]
+      
+      #calculate correlations between aap and hap
+      dt[, cor := corSpearman(aap_pm, hap_pm), by=.(pixel_id, draw)]
       
       #calculate the TAP RR for LRI
       message('calculating RISK')
       dt <- merge(dt, lri.rr, by='draw') #merge on the draws of IER parameters
-      dt[tap_pm_capita<=tmrel, tap_rr := 1] #only calculate RR if the exp>tmrel
-      dt[tap_pm_capita>tmrel, tap_rr := 1 + (alpha * (1 - exp(-beta * (tap_pm_capita - tmrel)^gamma)))] #power2 functional form
+      dt[tap_pc<=tmrel, tap_rr := 1] #only calculate RR if the exp>tmrel
+      dt[tap_pc>tmrel, tap_rr := 1 + (alpha * (1 - exp(-beta * (tap_pc - tmrel)^gamma)))] #power2 functional form
       
       #calculate the TAP PAF for LRI
       dt[, tap_paf := (tap_rr-1)/tap_rr]
       
       #calculate the LRI attrib to TAP
-      dt[, tap_lri_r := tap_paf * lri] #rate
-      dt[, tap_lri_c := tap_paf * lri * pop] #count
-      
+      # dt[, tap_lri_r := tap_paf * lri] #rate
+      # dt[, tap_lri_c := tap_paf * lri * pop] #count
       
       message('collapsing draws')
       #define relevant col vectors
-      out_cols <- c('hap_pct', 'tap_paf', 'tap_lri_r', 'tap_lri_c')
-      null_cols <- c(indicators, 'ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pm_capita', 'tap_rr',
+      #out_cols <- c('hap_pct', 'tap_paf', 'tap_lri_r', 'tap_lri_c')
+      out_cols <- c('hap_pct', 'tap_paf', 'tap_pm', 'dfu', 'cfu', 'cor')
+      null_cols <- c(indicators, 'ihmepm25', 'hap', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_rr', 
                      names(lri.rr)) %>% unlist
       
       #collapse over the draws for TAP PAF / LRI attrib and return the mean values
@@ -662,7 +673,7 @@ calcTAP <- function(country, dir,
         message('Aggregating at the level of ', by_cols)
         
         #distinguish that count columns should be a weighted sum instead of a weighted mean
-        sum_cols <- agg_cols %>% .[. %like% '_c'] %T>% 
+        sum_cols <- agg_cols %>% .[. %like% '_c|_pm'] %T>% 
           message('Using a weighted sum to aggregate: ', .) 
         mean_cols <- agg_cols %>% .[!(. %in% sum_cols)] %T>% 
           message('Using a weighted mean to aggregate: ', .) 
@@ -678,6 +689,7 @@ calcTAP <- function(country, dir,
           .[, (mean_cols) := lapply(.SD, weighted.mean, w=pop*area_fraction, na.rm=T), .SDcols=mean_cols, by=key(.)] %>% 
           .[, (sum_cols) := lapply(.SD, function(x, w) sum(x*w, na.rm=T), w=area_fraction), .SDcols=sum_cols, by=key(.)] %>% 
           .[, pop := sum(pop*area_fraction), by=key(.)] %>% #aggregate pop as well
+          .[, tap_pc := tap_pm / pop] %>% 
           .[, (null_cols) := NULL] %>%  #remove unecessary columns
           unique(., by=key(.)) %>% 
           return
@@ -691,7 +703,7 @@ calcTAP <- function(country, dir,
       list('ad0'=ad0,
            'ad2'=ad2) %>% 
         return
-    }
+    #}
       
   } else {message(country_files[!existance], ' does not exist..skipping!'); return(NULL)}
   

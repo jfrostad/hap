@@ -1,0 +1,14 @@
+"","covariate","measure","include","gbd"
+"1","access2","mean",TRUE,FALSE
+"2","aridity","mean",TRUE,FALSE
+"3","depratio","youngage",TRUE,FALSE
+"4","distriverslakes","mean",TRUE,FALSE
+"5","dmspntl","mean",TRUE,FALSE
+"6","escroplandarea","mean",TRUE,FALSE
+"7","evi","median",TRUE,FALSE
+"8","ghslurbanicity","mean",TRUE,FALSE
+"9","haqi","mean",TRUE,TRUE
+"10","herreronyield","vita",TRUE,FALSE
+"11","irrigation","mean",TRUE,FALSE
+"12","lstavg","median",TRUE,FALSE
+"13","worldpop","total",TRUE,FALSE

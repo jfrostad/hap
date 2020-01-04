@@ -31,7 +31,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(caretEnsemble, ccaPP, fasterize, fst, mgsub, randtoolbox)
+pacman::p_load(ccaPP, fasterize, fst, mgsub, randtoolbox)
 
 #detect if running in rstudio IDE
 debug <- F

@@ -513,7 +513,7 @@ fit_xgboost_child_model <- function(df,
                                     hyperparameter_filepath = NULL,
                                     debug=F) {
 
-  load_R_packages(c("xgboost", "caret", 'ggrepel', 'caretEnsemble'))
+  load_R_packages(c("xgboost", "caret", 'ggrepel'))
   
   if (debug) browser()
 
@@ -725,16 +725,16 @@ fit_xgboost_child_model <- function(df,
   message('building xgb ensemble')
 
   #build ensemble
-  xg_ensemble <- caretList(form,
+  xg_ensemble <- caretEnsemble::caretList(form,
                            data = df,
                            trControl = train_control_final,
-                           tuneList = list(xgbTree=caretModelSpec(method="xgbTree", tuneGrid=best_tune),
-                                           xgbTree=caretModelSpec(method="xgbTree", tuneGrid=second_best_tune)),
+                           tuneList = list(xgbTree=caretEnsemble::caretModelSpec(method="xgbTree", tuneGrid=best_tune),
+                                           xgbTree=caretEnsemble::caretModelSpec(method="xgbTree", tuneGrid=second_best_tune)),
                            metric = "RMSE",
                            objective = objective_function,
                            weights = df$xg_weight)
 
-  greedy_ensemble <- caretEnsemble(
+  greedy_ensemble <- caretEnsemble::caretEnsemble(
     xg_ensemble,
     metric="RMSE",
     trControl=train_control_final)

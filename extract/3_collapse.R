@@ -25,22 +25,22 @@ if (Sys.info()["sysname"] == "Linux") {
 } else {j_root <- "J:"; h_root <- "H:"}
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, tidyverse) 
+pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, tidyverse, ellipsis) 
 package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
-today <- '2019_07_29' #TODO setup to pull latest date if !run_collapse
+#today <- '2019_07_29' #TODO setup to pull latest date if !run_collapse
 
 #options
 cores <- 10
 this.family='cooking'
 modeling_shapefile_version <- "current"
 manual_date <- "2018_12_18" #set this value to use a manually specified extract date
-collapse_date <- "2019_07_31" #which data of collapse to use if not rerunning
+collapse_date <- "2019_12_11" #which data of collapse to use if not rerunning
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- F #set to TRUE if you have new data and want to recollapse
+run_collapse <- T #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 new_vetting <- T #set to TRUE to refresh the vetting diagnostic
@@ -172,7 +172,7 @@ collapseData <- function(this.family,
     
     #### Address Missingness ####
     message("\nBegin Addressing Missingness...")
-
+    
     # ID clusters with more than 20% weighted missingness
     #TODO set this up to loop over all vars -> right now just using cooking_fuel_solid as the gold standard
     missing.vars <- idMissing(dt, this.var="cooking_fuel_dirty", criteria=.2, wt.var='hh_size')
@@ -200,7 +200,7 @@ collapseData <- function(this.family,
                          missing.wts,
                          invalid.wts,
                          invalid.sizes) %>% unique
-
+    
     #remove these clusters and proceed
     message('dropping ', length(remove.clusters), 
             ' clusters based on variable missingness/invalidity above cluster-level criteria thresholds')
@@ -276,7 +276,7 @@ if (save_intermediate) {
 if (run_collapse) {
   
   #Run fx for each point/poly
-  cooking <- mapply(collapseData, point=T:F, this.family='cooking', SIMPLIFY=F, debug=F) %>% rbindlist
+  cooking <- mapply(collapseData, point=F, this.family='cooking', SIMPLIFY=F, debug=T) %>% rbindlist
   
   #Run fx for each census file
   cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
@@ -323,6 +323,7 @@ cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=
 #shapefile issues: document here shapefiles that cause resample_polygons to fail
 shapefile_issues <- c('IRQ_ADM3_2019_OCHA', 'TLS_regions', 'g2015_2004_2')
 shapefile_issues_nids <- cooking[shapefile %in% shapefile_issues, unique(nid)]
+message('shapfile issues with the following iso3s: ', cooking[shapefile %in% shapefile_issues, unique(ihme_loc_id)])
 
 #TODO, current only able to resample stage1/2 countries
 dt <- cooking[iso3 %in% unique(stages[Stage %in% c('1', '2a', '2b'), iso3])] %>% 
@@ -371,9 +372,9 @@ dt[, point := !polygon]
 #                 cluster_id, polygon, shapefile, location_code, weight, pseudocluster)]
 
 #save into MDG dir
-#save each one for modelling in ordinal space
+#save each one for modelling in binary/ordinal space
 file.path(share.model.dir, 'cooking_fuel_solid.RDS') %>% saveRDS(dt, file=.)
-file.path(share.model.dir, ' ') %>% write.csv(dt, file=., row.names=F)
+file.path(share.model.dir, 'cooking_fuel_solid.csv') %>% write.csv(dt, file=., row.names=F)
 file.path(share.model.dir, 'cooking_fuel_kerosene.RDS') %>% saveRDS(dt, file=.)
 file.path(share.model.dir, 'cooking_fuel_kerosene.csv') %>% write.csv(dt, file=., row.names=F)
 file.path(share.model.dir, 'cooking_fuel_dirty.RDS') %>% saveRDS(dt, file=.)

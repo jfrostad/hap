@@ -34,7 +34,7 @@ if (use_geos_nodes) {
 # set config and covariate files
 config_par   <- 'config_hap_best'
 config_file <- file.path(indicator_group, 'model/configs/')
-cov_par      <- 'covs_ort_standard'
+cov_par      <- 'covs_hap_standard'
 cov_file <- config_file
 
 # indicate whether to use old run date

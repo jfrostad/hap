@@ -555,16 +555,10 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  shapefile                   <- 'current'
+  shapefile                   <- '2019_09_10'
   modeling_shapefile_version <- shapefile
-  covs                        <- c('access2', 
-                                   'diarrhea_prev',
-                                   'edu_mean_raked',
-                                   'u5m')
-  cov_measures                <- c('mean',
-                                   'mean',
-                                   'median',
-                                   'mean')
+  covs                        <- c('ghslurbanicity')
+  cov_measures                <- c('mean')
 
 
 } else {
