@@ -111,7 +111,7 @@ if (latest_date) {
 collapseData <- function(this.family,
                          census.file=NULL,
                          out.temp=NULL,
-                         subset=NULL,
+                         subcountry=NULL,
                          debug=F) {
   
   message("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
@@ -144,12 +144,15 @@ collapseData <- function(this.family,
   #loop over various families of indicators
   message(paste('->Processing:', this.family))
   #### Subset & Shape Data ####
+  #subset to countries, generally used interactively in order to see why surveys are being dropped
+  if (!(is.null(subcountry))) {
+    dt <- dt[ihme_loc_id==subcountry]
+    raw <- raw[iso3==subcountry]
+  }
+  
   #launch browser to debug interactively
   if (debug) browser()
-  if (!(is.null(subset))) {
-    dt <- dt[ihme_loc_id==subset]
-    raw <- raw[iso3==subset]
-  }
+
     
   #output an intermediate file prior to collapse/indicator definition for preliminary analysis
   if (!is.null(out.temp)) {
@@ -277,7 +280,7 @@ if (save_intermediate) {
 if (run_collapse) {
   
   #Run fx for each point/poly
-  cooking <- collapseData('cooking', debug=T)
+  cooking <- collapseData('cooking', debug=F)
   
   #Run fx for each census file
   cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
@@ -348,7 +351,7 @@ if (run_resample) {
 #combine all points
 dt <- list(dt[polygon==F], pt) %>% 
   rbindlist(use.names=T, fill=T) %>% 
-  .[polygon==F, weight := 1 ] #weights are produced by the resample polygons fx
+  .[polygon==F, weight := 1] #weights are produced by the resample polygons fx
 
 #redefine row ID after resampling
 dt[, row_id := .I]
