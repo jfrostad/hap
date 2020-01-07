@@ -117,13 +117,23 @@ vetAssistant <- function(this.nid,
 
   #pull the raw data
   message(' --> raw data') 
-  raw <- 
+  raw.files <- 
     file.path(dirs[['raw']]) %>% 
     list.files(full.names = T, pattern='.csv') %>% 
     .[. %like% this.nid] %>% 
     #added second check against survey name in case of nids that are subsets of other, longer nids
-    .[. %like% cb[nid==this.nid, ihme_loc_id]] %>% 
-    { if(length(.)>0) fread(.) else 'No extraction present!' }
+    .[. %like% cb[nid==this.nid, ihme_loc_id]]
+  
+  if(length(raw.files)==1) { 
+    
+    raw <- fread(raw.files) 
+    
+  } else if (length(raw.files)>1) {
+    
+    raw <- lapply(raw.files, fread) %>% 
+      rbindlist(fill=T, use.names=T) 
+    
+  } else if(length(raw.files)==0) raw <- 'No extract'
   
   #pull the collapsed data
   message(' ---> collapsed data')
@@ -325,7 +335,7 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 #which nid are we vetting?
-problem.nid <- 303458 #set the NID you want to vet
+problem.nid <- 283812 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)

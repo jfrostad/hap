@@ -7,7 +7,7 @@
 
 # ----Cleaning----------------------------------------------------------------------------------------------------------
 #function to do some initial cleaning and prep for the data
-initialClean <- function(input.dt, var.fam, is.point) {
+initialClean <- function(input.dt, var.fam) {
   
   message("\nBegin Initial Cleaning...")
   message('->Subset to relevant variables')
@@ -31,8 +31,11 @@ initialClean <- function(input.dt, var.fam, is.point) {
   
   ### Standardize years
   message('-->Create a unique cluster id')
+  
+  #determine if working with point data
+  is.polygon <- all(dt[, lat] %>% unique %>% is.na)
 
-  if (is.point) dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, year_start)]
+  if (!is.polygon) dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, year_start)]
   else dt[, cluster_id := .GRP, by=.(iso3, shapefile, location_code, nid, year_start)]
 
   #Standardize year
@@ -47,7 +50,7 @@ initialClean <- function(input.dt, var.fam, is.point) {
   # dt <- dt[year_median>=2000]
 
   ### Standardize point data weighting
-  if (is.point) {
+  if (!is.polygon) {
     
     message('---->Change weight to 1 for point data')
     message('----->Change shapefile/location_code to NA for point data')
@@ -55,7 +58,9 @@ initialClean <- function(input.dt, var.fam, is.point) {
     dt[, hhweight := 1]
     dt[, c('shapefile', 'location_code') := NA]
     
-  }
+  } 
+  
+  dt[, polygon := is.polygon]
   
   #define a row id for other operations and key on it
   dt[, row_id := .I] 
@@ -202,10 +207,11 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, check.threshol
   if (length(clusters>1)) {  
     #save a diagnostic file with the clusters and the type of missingness
     dt[, N := uniqueN(cluster_id), by=nid] %>% # for proportion dropped
-      .[cluster_id %in% clusters, .(nid, ihme_loc_id, int_year, cluster_id, N)] %>%
-      setkey(., nid, ihme_loc_id, int_year, cluster_id) %>% 
+      .[, .(nid, ihme_loc_id, int_year, cluster_id, N)] %>%
+      setkey(., nid, ihme_loc_id, cluster_id) %>% 
       unique(., by=key(.)) %>% 
-      .[, count := sum(cluster_id %in% clusters), by=nid] %>% 
+      .[, count := as.integer(cluster_id %in% clusters)] %>% 
+      .[, count := sum(count), by=nid] %>% 
       .[, prop := count/N, by=nid] %>% 
       .[, var := this.var] %>% 
       .[, type := ifelse(!check.threshold, 'missingness', 'invalidity')] %>% 
@@ -276,7 +282,7 @@ cw <- function(dt, this.var, debug = F) {
 
 # ----Aggregate---------------------------------------------------------------------------------------------------------
 #aggregate the given indicator
-aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
+aggIndicator <- function(input.dt, var.fam, debug=F) {
   
   #allow for interactive debugs
   if (debug) browser()
@@ -289,13 +295,15 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   } 
   
   message('collapsing...', paste(these.vars, sep='/'))
-  
+
   #point data needs to be collapsed using urbanicity
-  key.cols <- c('cluster_id', 'nid', 'lat', 'long', 'survey_series', 'year_median', 'shapefile', 'location_code', 
-                switch(is.point, NULL, 'urban')) #if points data, add urbanicity to key
+  key.cols <- c('cluster_id', 'nid', 'lat', 'long', 
+                'survey_series', 'year_median', 'shapefile', 'location_code', 'urban')
 
   #set as copy so you dont save the new vars
-  dt <- copy(input.dt) %>% setkeyv(., key.cols)
+  dt <- copy(input.dt) %>%
+    .[polygon==T, urban := NA] %>%   #for polygon data, urbanicity status is no longer meaningful
+    setkeyv(., key.cols)
 
   #calculations
   dt[, (these.vars) := lapply(.SD, function(x, wt) sum(x*wt, na.rm=T)/sum(wt, na.rm=T), wt=hhweight*hh_size), 
@@ -304,9 +312,6 @@ aggIndicator <- function(input.dt, var.fam, is.point, debug=F) {
   dt[, N := sum(hhweight*hh_size)^2/sum(hhweight^2*hh_size), by=key(dt)]
   dt[, sum_of_sample_weights := sum(hhweight), by=key(dt)]
   
-  #for polygon data, urbanicity status is no longer meaningful
-  if (!is.point) dt[, urban := NA] #TODO what did urbanicity status for poly data originally mean?
-
   dt %>%  #collapse the dt to unique values based on the key and output
     unique(., by=key(dt)) %>% 
     return

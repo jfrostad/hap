@@ -55,6 +55,10 @@ doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 def.file <- file.path(doc.dir, 'definitions.xlsx')
 raw.dir <- file.path("/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap") #where your extractions are stored
 
+#TODO problem NIDs that seem to be getting dropped
+dropped.nids <- read_excel('/home/j/temp/albrja/diarrhea_lri_wash/hap/collapse_nid_analysis.xlsx', sheet='dropped_nids_collapse')
+
+
 ###Output###
 out.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
 model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
@@ -105,9 +109,9 @@ if (latest_date) {
   
 #loop over points and polygons to collapse
 collapseData <- function(this.family,
-                         point=NULL,
                          census.file=NULL,
                          out.temp=NULL,
+                         subset=NULL,
                          debug=F) {
   
   message("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
@@ -118,36 +122,34 @@ collapseData <- function(this.family,
     census <- T
     # Load data
     raw <- read.fst(census.file, as.data.table=T)
-    # Determine if point or poly
-    point <- !all(raw[, lat] %>% unique %>% is.na)
+    dt <- initialClean(raw, var.fam=this.family)
     
   } else {
     census <- F
     # Load data
-      if(point) {
-        
-        raw <- paste0(data.dir, 'points_', file_date, ".fst") %>% 
-          read.fst(., as.data.table=T)
-          
-        
-      } else {
-        
-        #note that poly file is now split into 2 files due to size limitations
-        raw <- paste0(data.dir, 'poly_', file_date, ".fst") %>% 
-          read.fst(., as.data.table=T)
-          
-      }
+    pt <- paste0(data.dir, 'points_', file_date, ".fst") %>% read.fst(., as.data.table=T)
+    poly <- paste0(data.dir, 'poly_', file_date, ".fst") %>% read.fst(., as.data.table=T)
+
+    dt <- list(
+      initialClean(pt, var.fam=this.family),
+      initialClean(poly, var.fam=this.family)
+    ) %>% rbindlist
+    
+    #cleanup
+    raw <- list(pt, poly) %>% rbindlist
   } 
   
-  message("Loading data...[point=", point, "]/[census=", census, "]")
+  message("Loading data...[census=", census, "]")
 
   #loop over various families of indicators
   message(paste('->Processing:', this.family))
-
   #### Subset & Shape Data ####
-  dt <- initialClean(raw, var.fam=this.family, is.point=point)
-  
+  #launch browser to debug interactively
   if (debug) browser()
+  if (!(is.null(subset))) {
+    dt <- dt[ihme_loc_id==subset]
+    raw <- raw[iso3==subset]
+  }
     
   #output an intermediate file prior to collapse/indicator definition for preliminary analysis
   if (!is.null(out.temp)) {
@@ -161,7 +163,7 @@ collapseData <- function(this.family,
     paste0(out.dir, '/uncollapsed_',
            ifelse(census, tools::file_path_sans_ext(basename(census.file)),
                   ifelse(point, 'points', 'poly')),
-           '.feather') %>% write_feather(dt, path=.)
+           '.feather') %>% write_feather(raw, path=.)
     
     paste0("saved intermediate files to:", out.temp) %>% return #end process here if saving int files
     
@@ -206,20 +208,6 @@ collapseData <- function(this.family,
             ' clusters based on variable missingness/invalidity above cluster-level criteria thresholds')
     dt <- dt[!(cluster_id %in% remove.clusters)]
     
-    #remove invalid rows that were insufficient in number to trigger criteria thresholds
-    message('dropping additional ', dt[(hhweight<=0)] %>% nrow, 
-            ' rows based on hhweight missingness/invalidity below cluster-level criteria thresholds')
-    dt <- dt[hhweight>0] #drop invalid rows as well
-    message('dropping additional ', dt[(hhweight<=0)] %>% nrow, 
-            ' rows based on hhsize invalidity below cluster-level criteria thresholds')
-    dt <- dt[hh_size>0] #drop invalid rows as well
-    
-    #TODO recode HH sizes that have values like 98, etc which represent unknown or other?
-    
-    # Crosswalk missing/invalid household size data
-    #TODO discuss this part with ani after learning more, for now just impute as 1
-    dt[(is.na(hh_size) | hh_size==0), hh_size := 1]
-    
     # message("Crosswalking HH Sizes...")
     # if (!ipums) {
     #   ptdat <- hh_cw_reg(data = ptdat)
@@ -232,6 +220,20 @@ collapseData <- function(this.family,
     # dt <- merge(dt, locs[, .(ihme_loc_id, region_id, super_region_id)], by='ihme_loc_id')
     # cw(dt, this.var='cooking_fuel_solid', debug=T)
     
+    # Crosswalk missing/invalid household size data
+    #TODO recode HH sizes that have values like 98, etc which represent unknown or other?
+    #TODO discuss this part with ani after learning more, for now just impute as 1
+    #dt[(is.na(hh_size) | hh_size==0 | hh_size > 95), table(nid)]
+    dt[(is.na(hh_size) | hh_size==0 | hh_size > 95), hh_size := 1]
+    
+    #remove invalid rows that were insufficient in number to trigger criteria thresholds
+    message('dropping additional ', dt[(hhweight<=0)] %>% nrow, 
+            ' rows based on hhweight missingness/invalidity below cluster-level criteria thresholds')
+    dt <- dt[hhweight>0] #drop invalid rows as well
+    message('dropping additional ', dt[(hh_size<=0)] %>% nrow, 
+            ' rows based on hhsize invalidity below cluster-level criteria thresholds')
+    dt <- dt[hh_size>0] #drop invalid rows as well
+    
     #subset to years that are >= 2000 as we dont model before this time period
     message('\nCreate column with median year of each cluster. Subset to >2000')
     dt[, year_median := median(int_year, na.rm=T) %>% floor, by=cluster_id]
@@ -241,8 +243,7 @@ collapseData <- function(this.family,
     #### Aggregate Data ####
     # Aggregate indicator to cluster level
     message("\nBegin Collapsing Variables")
-    agg.dt <- aggIndicator(dt, var.fam=this.family, is.point=point, debug=F) #list of variables to aggregate
-    agg.dt[, polygon := !(point)]
+    agg.dt <- aggIndicator(dt, var.fam=this.family, debug=F) #list of variables to aggregate
     message("->Complete!")
 
     # Standardize the year variable for each survey using the weighted mean of the NID
@@ -276,7 +277,7 @@ if (save_intermediate) {
 if (run_collapse) {
   
   #Run fx for each point/poly
-  cooking <- mapply(collapseData, point=F, this.family='cooking', SIMPLIFY=F, debug=T) %>% rbindlist
+  cooking <- collapseData('cooking', debug=T)
   
   #Run fx for each census file
   cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
