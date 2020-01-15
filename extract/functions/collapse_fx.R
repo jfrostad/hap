@@ -204,27 +204,27 @@ idMissing <- function(input.dt, this.var, criteria=.2, wt.var=NA, check.threshol
   clusters <- dt[pct_miss>criteria, cluster_id] %>% 
     unique
   
-  if (length(clusters>1)) {  
-    #save a diagnostic file with the clusters and the type of missingness
-    dt[, N := uniqueN(cluster_id), by=nid] %>% # for proportion dropped
-      .[, .(nid, ihme_loc_id, int_year, cluster_id, N)] %>%
-      setkey(., nid, ihme_loc_id, cluster_id) %>% 
-      unique(., by=key(.)) %>% 
-      .[, count := as.integer(cluster_id %in% clusters)] %>% 
-      .[, count := sum(count), by=nid] %>% 
-      .[, prop := count/N, by=nid] %>% 
-      .[, var := this.var] %>% 
-      .[, type := ifelse(!check.threshold, 'missingness', 'invalidity')] %>% 
-      .[, cluster_id := NULL] %>% 
-      #save using NID/vartype to uniquely ID the file, we will give a meaningful name to the combined diagnostic later
-      unique(., by='nid') %>% 
-      write.csv(., file=paste0(doc.dir, '/temp/dropped_clusters_', 
-                               dt[, nid] %>% unique %>% sample(2, replace=T) %>% prod, #create a semi-random number
-                               '_', this.var, '_', 
-                               ifelse(check.threshold, 'invalidity', 'missingness'), '.csv'))
-    return(clusters)
+  #save a diagnostic file with the clusters and the type of missingness
+  dt[, N := uniqueN(cluster_id), by=nid] %>% # for proportion dropped
+    .[, .(nid, ihme_loc_id, int_year, cluster_id, N)] %>%
+    setkey(., nid, ihme_loc_id, cluster_id) %>% 
+    unique(., by=key(.)) %>% 
+    .[, count := as.integer(cluster_id %in% clusters)] %>% 
+    .[, count := sum(count), by=nid] %>% 
+    .[, prop := count/N, by=nid] %>% 
+    .[, var := this.var] %>% 
+    .[, type := ifelse(!check.threshold, 'missingness', 'invalidity')] %>% 
+    .[, cluster_id := NULL] %>% 
+    #save using NID/vartype to uniquely ID the file, we will give a meaningful name to the combined diagnostic later
+    unique(., by='nid') %>% 
+    write.csv(., file=paste0(doc.dir, '/temp/dropped_clusters_', 
+                             dt[, nid] %>% unique %>% sample(2, replace=T) %>% prod, #create a semi-random number
+                             '_', this.var, '_', 
+                             ifelse(check.threshold, 'invalidity', 'missingness'), '.csv'),
+              row.names=F)
   
-  } else return(NULL)
+  if (length(clusters>0)) return(clusters)
+  else return(NULL)
   
 }
 
@@ -333,6 +333,18 @@ collapseCleanup <- function(var.fam, codebook, test.vars, cleanup=F, debug=F) {
     lapply(., fread) %>% 
     rbindlist
   
+  #also read in the final model dataset and collapse it to unique NIDs
+  mod <- 
+    list.files(model.dir, pattern='.fst', full.names = T) %>% 
+    sort(., decreasing=T) %>% 
+    .[1] %>% #pull most recent collapsed data 
+    read.fst(., as.data.table=T) %>% 
+    .[, nid] %>% 
+    unique %>% 
+    as.data.table %>% 
+    setnames(., '.', 'nid') %>% 
+    .[, mod_input := 1]
+  
   #remove rows that are not codebooked for the test.vars using helper function
   codebook <- codebook[nid %in% unique(dt$nid)] #subset codebook to relevant rows we have collapsed
   checkCodebook <- function(this.var, full.dt, codebook) {
@@ -354,14 +366,20 @@ collapseCleanup <- function(var.fam, codebook, test.vars, cleanup=F, debug=F) {
     rbindlist %>% 
     setkey(., nid, ihme_loc_id, int_year)
   
-  #generate total missingness diagnostic
-  dt[, total := sum(count), by=key(dt)]
+  #merge model data 
+  dt <- merge(dt, mod, by='nid', all.x=T, fill=T) %>% 
+    .[is.na(mod_input), mod_input := 0]
   
-  #output file (sort by max total)
-  write.csv(dt[order(-total)], file=paste0(doc.dir, '/', var.fam, '/dropped_clusters.csv'), row.names = F)
-  
+  #generate total missingness diagnostic and reshape wide
+  dt[, newvar := paste0(substr(type, 1, 4), '_', var)] 
+  dt <- dcast(dt[, -c('var', 'type'), with=F], ...~newvar, value.var=c('count', 'prop'), fun.aggregate=sum)
+
   #cleanup
+  write.csv(dt, file=paste0(doc.dir, '/', var.fam, '/dropped_clusters.csv'), row.names = F)
   if (cleanup) file.path(doc.dir, 'temp') %>% list.files(., pattern='dropped_clusters', full.names = T) %>% unlink
+  
+  #output file
+  return(dt)
   
 }
 #***********************************************************************************************************************

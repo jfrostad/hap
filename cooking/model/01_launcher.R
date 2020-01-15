@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_time_gmrf'
+config_par   <- 'hap_gp_sp_no_re'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 

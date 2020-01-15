@@ -84,7 +84,7 @@ if ('xgboost' %in% child_model_names) {
     names(sobol_scalars) <- c("nrounds", 'max_depth', "eta", "colsample_bytree", "min_child_weight", 'subsample')
     #note that carat returns a bug if this is a dt instead of df
     xg_grid <- data.frame(nrounds = gen_sequence(min=100, max=500, rounding=0, scalar=sobol_scalars$nrounds), 
-                          max_depth = gen_sequence(min=2, max=5, rounding=0, scalar=sobol_scalars$max_depth),
+                          max_depth = gen_sequence(min=2, max=4, rounding=0, scalar=sobol_scalars$max_depth),
                           eta = gen_sequence(min=.02, max=.2, scalar=sobol_scalars$eta),
                           colsample_bytree = gen_sequence(min=.4, max=1, scalar=sobol_scalars$colsample_bytree),
                           min_child_weight = gen_sequence(min=1, max=5, scalar=sobol_scalars$min_child_weight),

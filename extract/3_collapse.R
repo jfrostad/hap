@@ -25,7 +25,7 @@ if (Sys.info()["sysname"] == "Linux") {
 } else {j_root <- "J:"; h_root <- "H:"}
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, tidyverse, ellipsis) 
+pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, tidyverse, ellipsis, sf) 
 package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 #capture date
@@ -35,12 +35,12 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 #options
 cores <- 10
 this.family='cooking'
-modeling_shapefile_version <- "current"
-manual_date <- "2018_12_18" #set this value to use a manually specified extract date
-collapse_date <- "2019_12_11" #which data of collapse to use if not rerunning
+modeling_shapefile_version <- "2019_09_10"
+# manual_date <- "2018_12_18" #set this value to use a manually specified extract date
+# collapse_date <- "2019_12_11" #which data of collapse to use if not rerunning
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- T #set to TRUE if you have new data and want to recollapse
+run_collapse <- F #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 new_vetting <- T #set to TRUE to refresh the vetting diagnostic
@@ -57,7 +57,6 @@ raw.dir <- file.path("/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/ubCov_extract
 
 #TODO problem NIDs that seem to be getting dropped
 dropped.nids <- read_excel('/home/j/temp/albrja/diarrhea_lri_wash/hap/collapse_nid_analysis.xlsx', sheet='dropped_nids_collapse')
-
 
 ###Output###
 out.dir  <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
@@ -82,7 +81,7 @@ file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_ids.R') %>% source
 file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 
-lbd.shared.function.dir <- file.path(h_root, "_code/lbd/lbd_core/mbg_central")
+lbd.shared.function.dir <- file.path(h_root, "_code/lbd/hap/mbg_central")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
 mbg_setup(repo=lbd.shared.function.dir, package_list=package_list) #load mbg functions
 #***********************************************************************************************************************
@@ -254,6 +253,17 @@ collapseData <- function(this.family,
     message("\nStandardizing Year Variable")
     agg.dt[, year := weighted.mean(year_median, w=sum_of_sample_weights) %>% floor, by=nid]
     
+    # # Report on surveys dropped during collapse
+    # if(census.file %>% is.null) {
+    #   for (iso in unique(raw$iso3) %>% sort) {
+    #     
+    #     dropped.nids <- unique(raw[iso3==iso, nid]) %>%
+    #       .[!(. %in% unique(agg.dt[ihme_loc_id==iso, nid]))]
+    #     
+    #     if (length(dropped.nids)>0) message(iso, '\nNIDs dropped by collapse:\n'); cat(dropped.nids, sep='\n')
+    #   }
+    # }
+    
     # Skip the rest of the process if no rows of data are left
     if (nrow(dt) == 0) {message('no data left to return!'); return(NULL)}
     else return(agg.dt)
@@ -280,10 +290,10 @@ if (save_intermediate) {
 if (run_collapse) {
   
   #Run fx for each point/poly
-  cooking <- collapseData('cooking', debug=F)
+  cooking <- collapseData('cooking')
   
   #Run fx for each census file
-  cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=cores) %>% 
+  cooking.census <- mcmapply(collapseData, census.file=ipums.files, this.family='cooking', SIMPLIFY=F, mc.cores=1) %>% 
     rbindlist
     
   #combine all and redefine the row ID
@@ -297,13 +307,14 @@ if (run_collapse) {
 
   #save poly and point collapses
   #TODO loop over all fams in fx
-  paste0(out.dir, "/", "data_", this.family, '_', today, ".fst") %>%
+  paste0(out.dir, "/", "collapsed_data_", this.family, ".fst") %>%
     write.fst(cooking, path=.)
 
   #combine diagnostics and cleanup intermediate files
-  collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel_dirty', 'hh_size'), cleanup=T)
+  col.diagnostic <- 
+    collapseCleanup(this.family, codebook=codebook, test.vars=c('cooking_fuel_dirty', 'hh_size'), cleanup=T, debug=F)
   
-} else cooking <- paste0(out.dir, "/", "data_", this.family, '_', collapse_date, ".fst") %>% read.fst(as.data.table=T)
+} else cooking <- paste0(out.dir, "/", "collapsed_data_", this.family, ".fst") %>% read.fst(as.data.table=T)
 #***********************************************************************************************************************
 
 # ---DATA EXCLUSION-----------------------------------------------------------------------------------------------------
@@ -320,6 +331,7 @@ cooking <- cooking[!(nid %in% excluded_nids)] #remove any excluded datapoints
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
 #prep for resampling
 vars <- names(cooking) %>% .[. %like% 'cooking']
+vars <- c('cooking_fuel_solid', 'cooking_fuel_dirty')
 
 #convert to count space
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
@@ -353,12 +365,20 @@ dt <- list(dt[polygon==F], pt) %>%
   rbindlist(use.names=T, fill=T) %>% 
   .[polygon==F, weight := 1] #weights are produced by the resample polygons fx
 
+for (iso in unique(dt$ihme_loc_id) %>% sort) {
+  
+  dropped.nids <- unique(cooking[ihme_loc_id==iso, nid]) %>% 
+    .[!(. %in% unique(dt[ihme_loc_id==iso, nid]))]
+  
+  if (length(dropped.nids)>0) message('\n', iso, '...NIDs dropped by resample:\n'); cat(dropped.nids, sep=' | ')
+}
+
 #redefine row ID after resampling
 dt[, row_id := .I]
 setkey(dt, row_id)
 
 #save resampled data
-paste0(model.dir, "/", "data_", this.family, '_', today, ".fst") %>%
+paste0(model.dir, "/", "resampled_data_", this.family, ".fst") %>%
   write.fst(dt, path=.)
 
 #prep for MDG

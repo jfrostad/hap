@@ -60,6 +60,9 @@ individual_countries <- commandArgs()[17]
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
 dir.create(outputdir, recursive=T)
 
+## save config type
+file.create(paste0(outputdir, '/000_', config_par, '.note'))
+
 ## Create directory structure for this model run
 create_dirs(indicator_group = indicator_group, indicator = indicator)
 
