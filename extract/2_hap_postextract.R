@@ -166,48 +166,51 @@ write.csv(verification[failures>0], paste0(folder_out, "/problem_extractions.csv
 ######################## PULL IN GEO CODEBOOKS ######################
 #####################################################################
 #Get all geog codebooks and package them together
-message("Retrieve geo codebook filepaths")
-files <- list.files(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks"), pattern=".csv$", ignore.case = T, full.names = T)
-files <- grep("IPUMS|special", files, value = T, invert = T) # list any strings from geo codebooks you want excluded here
-
-message("Read geo codebooks into list")
-geogs <- lapply(files, read_add_name_col)
-
-message("Append geo codebooks together")
-geo <- rbindlist(geogs, fill=T, use.names=T)
-geo[is.na(admin_level), admin_level := "NA"] #set NA values for admin_level to "NA" as a string to keep the following line from dropping them because of bad R logic
-geo <- geo[admin_level != "0", ] #drop anything matched to admin0
-geo <- geo[survey_module != "GSEC1"] #drop this geomatch which is creating a m:m mismatch on different keys issue
-rm(geogs)
-
-#Dedupe the geography codebook by geospatial_id, iso3, and nid
-geo <- distinct(geo, nid, iso3, geospatial_id, .keep_all=T)
-
-#coerce lat/longs to numeric
-geo <- geo[, lat := as.numeric(lat)]
-geo <- geo[, long := as.numeric(long)]
+# message("Retrieve geo codebook filepaths")
+# files <- list.files(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks"), pattern=".csv$", ignore.case = T, full.names = T)
+# files <- grep("IPUMS|special", files, value = T, invert = T) # list any strings from geo codebooks you want excluded here
+# 
+# message("Read geo codebooks into list")
+# geogs <- lapply(files, read_add_name_col)
+# 
+# message("Append geo codebooks together")
+# geo <- rbindlist(geogs, fill=T, use.names=T)
+# geo[is.na(admin_level), admin_level := "NA"] #set NA values for admin_level to "NA" as a string to keep the following line from dropping them because of bad R logic
+# geo <- geo[admin_level != "0", ] #drop anything matched to admin0
+# geo <- geo[survey_module != "GSEC1"] #drop this geomatch which is creating a m:m mismatch on different keys issue
+# rm(geogs)
+# 
+# #Dedupe the geography codebook by geospatial_id, iso3, and nid
+# geo <- distinct(geo, nid, iso3, geospatial_id, .keep_all=T)
+# 
+# #coerce lat/longs to numeric
+# geo <- geo[, lat := as.numeric(lat)]
+# geo <- geo[, long := as.numeric(long)]
 
 #####################################################################
 ######################## PREP DATA FOR MERGE ########################
 #####################################################################
-#Reconcile ubCov & geo codebook data types
-message("make types between merging datasets match")
-if (class(topics$nid) == "numeric"){
-  geo[, nid := as.numeric(nid)]
-} else if (class(topics$nid) == "integer"){
-  geo[, nid := as.integer(nid)]
-} else if (class(topics$nid) == "character"){
-  geo[, nid := as.character(nid)]
-} else{
-  message("update code to accomodate topics nid as")
-  message(class(topics$nid))
-}
-
-#Drop unnecessary geo codebook columns
-geo_keep <- c("nid", "iso3", "geospatial_id", "point", "lat", "long", "shapefile", "location_code", "survey_series")
-geo_k <- geo[, geo_keep, with=F]
+# #Reconcile ubCov & geo codebook data types
+# message("make types between merging datasets match")
+# if (class(topics$nid) == "numeric"){
+#   geo[, nid := as.numeric(nid)]
+# } else if (class(topics$nid) == "integer"){
+#   geo[, nid := as.integer(nid)]
+# } else if (class(topics$nid) == "character"){
+#   geo[, nid := as.character(nid)]
+# } else{
+#   message("update code to accomodate topics nid as")
+#   message(class(topics$nid))
+# }
+# 
+# #Drop unnecessary geo codebook columns
+# geo_keep <- c("nid", "iso3", "geospatial_id", "point", "lat", "long", "shapefile", "location_code", "survey_series")
+# geo_k <- geo[, geo_keep, with=F]
 ## If the merge returns an 'allow.cartesian' error, we've likely over-dropped characters - contact Scott Swartz to address it ##
 
+#use new geodata database 
+source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
+geo_k <- get_geocodebooks(nids = unique(topics$nid))
 #####################################################################
 ############################### MERGE ###############################
 #####################################################################
@@ -272,7 +275,7 @@ if (topic == "hap"){
   #accomodating my file structure
   #TODO make more flexible
   if (h %like% 'jfrostad') file.path(h, "_code/lbd", "hap/extract/2a_hap_custom_postextract.R") %>% source
-  else file.path(h, "hap/extract/2a_hap_custom_postextract.R") %>% source
+  else file.path(h, "/repos/hap/extract/2a_hap_custom_postextract.R") %>% source
 }
 #File path where this is located in your repo.
 

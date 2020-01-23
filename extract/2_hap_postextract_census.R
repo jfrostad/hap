@@ -68,9 +68,10 @@ codebook <- codebook[assigned %in% extractor_ids]
 new.files <- codebook[, output_name] %>% unique %>% paste(., collapse="|")
 extractions <- grep(new.files, extractions, invert=F, value=T)
 
-message("Read in IPUMS Geo Codebook")
-geo <- read.csv(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks/IPUMS_CENSUS.csv"), stringsAsFactors = F, encoding="windows-1252")
-geo <- geo[, c("nid", "iso3", 'shapefile', 'location_code', 'lat', 'long', 'admin_level', 'point', 'geospatial_id', 'start_year', 'end_year')]
+# message("Read in IPUMS Geo Codebook")
+# geo <- read.csv(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks/IPUMS_CENSUS.csv"), stringsAsFactors = F, encoding="windows-1252")
+# geo <- geo[, c("nid", "iso3", 'shapefile', 'location_code', 'lat', 'long', 'admin_level', 'point', 'geospatial_id', 'start_year', 'end_year')]
+
 
 #TODO add the same functionality in the regular post extract of saving a list of broken/problem extractions
 #needs to be setup within the loop to return this information serially
@@ -87,6 +88,10 @@ ipums_merge <- function(file, geo, folder_out, noms){
   year_start <- dt$year_start[1] %>% as.character
   year_end <- dt$year_end[1] %>% as.character
   survey_module <- dt$survey_module[1] %>% as.character
+  
+  #use new geocodebook database 
+  source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
+  geo <- get_geocodebooks(nids = nid)
   
   #skip bad data
   has_pweight_not_hhweight <- "pweight" %in% names(dt) & !("hhweight" %in% names(dt))
