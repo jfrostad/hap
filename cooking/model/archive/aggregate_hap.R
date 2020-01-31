@@ -2,6 +2,7 @@
 ## MBG aggregate results launcher script for ORT
 ## Written by Kirsten Wiens
 ## Created 2018/09/17
+#source("/homes/jfrostad/_code/lbd/hap/cooking/model/aggregate_hap.R", echo=T)
 ##############################################################################
 
 
@@ -21,11 +22,11 @@ debug.args <- c('simulate',
                 'cooking',
                 'cooking_fuel_solid',
                 'hap_best',
-                'covs_cooking_dia_cssa',
-                'dia_cssa',
+                'cooking_NGA',
+                'NGA',
                 'proj_geo_nodes',
                 TRUE,
-                '2019_07_19_17_36_52',
+                '2020_01_15_14_28_47',
                 'total',
                 0)
 #pull args from the job submission if !interactive

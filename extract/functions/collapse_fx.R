@@ -37,6 +37,9 @@ initialClean <- function(input.dt, var.fam) {
 
   if (!is.polygon) dt[, cluster_id := .GRP, by=.(iso3, lat, long, nid, year_start)]
   else dt[, cluster_id := .GRP, by=.(iso3, shapefile, location_code, nid, year_start)]
+  
+  #cluster_id should be unique within NID
+  dt[, cluster_id := paste0(nid, '_', cluster_id)]
 
   #Standardize year
   #TODO currently moving this step to after HH size cw because it is creating missingness in year_median

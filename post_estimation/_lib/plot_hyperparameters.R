@@ -2,7 +2,10 @@ require(INLA)
 require(data.table)
 require(ggplot2)
 
-plot_hyperparameters <- function(indicator, indicator_group, run_date, age, holdout, save_file = NULL, regs) {
+plot_hyperparameters <- function(indicator, indicator_group, run_date, age, holdout, save_file = NULL, regs,
+                                 debug=F) {
+  
+  if(debug) browser()
   
   # get regions
   outputdir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
@@ -11,7 +14,7 @@ plot_hyperparameters <- function(indicator, indicator_group, run_date, age, hold
   # extract prior and posterior distributions from INLA model objects
   message('Load models & extract priors and posteriors for hyper-parameters')
   dist <- rbindlist(lapply(regions, function(r) {
-    
+
     # load model
     message(paste0('...', r))
     result = tryCatch({
@@ -56,15 +59,37 @@ plot_hyperparameters <- function(indicator, indicator_group, run_date, age, hold
   
   # make plots
   message('Plotting hyper-parameters')
+
+  #custom function to control the hyper param plots
+  distPlot <- function(dist_dt, reg) {
+    
+    #subset data
+    if (reg=='regional') { dt <- dist_dt %>% copy %>% .[nchar(region)>3]; reg_label <- ' (Regional Models)'
+    } else if (reg=='country') { dt <- dist_dt %>% copy %>% .[nchar(region)==3]; reg_label <- ' (Ctry Models)'
+    } else dt <- dist_dt %>% copy %>% .[region==reg]; reg_label <- paste0(' (', reg, ')')
+
+    gg <- ggplot(dt[y > 1e-8,], aes(x = x, y = y, color = region, linetype = type)) +
+      facet_wrap(~ name, scales = 'free') +
+      geom_line() +
+      scale_color_brewer(palette = 'Set3') +
+      labs(x = '', y = '', title = paste0('Hyper-parameter prior and posterior distributions for ', indicator, reg_label)) +
+      theme_minimal()
+    
+    print(gg)
+    
+    return(NULL)
+    
+  }
+  
+  #make series of plots
   
   if (is.null(save_file)) save_file <- paste0(outputdir, '/diagnostic_plots/inla_hyperparameters.pdf')
   pdf(save_file, width = 14, height = 8)
-  gg <- ggplot(dist[y > 1e-8,], aes(x = x, y = y, color = region, linetype = type)) +
-    facet_wrap(~ name, scales = 'free') +
-    geom_line() +
-    labs(x = '', y = '', title = paste0('Hyper-parameter prior and posterior distributions for ', indicator)) +
-    theme_bw()
-  print(gg)
+  
+  distPlot(dist, reg='regional')
+  distPlot(dist, reg='country')
+  lapply(unique(dist$region), distPlot, dist_dt=dist)
+
   dev.off()
   
   return(dist)

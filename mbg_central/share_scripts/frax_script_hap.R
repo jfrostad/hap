@@ -41,9 +41,9 @@ if (interactive) {
   config_par   <- 'hap_best'
   holdout <- 0
   age <- 0
-  run_date <- '2019_09_16_23_24_14'
+  run_date <- '2020_01_15_18_33_30'
   measure <- 'prevalence'
-  reg <- 'dia_mid_east'
+  reg <- 'BRA'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {

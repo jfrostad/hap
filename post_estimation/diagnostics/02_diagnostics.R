@@ -30,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(data.table, fasterize, fst, googledrive, magrittr, mgsub, sf)
+pacman::p_load(data.table, fasterize, fst, gargle, googledrive, magrittr, mgsub, sf, farver)
 
 #running interactively?
 interactive <- T
@@ -46,7 +46,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_01_10_14_09_12',
+                '2020_01_27_14_19_19',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
@@ -279,7 +279,8 @@ write.csv(mbg, paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator
 #original authorization must be done locally (doesnt seem to work in IDE and must be interactively done)
 if (new_vetting) {
   setwd(doc.dir) 
-  googledrive::drive_auth(cache='drive.httr-oauth')
+  #googledrive::drive_auth(cache='drive.httr-oauth')
+  #googledrive::drive_auth(use_oob=T)
   googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)
 }
 #read in vetting sheet
@@ -288,13 +289,16 @@ vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(s
   .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] %>%  #subset to relevant columns
   unique(., by=names(.)) #TODO find out why there are duplicates in the sheet
 
+#Fix name for bobby =)
+vetting[vetting=='Not started', vetting := 'Adequate']
+
 #merge onto data
 mbg <- merge(mbg, vetting, by='nid', all.x=T)
 
 #define colorscale
 # build color scheme for the vetting sheet values
 # TODO make this code more robust for people who do not have the same schema
-vetting_colors <- c("Not started"='grey4', 
+vetting_colors <- c("Adequate"='grey4', 
                     "Problematic"='darkorange1',
                     "Completed"='forestgreen',
                     "Flagged"='purple1',
@@ -326,42 +330,32 @@ if (use_stacking_covs) {
                               run_date, 
                               raked=raked,
                               vetting_colorscale=vetting_colors,
+                              label='config',
                               debug=F)
   )
   
 }
 
-stop("this is all so far")
+
 
 # Plot priors for spatial hyperparameters --------------------------------------------------
 
 message('Plotting spatial hyperparameters prior and posteriors')
+# 
+# if (measure == 'prevalence') {
+  
+# Plot a la HIV team
+plot_hyperparameters(indicator = indicator,
+                     indicator_group = indicator_group,
+                     run_date = run_date,
+                     age = 0,
+                     holdout = holdouts,
+                     save_file = NULL,
+                     regs = Regions,
+                     debug=F)
+# }
 
-if (measure == 'prevalence') {
-  
-  # Plot a la HIV team
-  source(paste0(core_repo, 'diagnostics/04_plot_hyperparameters.R'))
-  plot_hyperparameters(indicator = indicator, 
-                       indicator_group = indicator_group, 
-                       run_date = run_date, 
-                       age = 0, 
-                       holdout = holdouts, 
-                       save_file = NULL,
-                       regs = Regions)
-  
-  # Plot a la Chris
-  source(paste0(core_repo, 'diagnostics/05_plot_priors_chris.R'))
-  for (region in Regions) {
-    plot_spatial_priors(indicator,
-                        indicator_group,
-                        run_date,
-                        region,
-                        holdout = holdouts,
-                        age = 0)
-  }
-  
-}
-
+stop("this is all so far")
 
 # Global diagnostics -------------------------------
 

@@ -42,9 +42,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'VNM'
+  reg                      <- 'ZWE'
   age                      <- 0
-  run_date                 <- "2019_11_22_16_16_20"
+  run_date                 <- "2020_01_31_12_17_51"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -502,6 +502,24 @@ if(as.logical(skiptoinla) == FALSE){
     
     message('Stacking is complete')
   }
+  
+  # TODO pull out into custom function
+  # interrogate children
+  # covariate_list <- copy(all_cov_layers)
+  # tv_cov_names = c()
+  # for(lll in names(covariate_list)){
+  #   if(class(covariate_list[[lll]]) == 'RasterBrick'){
+  #     tv_cov_names = append(tv_cov_names, lll)
+  #     if (nrow(period_map) > 1)  names(covariate_list[[lll]]) = paste0('XXX',1:length(names(covariate_list[[lll]]))) #use XXX as a place holder
+  #   }
+  #   
+  # }
+  # 
+  # processCovs <- function(i) {
+  #   
+  #   
+  #   
+  # }
   
   
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1037,7 +1055,6 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ AGGREGATE ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 # set specific arguments
 measure         <- 'prevalence'
 jname           <- paste('agg', reg, indicator, sep = '_')
@@ -1048,7 +1065,7 @@ mymem <- 200
 if (as.logical(individual_countries) & reg != 'IND') mymem <- 50
 if(r == 'dia_malay' | r == 'dia_name') mymem <- 225
 if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') mymem <- 250
-if(r == 'dia_s_america') mymem <- 300
+if(r == 'dia_s_america' | r == 'BRA') mymem <- 300
 
 # set up qsub
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
@@ -1063,8 +1080,6 @@ args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, 
 # submit qsub
 paste(sys.sub, r_shell, script, args) %>% 
   system
-
-
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ FIN ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

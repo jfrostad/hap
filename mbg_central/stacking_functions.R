@@ -510,6 +510,7 @@ fit_xgboost_child_model <- function(df,
                                     xg_grid = NA,
                                     xg_ensemble_corr = .5,
                                     build_ensemble = F,
+                                    return_second_best = F,
                                     hyperparameter_filepath = NULL,
                                     debug=F) {
 
@@ -791,22 +792,30 @@ fit_xgboost_child_model <- function(df,
     # Extract out of sample and in sample predictions
     df[, 'xgboost_cv_pred'   := arrange(xg_fit_final$pred, rowIndex)[,"pred"]]
     df[, 'xgboost_full_pred' := predict(xg_fit_final, df)]
-    df[, 'xgboost2_cv_pred'   := arrange(xg_fit_final_2$pred, rowIndex)[,"pred"]]
-    df[, 'xgboost2_full_pred' := predict(xg_fit_final_2, df)]
     
     # Name model for later use in making stack rasters
     xg_fit_final$model_name <- "xgboost"
-    xg_fit_final_2$model_name <- "xgboost2"
     
+    if (return_second_best) {
     
-    xgboost <- list(
-      xgboost <- list(dataset = df[, .(xgboost_cv_pred, xgboost_full_pred)],
-                      xgboost = xg_fit_final),
-      xgboost2 <- list(dataset = df[, .(xgboost2_cv_pred, xgboost2_full_pred)],
-                       xgboost2 = xg_fit_final_2)
-    )
+      df[, 'xgboost2_cv_pred'   := arrange(xg_fit_final_2$pred, rowIndex)[,"pred"]]
+      df[, 'xgboost2_full_pred' := predict(xg_fit_final_2, df)]
+      
+      # Name model for later use in making stack rasters
+      xg_fit_final_2$model_name <- "xgboost2"
+      
+      
+      xgboost <- list(
+        xgboost <- list(dataset = df[, .(xgboost_cv_pred, xgboost_full_pred)],
+                        xgboost = xg_fit_final),
+        xgboost2 <- list(dataset = df[, .(xgboost2_cv_pred, xgboost2_full_pred)],
+                         xgboost2 = xg_fit_final_2)
+      )
+    
+    } else xgboost <- list(dataset = df[, .(xgboost_cv_pred, xgboost_full_pred)], xgboost = xg_fit_final)
+      
   
-  }
+  } 
   
   return(xgboost)
   

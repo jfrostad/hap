@@ -25,7 +25,7 @@ if (Sys.info()["sysname"] == "Linux") {
 } else {j_root <- "J:"; h_root <- "H:"}
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, tidyverse, ellipsis, sf) 
+pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, gargle, ellipsis, sf) 
 package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 #capture date
@@ -36,14 +36,13 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 cores <- 10
 this.family='cooking'
 modeling_shapefile_version <- "2019_09_10"
-# manual_date <- "2018_12_18" #set this value to use a manually specified extract date
-# collapse_date <- "2019_12_11" #which data of collapse to use if not rerunning
+manual_date <- "2019_12_23" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- F #set to TRUE if you have new data and want to recollapse
+run_collapse <- T #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
-new_vetting <- T #set to TRUE to refresh the vetting diagnostic
+new_vetting <- F #set to TRUE to refresh the vetting diagnostic
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -320,7 +319,7 @@ if (run_collapse) {
 # ---DATA EXCLUSION-----------------------------------------------------------------------------------------------------
 #exclude datapoints based on HAP vetting
 setwd(doc.dir)
-if (new_vetting) {setwd(doc.dir); googledrive::drive_auth(cache='drive.httr-oauth'); drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
+if (new_vetting) {setwd(doc.dir); googledrive::drive_auth(use_oob = T); drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)}
 vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='1. Vetting', skip=1) %>% as.data.table
 excluded_nids <- vetting[`HAP Vetting Status`=='Excluded', nid] %>% unique #get list of excluded points
 message('Excluding the following NIDs:')

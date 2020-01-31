@@ -4,7 +4,7 @@
 ## Written by Kirsten Wiens
 ## Created 2018/02/23
 ##############################################################################
-#source('/homes/jfrostad/_code/lbd/hap/cooking/model/01_launcher.R') 
+#source('/homes/jfrostad/_code/lbd/hap/cooking/model/1_launcher.R') 
 
 ## Setup -------------------------------------------------------------------------
 
@@ -15,7 +15,7 @@ rm(list = ls())
 user            <- Sys.info()['user']
 repo            <- file.path('/homes', user, '_code/lbd/hap/')
 indicator_group <- 'cooking'
-parallel_script <- file.path(indicator_group, 'model/parallel_hap')
+parallel_script <- file.path(indicator_group, 'model/3_model')
 
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_gp_sp_no_re'
+config_par   <- 'hap_sp_no_re'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
@@ -73,7 +73,7 @@ regions <- c('dia_afr_horn',
              'dia_mcaca', 'dia_s_america-BRA-GUF', 'BRA',
              'dia_central_asia', 'dia_chn_mng', 'MNG',
              'dia_malay',
-             'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
+             'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF', 'ZWE',
              'dia_se_asia-VNM-THA', 'VNM', 'THA',
              'dia_mid_east-AFG', 'dia_south_asia+AFG')
 
@@ -85,7 +85,9 @@ regions <- c('dia_afr_horn',
 #regions <- c('dia_mid_east-AFG', 'dia_south_asia+AFG')
 # regions <- c('dia_chn_mng', 'dia_s_america')
 # regions <- c('dia_afr_horn', 'dia_name')
-#regions <- c('dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'dia_wssa-NGA')
+# regions <- c('dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF', 'ZWE',
+#              'dia_cssa',
+#              'dia_mcaca')
 
 # list indicators
 indics <- 'cooking_fuel_solid'
@@ -120,7 +122,7 @@ for (i in indics) {
                       '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                       '-l fthread=1 -l h_rt=00:02:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
     r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
-    script <- file.path('/homes', user, '_code/lbd/hap', indicator_group, 'model/01_launch.R')
+    script <- file.path('/homes', user, '_code/lbd/hap', indicator_group, 'model/2_rocket.R')
     args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, Regions, parallel_script,
                   plot_covariates, covariate_plotting_only, proj_arg, use_geos_nodes, run_date, holdout)
 

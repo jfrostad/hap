@@ -52,9 +52,8 @@ proj_arg <- commandArgs()[14]
 message(proj_arg)
 use_geos_nodes <- commandArgs()[15]
 
-## Set run date and whether running individual countries
+## Set run date
 run_date <- commandArgs()[16]
-individual_countries <- commandArgs()[17]
 
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
@@ -73,7 +72,7 @@ if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
 check_config()
 
 ## If running individual countries make sure all country FEs and REs off
-individual_countries <- commandArgs()[17]
+individual_countries <- ifelse(nchar(Regions) == 3, TRUE, FALSE)
 if (individual_countries) {
   use_child_country_fes <- FALSE
   use_inla_country_fes  <- FALSE
@@ -85,25 +84,25 @@ if (Regions != 'dia_south_asia' & Regions != 'IND') {
   use_subnat_res <- FALSE
 }
 
-## Set BRT parameters from optimizer sheet
-if (stacked_fixed_effects %like% 'gbm') {
-  
-  gbm_params <- paste0(core_repo, indicator_group, '/model/configs/gbm_params.csv') %>% 
-    fread(stringsAsFactors=F)
-  gbm_tc <- gbm_params[indi == indicator & region == Regions, gbm_tc]
-  gbm_lr <- gbm_params[indi == indicator & region == Regions, gbm_lr]
-  gbm_bf <- gbm_params[indi == indicator & region == Regions, gbm_bf]
-  gbm_nminobs <- gbm_params[indi == indicator & region == Regions, gbm_nminobs]
-  gbm_ntrees <- gbm_params[indi == indicator & region == Regions, gbm_ntrees]
-  gbm_cv <- gbm_params[indi == indicator & region == Regions, gbm_cv]
-  
-} else {
-  
-  gbm_cv <- NA
-  gbm_tc <- NA
-  gbm_bf <- NA
-  
-}
+# ## Set BRT parameters from optimizer sheet
+# if (stacked_fixed_effects %like% 'gbm') {
+#   
+#   gbm_params <- paste0(core_repo, indicator_group, '/model/configs/gbm_params.csv') %>% 
+#     fread(stringsAsFactors=F)
+#   gbm_tc <- gbm_params[indi == indicator & region == Regions, gbm_tc]
+#   gbm_lr <- gbm_params[indi == indicator & region == Regions, gbm_lr]
+#   gbm_bf <- gbm_params[indi == indicator & region == Regions, gbm_bf]
+#   gbm_nminobs <- gbm_params[indi == indicator & region == Regions, gbm_nminobs]
+#   gbm_ntrees <- gbm_params[indi == indicator & region == Regions, gbm_ntrees]
+#   gbm_cv <- gbm_params[indi == indicator & region == Regions, gbm_cv]
+#   
+# } else {
+#   
+#   gbm_cv <- NA
+#   gbm_tc <- NA
+#   gbm_bf <- NA
+#   
+# }
 
 # ## Set xgboost options
 # if (any(grepl('xgboost', stacked_fixed_effects))) {
@@ -245,7 +244,7 @@ for(i in 1:nrow(loopvars)){
   if(r == 'NGA' | r == 'PAK' | r == 'KEN' | r == 'ZWE' | r == 'VNM' | r == 'THA' | r == 'dia_central_asia') region_cores <- 4
   if(r == 'dia_se_asia-VNM-THA' | r == 'dia_sssa' | r == 'MNG' | r == 'COD') region_cores <- 6
   if(r == 'dia_malay' | r == 'dia_name') region_cores <- 10
-  if(r =='dia_south_asia' | r=='dia_s_america-BRA' | r == 'dia_afr_horn') region_cores <- 12
+  if(r =='dia_south_asia' | r =='dia_south_asia+AFG' | r=='dia_s_america-BRA' | r == 'dia_afr_horn') region_cores <- 12
   if(r == 'dia_s_america' | r == 'dia_wssa'| r == 'dia_chn_mng' | r == 'dia_wssa-NGA' | r=='BRA') region_cores <- 25
   if(loopvars[i, 3] > 0) region_cores <- round(region_cores*0.8)
   

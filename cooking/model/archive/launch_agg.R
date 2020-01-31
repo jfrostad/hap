@@ -18,7 +18,7 @@ if (interactive) {
                                 'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
                                 'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
   #regions <- 'dia_chn_mng'
-  run_date                 <- '2019_09_16_23_24_14'
+  run_date                 <- '2020_01_23_10_27_23'
   makeholdout              <- F
   
 } else {
@@ -78,7 +78,7 @@ for (ho in holdouts) {
     if (as.logical(individual_countries) & reg != 'IND') mymem <- 100
     if(r %in% c('dia_malay', 'dia_name')) mymem <- 250
     if(r %in% c('dia_wssa', 'dia_south_asia')) mymem <- 320
-    if(r %in% c('dia_chn_mng', 'dia_s_america')) mymem <- 400
+    if(r %in% c('dia_chn_mng', 'dia_s_america', 'BRA')) mymem <- 400
     
     # set up qsub
     sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 

@@ -45,6 +45,7 @@ stacker_time_series_plots <- function(reg,
                                       run_date = run_date,
                                       raked = T,
                                       vetting_colorscale = NULL,
+                                      label = NULL,
                                       debug=F) {
   # -----------------------------------------------------------------------------------
   # Work interactively to build function
@@ -134,9 +135,14 @@ stacker_time_series_plots <- function(reg,
   # Make plots
   message('Making plots')
   
+  #add label to plot filepath
+  if (label %>% is.null) plot_label <- ''
+  else if (label=='config') plot_label <- list.files(outputdir, pattern = '.note') %>% gsub('.note|000', '', .)
+  else plot_label <- label
+
   # create pdf to write to
   dir.create(paste0(outputdir, 'diagnostic_plots/'))
-  pdf(paste0(outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, '.pdf'), height = 10, width = 14)
+  pdf(paste0(outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, plot_label, '.pdf'), height = 10, width = 14)
 
   # test data structure
   if (nrow(dt[lvl=='adm0' & !is.na(input_mean)]) != dt[lvl=='adm0' & !is.na(input_mean), .(nid,ADM0_CODE, year)] %>% uniqueN) {
