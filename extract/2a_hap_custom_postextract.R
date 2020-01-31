@@ -2,11 +2,11 @@
 
 #replace missing pweights with hhweight
 all[is.na(hhweight) & !is.na(pweight), hhweight := pweight]
-
+print(nrow(all))
 #drop useless vars
 drop <- c("line_id", "sex_id", "age_year", "age_month", "pweight", "latitude", "longitude")
 all <- all[, (drop):= NULL]
-
+print(nrow(all))
 #cleanup women module
 message("dropping duplicate women in single household (so household sizes aren't duplicated)")
 wn <- all[survey_module == "WN", ]
@@ -16,11 +16,13 @@ all <- all[survey_module != "WN", ]
 all <- rbind(all, wn, fill=T, use.names=T)
 
 message("drop duplicate HH entries and cleanup hh_sizes")
+print(nrow(all))
 ####
 # 0. Set hh_size values to NA for nid 157397 7438
 #TODO look further into this and why just these NIDs
 nids_without_unique_hh_ids <- c(157397, 7438, 24915)
 all[nid %in% nids_without_unique_hh_ids, hh_size := NA]
+print(nrow(all))
 # 1. separate NA hh_size values from dataset
 
 #drop data that doesn't need a hh_size crosswalk and that has NA hh_sizes
@@ -31,7 +33,7 @@ all[, missingHHsize := sum(is.na(hh_size)), by=nid]
 all[, obs := .N, by=nid]
 all[, pct_miss_hh_size := 100 * missingHHsize / obs]
 all[, is_hh := pct_miss_hh_size > 0]
-
+print(nrow(all))
 #subset cases where all hh_sizes are present. Make sure each Row is a HH
 has_hh_size_no_id <- all[!is.na(hh_size) & is.na(hh_id), ]
 has_hh_size_id <- all[!is.na(hh_size) & !is.na(hh_id), ]
@@ -40,7 +42,7 @@ has_hh_size_id[, prev_uq_id := paste(nid, psu, hh_id, sep="_")]
 diff <- length(unique(has_hh_size_id$uq_id)) - length(unique(has_hh_size_id$prev_uq_id))
 message(paste("There are", diff, "more unique households from including spacetime than excluding."))
 hhhs <- distinct(has_hh_size_id, uq_id, .keep_all=T)
-
+print(nrow(all))
 #subset cases where all hh_sizes are missing and each row is not a HH. Set hh_size to 1
 missing_hh_size <- all[is.na(hh_size) & survey_module != 'HH', ]
 missing_hh_size[, hh_size := 1]

@@ -221,12 +221,21 @@ geo_k$geospatial_id <- as.character(geo_k$geospatial_id)
 topics$geospatial_id <- as.character(topics$geospatial_id)
 all <- merge(geo_k, topics, by.x=c("nid", "iso3", "geospatial_id"), by.y=c("nid", "iso3", "geospatial_id"), all.x=F, all.y=T)
 all[iso3 == "KOSOVO", iso3 := "SRB"] #GBD rolls Kosovo data into Serbia
+print(nrow(all))
+
+# Merge on stages to subset out stage 3 data and pre-2000
+all <- all[year_end >= 2000,]
+stages2 <- select(stages, Stage, iso3)
+all <- merge(all, stages2, by = 'iso3')
+all <- all[!(Stage %in% c('2x', '3')),]
+all$Stage <- NULL
+
 
 #####################################################################
 ############################### MERGE DIAGNOSTIC ####################
 #####################################################################
-
-geo_nids <- unique(geo$nid)
+geo_nids <- as.data.table(geo_k$nid)
+geo_nids <- unique(geo_nids)
 topic_nids <- unique(topics$nid)
 merged_correctly <- all[(!is.na(shapefile) & !is.na(location_code)) | (!is.na(lat) & !is.na(long)),]
 merged_nids <- unique(merged_correctly$nid)
@@ -251,10 +260,10 @@ message("Adding year_experiment column")
 all[, year_experiment := round(mean(year_start, na.rm=T)), by=.(nid, iso3)]
 
 all[(!is.na(int_year) & int_year <= year_start+5 & int_year >= year_start), year_experiment := round(mean(int_year, na.rm=T)), by=c("nid", "iso3")]
-
+print(nrow(all))
 #make point-level clusters annually representative of themselves
 all[!is.na(lat) & !is.na(long) & !is.na(int_year) & int_year <= year_start+5 & int_year >= year_start, year_experiment := round(mean(x=int_year, na.rm=T)), by=.(nid, iso3, lat, long)]
-
+print(nrow(all))
 bad_year_nids <- unique(all[is.na(year_experiment), nid])
 for (bad_nid in bad_year_nids){
   message(bad_nid)
@@ -296,9 +305,10 @@ message("Exporting a list of surveys that need to be geo matched")
 # fix_collapse <- distinct(fix[,c("nid", "iso3", "year_start", "survey_name"), with=T])
 # fix_collapse <- merge(fix_collapse, stages, by="iso3", all.x=T)
 
-all[!(nid %in% unique(geo$nid))] %>% 
+all[!(nid %in% unique(geo_k$nid))] %>% 
   .[, .(nid, iso3, year_start, survey_name)] %>% 
   distinct %>% 
   merge(., stages, by='iso3', all.x=T) %>% 
   write.csv(., file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched", topic, "new_geographies_to_match.csv"), 
             row.names=F, na="")
+print(nrow(all))
