@@ -46,11 +46,11 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_01_27_14_19_19',
+                '2020_02_01_10_33_18',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
-new_vetting <- T
+new_vetting <- F
 
 #is this a raked model?
 raked <- F
@@ -71,7 +71,7 @@ cov_file        <- args[11]
 message(indicator)
 
 ## Load MBG packages
-package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
+package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -149,8 +149,7 @@ combine_aggregation(rd       = run_date,
                     regions  = Regions,
                     holdouts = holdouts,
                     raked    = raked,
-                    delete_region_files = F,
-                    metrics = 'rates')
+                    delete_region_files = F)
 
 # summarize admins
 summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
@@ -165,9 +164,7 @@ if (raked) {
                       regions  = Regions,
                       holdouts = holdouts,
                       raked    = raked,
-                      measure  = measure,
-                      delete_region_files = F,
-                      metrics = 'rates')
+                      delete_region_files = F)
 
   # summarize admins
   summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
@@ -207,7 +204,7 @@ dat <- lapply(Regions,function(x)
                        indicator_group, 
                        run_date,
                        modeling_shapefile_version, 
-                       build=F)
+                       build=T)
   ) %>% 
   rbindlist
 
@@ -219,7 +216,7 @@ stack <- lapply(Regions, function(x)
                            run_date, 
                            modeling_shapefile_version,
                            pop_measure='total',
-                           build=F)
+                           build=T)
   ) %>% 
   rbindlist
 
@@ -263,12 +260,12 @@ if (raked) {
 
 # stackers
 mbg <- merge(mbg, stack,
-             by =  names(mbg) %>% .[grep('CODE|year|lvl', .)],
+             by =  names(mbg) %>% .[grep('CODE|year|lvl|region', .)],
              all.x = T)
 
 # data
 mbg <- merge(mbg, dat,
-             by = names(mbg) %>% .[grep('CODE|year|lvl', .)],
+             by = names(mbg) %>% .[grep('CODE|year|lvl|region', .)],
              all.x = T)
 
 # save

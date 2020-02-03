@@ -271,8 +271,7 @@ stacker_time_series_plots <- function(reg,
     return(NULL) #no need to return anything
     
   }
-  
-  
+
   # for each country in the region
   mbg[, ADM0_CODE] %>% 
     unique %>% 

@@ -23,3 +23,8 @@ dplyr
 magrittr
 stringr
 assertthat
+R6
+sf
+lwgeom
+argparse
+TMB

@@ -3,7 +3,6 @@ pullupstream<-function(){
   system('cd /share/code/geospatial/lbd_core\ngit pull origin master')
 }
 
-# miscellaneous functions
 lstype<-function(type='closure'){
     inlist<-ls(.GlobalEnv)
     if (type=='function') type <-'closure'
@@ -205,6 +204,8 @@ waitforaggregation <- function(rd = run_date,
                        "Age: ", lv_left[i, age], " | ",
                        "Raked: ", lv_left[i, raked]))
       }
+    } else {
+      break
     }
 
     Sys.sleep(60)
@@ -212,6 +213,20 @@ waitforaggregation <- function(rd = run_date,
   }
 }
 
+#' @title Combine aggregation
+#' @description Combine aggregation objects across region
+#' @param run_date, indicator, indicator_group for this run
+#' @param ages: single value or vector of ages
+#' @param regions: vector of regions used
+#' @param holdouts: vector of holdouts used, e.g. just 0 or c(1,2,3,4,5,0)
+#' @param raked: vector of raked values, e.g. just T, just F, or c(T,F)
+#' @param dir_to_search: which directory to search in (defaults to share directory)
+#' @param delete_region_files: logical. Should we delete the region-specific intermediate files?
+#' @param merge_hierarchy_list: logical. Do you want to merge the sp_hierarchy_list onto your admin tables?
+#' @param check_for_dupes PARAM_DESCRIPTION, Default: F
+#' @return rdata files for each combo of age/holdout/raked
+#'   each with admin_0, admin_1, admin_2 data table objects & the sp_hierarchy_list object
+#'   that maps them to names of admin units
 combine_aggregation <- function(rd = run_date,
                                 indic = indicator,
                                 ig = indicator_group,
@@ -222,9 +237,7 @@ combine_aggregation <- function(rd = run_date,
                                 dir_to_search = NULL,
                                 delete_region_files = T,
                                 merge_hierarchy_list = F,
-                                check_for_dupes = F,
-                                measure = 'prevalence',
-                                metrics = c('rates', 'counts')) {
+                                check_for_dupes = F) {
   
   # Combine aggregation objects across region
   # Jon Mosser / jmosser@uw.edu
@@ -253,89 +266,70 @@ combine_aggregation <- function(rd = run_date,
   for(rake in raked) {
     for (holdout in holdouts) {
       for (age in ages) {
-        for (metric in metrics) {
-          message(paste0("\nWorking on age: ", age, " | holdout: ", holdout, " | raked: ", rake, " | metric: ", metric))
+        message(paste0("\nWorking on age: ", age, " | holdout: ", holdout, " | raked: ", rake))
+        
+        # Set up lists
+        ad0 <- list()
+        ad1 <- list()
+        ad2 <- list()
+        sp_h <- list()
+        
+       
+        for (reg in regions) {
+          message(paste0("  Region: ", reg))
           
-          # Set up lists
-          ad0 <- list()
-          ad1 <- list()
-          ad2 <- list()
-          sp_h <- list()
+          load(paste0(dir_to_search, indic, "_", ifelse(rake, "raked", "unraked"),
+                      "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"))
           
-          
-          for (reg in regions) {
-            message(paste0("  Region: ", reg))
+          if(merge_hierarchy_list == T) {
+            # Prepare hierarchy list for adm0
+            ad0_list <- subset(sp_hierarchy_list, select = c("ADM0_CODE", "ADM0_NAME", "region")) %>% unique
             
-            load(paste0(dir_to_search, indic, "_", 
-                        ifelse(raked, paste0("raked_", measure), "unraked"), 
-                        ifelse(metric == "counts", "_c", ""),
-                        "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"))
+            # Prepare hierarchy list for adm1
+            ad1_list <- subset(sp_hierarchy_list,
+                               select = c("ADM0_CODE", "ADM1_CODE", "ADM0_NAME", "ADM1_NAME", "region")) %>%
+              unique
             
-            if(merge_hierarchy_list == T) {
-              # Prepare hierarchy list for adm0
-              ad0_list <- subset(sp_hierarchy_list, select = c("ADM0_CODE", "ADM0_NAME", "region")) %>% unique
-              
-              # Prepare hierarchy list for adm1
-              ad1_list <- subset(sp_hierarchy_list,
-                                 select = c("ADM0_CODE", "ADM1_CODE", "ADM0_NAME", "ADM1_NAME", "region")) %>%
-                unique
-              
-              # Merge
-              admin_0 <- merge(ad0_list, admin_0, by = "ADM0_CODE", all.y = T)
-              admin_1 <- merge(ad1_list, admin_1, by = "ADM1_CODE", all.y = T)
-              admin_2 <- merge(sp_hierarchy_list, admin_2, by = "ADM2_CODE", all.y = T)
-              rm(ad0_list, ad1_list)
-            }
-            if(check_for_dupes){
-              adms <- get_adm0_codes(reg)
-              sp_hier <- get_sp_hierarchy()
-              include_ad0 <- sp_hier$ADM0[ADM0_CODE %in% adms, ADM0_CODE]
-              include_ad1 <- sp_hier$ADM1[ADM0_CODE %in% adms, ADM1_CODE]
-              include_ad2 <- sp_hier$ADM2[ADM0_CODE %in% adms, ADM2_CODE]
-              
-              ad0[[reg]] <- admin_0[ADM0_CODE %in% include_ad0]
-              ad1[[reg]] <- admin_1[ADM1_CODE %in% include_ad1]
-              ad2[[reg]] <- admin_2[ADM2_CODE %in% include_ad2]
-              sp_h[[reg]] <- sp_hierarchy_list
-            } else{
-              ad0[[reg]] <- admin_0
-              ad1[[reg]] <- admin_1
-              ad2[[reg]] <- admin_2
-              sp_h[[reg]] <- sp_hierarchy_list
-            }
+            # Merge
+            admin_0 <- merge(ad0_list, admin_0, by = "ADM0_CODE", all.y = T)
+            admin_1 <- merge(ad1_list, admin_1, by = "ADM1_CODE", all.y = T)
+            admin_2 <- merge(sp_hierarchy_list, admin_2, by = "ADM2_CODE", all.y = T)
+            rm(ad0_list, ad1_list)
+          }
+          if(check_for_dupes){
+            adms <- get_adm0_codes(reg)
+            sp_hier <- get_sp_hierarchy()
+            include_ad0 <- sp_hier$ADM0[ADM0_CODE %in% adms, ADM0_CODE]
+            include_ad1 <- sp_hier$ADM1[ADM0_CODE %in% adms, ADM1_CODE]
+            include_ad2 <- sp_hier$ADM2[ADM0_CODE %in% adms, ADM2_CODE]
             
-            rm(admin_0, admin_1, admin_2, sp_hierarchy_list)
-            
-            # remove any fixed effects collumns
-            if (use_inla_country_fes) {
-              if (nchar(reg) != 3) {
-                ad0[[reg]][, c(grep(pattern = 'gaul_code', colnames(admin_0))) := NULL]
-                ad1[[reg]][, c(grep(pattern = 'gaul_code', colnames(admin_1))) := NULL]
-                ad2[[reg]][, c(grep(pattern = 'gaul_code', colnames(admin_2))) := NULL]
-              }
-            }
-            
-            # add region names to file
-            ad0[[reg]][, region := reg]
-            ad1[[reg]][, region := reg]
-            ad2[[reg]][, region := reg]
+            ad0[[reg]] <- admin_0[ADM0_CODE %in% include_ad0]
+            ad1[[reg]] <- admin_1[ADM1_CODE %in% include_ad1]
+            ad2[[reg]] <- admin_2[ADM2_CODE %in% include_ad2]
+            sp_h[[reg]] <- sp_hierarchy_list
+          } else{
+            ad0[[reg]] <- admin_0
+            ad1[[reg]] <- admin_1
+            ad2[[reg]] <- admin_2
+            sp_h[[reg]] <- sp_hierarchy_list
           }
           
-          # Get to long format & save
-          message("  Combining...")
-          admin_0 <- rbindlist(ad0)
-          admin_1 <- rbindlist(ad1)
-          admin_2 <- rbindlist(ad2)
-          sp_hierarchy_list <- rbindlist(sp_h)
-          
-          message("  Saving combined file...")
-          save(admin_0, admin_1, admin_2, sp_hierarchy_list,
-               file = paste0(dir_to_search, indic, "_",
-                             ifelse(rake, paste0("raked_", measure), "unraked"),
-                             ifelse(metric == "counts", "_c", ""),
-                             "_admin_draws_eb_bin", age, "_",
-                             holdout, ".RData"))
+          rm(admin_0, admin_1, admin_2, sp_hierarchy_list)
         }
+        
+        # Get to long format & save
+        message("  Combining...")
+        admin_0 <- rbindlist(ad0)
+        admin_1 <- rbindlist(ad1)
+        admin_2 <- rbindlist(ad2)
+        sp_hierarchy_list <- rbindlist(sp_h)
+        
+        message("  Saving combined file...")
+        save(admin_0, admin_1, admin_2, sp_hierarchy_list,
+             file = paste0(dir_to_search, indic, "_",
+                           ifelse(rake, "raked", "unraked"),
+                           "_admin_draws_eb_bin", age, "_",
+                           holdout, ".RData"))
       }
     }
   }
@@ -366,24 +360,24 @@ combine_aggregation <- function(rd = run_date,
   unlink(fin_files_to_delete)
 }
 
-## get_singularity ------------------------------------------------------------
-#' Which Singularity image to use
+
+#' @title Get singularity
 #'
-#' \code{get_singularity} determines which Singularity image to use. The
+#' @description \code{get_singularity} determines which Singularity image to use. The
 #' default is the 'default' keyword. Image names without the full path to the
 #' file defined are assumed to exist as the default location:
-#'    /share/singularity-images/lbd
+#'    \code{/share/singularity-images/lbd}
 #' In either case it will test to make sure the file exists and exit if it does
 #' not. The default image is hardcoded into the shell script used to launch
 #' Singularity containers:
-#'   lbd_core/mbg_central/share_scripts/shell_sing.sh
+#'   \code{lbd_core/mbg_central/share_scripts/shell_sing.sh}
 #'
 #' @param image A string that defines which Singularity image to launch
 #'   [default = 'default']. If the 'default' keyword is passed in or left blank,
 #'   the default keyword will be returned. Either the full path to the image
 #'   may be provided or only the Singularity image name. In the latter case,
 #'   the image is assumed to live in the default image location:
-#'   /share/singularity-images/lbd.
+#'   \code{/share/singularity-images/lbd.}
 #'
 #' @return When image = 'default', 'default' is returned. When this keyword is
 #'   passed to the shell_sing.sh script through `qsub` it will use the default
@@ -414,10 +408,9 @@ get_singularity <- function(image = 'default') {
   return(sing_image)
 }
 
-## qsub_sing_envs -------------------------------------------------------------
-#' Adds environmental variables to a qsub string
+#' @title Adds environmental variables to a qsub string
 #'
-#' \code{qsub_sing_envs} assumes that a qsub string is being built to launch a
+#' @description \code{qsub_sing_envs} assumes that a qsub string is being built to launch a
 #' Singularity container. It always adds in the '-v sing_image=sing_image' as
 #' expected by lbd_core/mbg_central/shell_sing.sh script that ultimately
 #' launches the container. Optionally, users may want to pass the additional
@@ -489,8 +482,7 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
   return(qsub_stub)
 }
 
-# make_qsub_share --------------------------------------------------------------
-#'
+
 #' @title Make qsub string (share)
 #'
 #' @description Constructs a qsub string and returns it
@@ -501,7 +493,7 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
 #' 
 #' @param code_path Full path to R script. Override \code{code}
 #' 
-#' @param cores Number of threads
+#' @param cores Number of threads. Default: 2
 #' 
 #' @param memory RAM to be reserved, in GBs
 #'
@@ -585,7 +577,7 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
 #'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
 #'   SET_MKL_THREADS=4 can be achieved by passing in
 #'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = NULL]
+#'   [default = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)]
 #'
 #' @return Returns a qsub string
 #' @export
@@ -593,7 +585,7 @@ qsub_sing_envs <- function(qsub_stub, envs, image) {
 make_qsub_share <- function(user = Sys.info()["user"],
                             code = NULL,
                             code_path = NULL,
-                            cores = slots,
+                            cores = 2,
                             memory = 100,
                             proj = NULL,
                             ig = indicator_group,
@@ -613,7 +605,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
                             run_time = NULL,
                             priority = 0,
                             singularity = singularity_version,
-                            singularity_opts = NULL) {
+                            singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)) {
   
   # save an image
   if (saveimage == TRUE) save.image(pre_run_image_path(ig, indic, rd, age, reg, holdout))
@@ -648,7 +640,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
   if (is.null(code)) {
     code <- sprintf("%s/mbg_central/share_scripts/parallel_model.R", corerepo)
   } else {
-    code <- sprintf("%s/%s.R", corerepo, code)
+    code <- sprintf("%s/%s/%s.R", corerepo, ig, code)
   }
   
   # If code_path is not NULL, then override `code`
@@ -675,8 +667,6 @@ make_qsub_share <- function(user = Sys.info()["user"],
 }
 
 
-# make_qsub_postest -------------------------------------------------------------
-#'
 #' @title Make qsub string for post estimation
 #'
 #' @description Constructs a qsub string for the post estimation script and returns it
@@ -687,7 +677,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
 #'
 #' @param code_path Full path to R script. Overrides \code{code} and \code{script_dir}
 #'
-#' @param cores Number of threads
+#' @param cores Number of threads. Default: 2.
 #'
 #' @param memory RAM to be reserved, in GBs
 #'
@@ -779,7 +769,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
 #'   (see shell_sing.sh comments). For example SET_OMP_THREADS=1 and
 #'   SET_MKL_THREADS=4 can be achieved by passing in
 #'     \code{envs = list(SET_OMP_THREADS=1, SET_MKL_THREADS=4)}
-#'   [default = NULL]
+#'   [default = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)]
 #'
 #' @return Returns a qsub string
 #'
@@ -787,7 +777,7 @@ make_qsub_share <- function(user = Sys.info()["user"],
 make_qsub_postest <- function(user = Sys.info()["user"],
                               code,
                               code_path = NULL,
-                              cores = slots,
+                              cores = 2,
                               memory = 100,
                               proj = NULL,
                               ig = indicator_group,
@@ -808,7 +798,7 @@ make_qsub_postest <- function(user = Sys.info()["user"],
                               run_time = NULL,
                               priority = 0,
                               singularity = singularity_version,
-                              singularity_opts = NULL) {
+                              singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores)) {
   
   # Create test_post_est dir within model dir.
   temp_dir <- path_join(get_model_output_dir(ig, indic, rd), "test_post_est")
@@ -870,10 +860,6 @@ make_qsub_postest <- function(user = Sys.info()["user"],
 }
 
 
-
-# use my condSim update until forked repo is pulled by NG
-#source('../seegMBG/R/gis_functions.R')
-cellIdx <- function (x) which(!is.na(getValues(x[[1]])))
 insertRaster <- function (raster, new_vals, idx = NULL) {
 
 
@@ -1033,7 +1019,8 @@ defaultOptions <- function (resolution = 5,
 
 
 # for cleaning clutter
-"rmlike" <- function(...) {
+# https://stackoverflow.com/a/11625075
+rmlike <- function(...) {
   names <- sapply(
     match.call(expand.dots = FALSE)$..., as.character)
   names = paste(names,collapse="|")
@@ -1122,7 +1109,7 @@ tidyInstall <- function (packages, versions = NULL, lib = .libPaths()[1]) {
           return (invisible())
         } else {
           # otherwise, install the correct version
-          devtools::with_lib(new = lib,
+          withr::with_libpaths(new = lib,
                              devtools::install_version(packages, versions))
         }
 
@@ -1131,7 +1118,7 @@ tidyInstall <- function (packages, versions = NULL, lib = .libPaths()[1]) {
 
         if (!is.null(versions)) {
           # if a version is required, install it and exit
-          devtools::with_lib(new = lib,
+          withr::with_libpaths(new = lib,
                              devtools::install_version(packages, versions))
           return (invisible())
         } else {
@@ -2088,12 +2075,14 @@ combine_region_image_history <- function(indicator, indicator_group, run_date, f
 }
 
 
-      cirange = function(x){
-          z=quantile(x,probs=c(.025,.975),na.rm=T)
-          return(z[2]-z[1])
-      }
-      lower = function(x) quantile(x,probs=.025,na.rm=T)
-      upper = function(x) quantile(x,probs=.975,na.rm=T)
+# These 3 functions are used as a summstats argument via a configuration option. DO NOT DELETE
+cirange = function(x){
+    z=quantile(x,probs=c(.025,.975),na.rm=T)
+    return(z[2]-z[1])
+}
+lower = function(x) quantile(x,probs=.025,na.rm=T)
+upper = function(x) quantile(x,probs=.975,na.rm=T)
+
 
 cleanup_inla_scratch <- function(run_date) {
 
@@ -2144,6 +2133,35 @@ region_violin <- function(indicator,
 
 }
 
+
+#' @title FUNCTION_TITLE
+#' @description FUNCTION_DESCRIPTION
+#' @param ras PARAM_DESCRIPTION
+#' @param indicator PARAM_DESCRIPTION
+#' @param region PARAM_DESCRIPTION, Default: 'africa'
+#' @param return_map PARAM_DESCRIPTION, Default: T
+#' @param out_dir PARAM_DESCRIPTION, Default: NULL
+#' @param highisbad PARAM_DESCRIPTION, Default: T
+#' @param min_value PARAM_DESCRIPTION, Default: NULL
+#' @param mid_value PARAM_DESCRIPTION, Default: NULL
+#' @param max_value PARAM_DESCRIPTION, Default: NULL
+#' @param legend_title PARAM_DESCRIPTION, Default: NULL
+#' @param plot_title PARAM_DESCRIPTION, Default: NULL
+#' @param layer_names PARAM_DESCRIPTION, Default: NULL
+#' @param cores PARAM_DESCRIPTION, Default: 12
+#' @param individual_layers PARAM_DESCRIPTION, Default: T
+#' @return OUTPUT_DESCRIPTION
+#' @details DETAILS
+#' @examples
+#' \dontrun{
+#' if (interactive()) {
+#'   # EXAMPLE1
+#' }
+#' }
+#' @seealso
+#'  \code{\link[pacman]{p_load}}
+#' @rdname plot_raster
+#' @export
 plot_raster <- function(ras,
                         indicator,
                         region = 'africa',
@@ -2489,10 +2507,8 @@ plot_raster <- function(ras,
 
 generate_time_log <- function(ticlog) {
 
-  # Set up packages
   require(magrittr)
   require(data.table)
-
   # Functions in functions
   strip_time <- function(x) {
     sec <- as.numeric(x$toc - x$tic)
@@ -2541,12 +2557,10 @@ graph_run_summary <- function(run_date,
     #package_lib <- paste0(j_root,'/temp/geospatial/packages') # Library for all MBG versioned packages.
     #.libPaths(package_lib)
   }
-
   require(data.table)
   require(magrittr)
   require(ggplot2)
   require(RColorBrewer)
-
   dir <- paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date, "/")
 
   file <- list.files(dir, pattern = "run_summary.*.csv")
@@ -2640,7 +2654,8 @@ clean_model_results_table <- function(rd   = run_date,
   stacker_names <- strsplit(stackers, " + ", fixed=T)[[1]]
   mods <- model_fit_table(lv=lv,rd=rd,nullmodel=nm, indicator = indic, indicator_group = ig,
                           coefs.sum1 = coefs.sum1, stacker_name_vec = stacker_names,
-                          use_stacking_covs = use_stacking_covs, use_gp = use_gp)
+                          use_stacking_covs = use_stacking_covs, use_gp = use_gp,
+                          spde_prior = spde_prior)
 
   # add region column
   all_mods <- lapply(names(mods), function(n) {
@@ -2678,6 +2693,7 @@ model_fit_table <- function(lv=loopvars[loopvars[,3]==0,],
                             holdout = 0,
                             coefs.sum1,
                             use_gp = use_gp,
+                            spde_prior = spde_prior,
                             use_stacking_covs = use_stacking_covs,
                             stacker_name_vec){
   # load models
@@ -2707,7 +2723,6 @@ model_fit_table <- function(lv=loopvars[loopvars[,3]==0,],
     }
 
     # Get the spde
-    if(grepl("geos", Sys.info()[4])) INLA:::inla.dynload.workaround()
     input_data <- build_mbg_data_stack(df = df,
                                        fixed_effects = all_fixed_effects,
                                        mesh_s = mesh_s,
@@ -2716,7 +2731,7 @@ model_fit_table <- function(lv=loopvars[loopvars[,3]==0,],
                                        use_nugget = FALSE,
                                        stacker_names = stacker_name_vec,
                                        exclude_cs    = stacker_name_vec,
-                                       usematernnew=F)
+                                       spde_prior = spde_prior)
 
      spde <- input_data[[2]]
 
@@ -2735,17 +2750,21 @@ model_fit_table <- function(lv=loopvars[loopvars[,3]==0,],
 
     ## other hyperparmas
     hyps <- summary(res_fit)$hyperpar[-(1:2), keep.cols] ## first two rows are
-                                                         ## theta1, theta2 which
-                                                         ## we have in range and
-                                                         ## nom.var
+                                                         ## theta1/range, theta2/sd
 
     if(as.logical(use_gp)){
-      ## now we extract what we need from the fit to get transformed spatial params
-      res.field <- inla.spde2.result(res_fit, 'space', spde, do.transf=TRUE)
-
-      ## nominal range at 0.025, 0.5, 0.975 quantiles
-      range   <- inla.qmarginal(c(0.025, 0.5, 0.975), res.field$marginals.range.nominal[[1]])
-      nom.var <- inla.qmarginal(c(0.025, 0.5, 0.975), res.field$marginals.variance.nominal[[1]])
+      if(eval(parse(text=spde_prior))$type=="pc") {
+        ## extract values from the fit directly
+        range <- res_fit$summary.hyperpar[1,keep.cols]
+        nom.var <- res_fit$summary.hyperpar[2,keep.cols]^2
+      } else {
+        ## now we extract what we need from the fit to get transformed spatial params
+        res.field <- INLA::inla.spde2.result(res_fit, 'space', spde, do.transf=TRUE)
+        
+        ## nominal range at 0.025, 0.5, 0.975 quantiles
+        range   <- INLA::inla.qmarginal(c(0.025, 0.5, 0.975), res.field$marginals.range.nominal[[1]])
+        nom.var <- INLA::inla.qmarginal(c(0.025, 0.5, 0.975), res.field$marginals.variance.nominal[[1]])
+      }
       spat.hyps <- rbind(range, nom.var)
       rownames(spat.hyps) <- c('Nominal Range', 'Nominal Variance')
       colnames(spat.hyps) <- keep.cols
@@ -2792,6 +2811,9 @@ model_fit_table <- function(lv=loopvars[loopvars[,3]==0,],
 }
 
 check_config <- function(cr = core_repo) {
+
+  # TODO: update package to use data()
+  # data(must_haves)
   must_haves <- read.csv(paste0(cr, '/mbg_central/share_scripts/common_inputs/config_must_haves.csv'), header = F, stringsAsFactors = F)$V1
 
   message("\nRequired covariates: ")
@@ -2859,6 +2881,11 @@ check_config <- function(cr = core_repo) {
       ctry_re_prior <<- "list(prior = 'loggamma', param = c(2, 1))"
       message(paste0('  ', confs, ': ', get(confs)))
 
+    } else if (confs == "nid_re_prior") {
+      message("You are missing a 'nid_re_prior' argument in your config. Defaulting to 'list(prior = 'loggamma', param = c(2, 1))'")
+      nid_re_prior <<- "list(prior = 'loggamma', param = c(2, 1))"
+      message(paste0('  ', confs, ': ', get(confs)))
+
     } else if (confs == "use_nid_res") {
       message("You are missing a 'use_nid_res' argument in your config. Defaulting to FALSE")
       use_nid_res <<- FALSE
@@ -2867,6 +2894,11 @@ check_config <- function(cr = core_repo) {
     } else if (confs == "rho_prior") {
       message("You are missing a 'rho_prior' argument in your config. Defaulting to 'list(prior = 'normal', param = c(0, 0.1502314))'")
       rho_prior <<- "list(prior = 'normal', param = c(0, 1/(2.58^2)))"
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "gp_sum_to_zero") {
+      message("You are missing a 'gp_sum_to_zero' argument in your config. Defaulting to FALSE")
+      gp_sum_to_zero <<- FLASE
       message(paste0('  ', confs, ': ', get(confs)))
 
     } else if (confs == "use_s2_mesh") {
@@ -2877,6 +2909,11 @@ check_config <- function(cr = core_repo) {
     } else if (confs == "s2_mesh_params") {
       message("You are missing a 's2_mesh_params' argument in your config. Defaulting to c(50, 500, 1000)")
       s2_mesh_params <<- "c(25, 500, 1000)"
+      message(paste0('  ', confs, ': ', get(confs)))
+
+    } else if (confs == "sparse_ordering") {
+      message("You are missing a 'sparse_ordering' argument in your config. Defaulting to TRUE")
+      sparse_ordering <<- TRUE
       message(paste0('  ', confs, ': ', get(confs)))
 
     } else if (confs == "modeling_shapefile_version") {
@@ -2898,7 +2935,17 @@ check_config <- function(cr = core_repo) {
       message("You are missing a 'check_cov_pixelcount' argument in your config. Defaulting to FALSE")
       check_cov_pixelcount <<- FALSE
       message(paste0('  ', confs, ': ', get(confs)))
-
+      
+    } else if (confs == "gbd_fixed_effects_constraints") {
+      message("You are missing a 'gbd_fixed_effects_constraints' argument in your config. Defaulting to FALSE")
+      gbd_fixed_effects_constraints <<- "c(0)"
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "fixed_effects_constraints") {
+      message("You are missing a 'fixed_effects_constraints' argument in your config. Defaulting to FALSE")
+      fixed_effects_constraints <<- "c(0)"
+      message(paste0('  ', confs, ': ', get(confs)))
+  
     } else if (confs == "memory") {
       message("You are missing a 'memory' argument in your config. Defaulting to 10G")
       memory <<- 10
@@ -2932,6 +2979,36 @@ check_config <- function(cr = core_repo) {
       message("You are missing a 'rake_countries' argument in your config. Defaulting to TRUE")
       rake_countries <<- TRUE
       message(paste0("  ", confs, ": ", get(confs)))
+
+    } else if (confs == "use_space_only_gp") {
+      message("You are missing a 'use_space_only_gp' argument in your config. Defaulting to FALSE")
+      use_space_only_gp <<- FALSE
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "st_gp_int_zero") {
+      message("You are missing a 'st_gp_int_zero' argument in your config. Defaulting to FALSE")
+      st_gp_int_zero <<- FALSE
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "s_gp_int_zero") {
+      message("You are missing a 's_gp_int_zero' argument in your config. Defaulting to FALSE")
+      s_gp_int_zero <<- FALSE
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "use_time_only_gmrf") {
+      message("You are missing a 'use_time_only_gmrf' argument in your config. Defaulting to FALSE")
+      use_time_only_gmrf <<- FALSE
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "time_only_gmrf_type") {
+      message("You are missing a 'time_only_gmrf_type' argument in your config. Defaulting to FALSE")
+      time_only_gmrf_type <<- "rw2"
+      message(paste0('  ', confs, ': ', get(confs)))
+      
+    } else if (confs == "spde_prior") {
+      message("You are missing a 'spde_prior' argument in your config. Defaulting to 'list(type='pc')'")
+      spde_prior <<- "list(type='pc')"
+      message(paste0('  ', confs, ': ', get(confs)))
       
     } else {
       stop(paste0(confs, " is missing, add it to your config"))
@@ -2949,11 +3026,11 @@ check_config <- function(cr = core_repo) {
   }
 
 
-  message("\nAdditional covariates: ")
+  message("\nAdditional config arguments: ")
   extras <- config$V1[!(config$V1 %in% must_haves)]
   for (extra in extras) message(paste0('  ', extra, ': ', get(extra)))
 
-  ## print out shapeilfe info
+  ## print out shapefile info
   m.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = modeling_shapefile_version))
   r.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = raking_shapefile_version))
   message("\n\n\nSHAPEFILE VERSION INFORMATION: ")
@@ -2993,7 +3070,10 @@ ez_evparse <- function(data, column) {
 #' @param push_to_global_env Should the config parameters be pushed to the global environment? Default: TRUE
 #' @param run_tests Run the assertion tests? This will run the tests and error out if there's an 
 #' inconsistent config parameter. Default: TRUE
-#' @return OUTPUT_DESCRIPTION
+#' @param return_list Return a list result or just the config? Default FALSE
+#' @return Depends on return_list. If FALSE (default) returns just the MBG config (a list). If True, returns a
+#' named list of configs, where "config" is the usual MBG config, and "fixed_effects_config" is the config info
+#' of the fixed effects
 #' @details DETAILS
 #' @examples
 #' \dontrun{
@@ -3019,7 +3099,8 @@ set_up_config <- function(repo,
                           post_est_only = FALSE, 
                           run_date = "", 
                           push_to_global_env = TRUE,
-                          run_tests = TRUE) {
+                          run_tests = TRUE,
+                          return_list = FALSE) {
   
   ###### Block 1: Equivalent to load_config ######
   
@@ -3036,21 +3117,21 @@ set_up_config <- function(repo,
     message("Pulling config from default folder, since config_name and config_file are NULL")
     ## If new model run, pull config from /share repo
     if (post_est_only == FALSE) 
-      config <- fread(paste0(repo, "/", indicator_group, "/config_", indicator, ".csv"), header = FALSE)
+      config <- data.table::fread(paste0(repo, "/", indicator_group, "/config_", indicator, ".csv"), header = FALSE)
     ## If running analysis on existing model, use config from that model's outputs folder
     if (post_est_only == TRUE) 
-      config <- fread(paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date, "/config.csv"))
+      config <- data.table::fread(paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date, "/config.csv"))
   }
   
   ## Pull by specific config name
   if (!is.null(config_name) & is.null(config_file)) {
     message("Pulling config from specified name")
-    config <- fread(paste0(repo, "/", indicator_group, "/", config_name, ".csv"), header = FALSE)
+    config <- data.table::fread(paste0(repo, "/", indicator_group, "/", config_name, ".csv"), header = FALSE)
   }
   ## Pull specified config file
   if (is.null(config_name) & !is.null(config_file)) {
     message("Pulling config from specified filepath")
-    config <- fread(config_file, header = FALSE)
+    config <- data.table::fread(config_file, header = FALSE)
   }
   
   ####### Logic checking for covariates config ####### 
@@ -3068,13 +3149,13 @@ set_up_config <- function(repo,
   ## Pull by specific covs name
   if (!is.null(covs_name) & is.null(covs_file)) {
     message("Pulling covs from specified name")
-    covs <- fread(paste0(repo, "/", indicator_group, "/", covs_name, ".csv"), header = TRUE)
+    covs <- read_covariate_config(paste0(repo, "/", indicator_group, "/", covs_name, ".csv"))
   }
   
   ## Pull specified covs file
   if (is.null(covs_name) & !is.null(covs_file)) {
     message("Pulling covs from specified filepath")
-    covs <- fread(covs_file, header = TRUE)
+    covs <- read_covariate_config(covs_file)
   }
   
   ## For parsimony, let's make sure that the config column names are V1 and V2
@@ -3097,16 +3178,30 @@ set_up_config <- function(repo,
     covs[, `:=`(include, as.logical(include))]
     covs <- subset(covs, include == T)  # Use only those where include flag set to true
     fe <- subset(covs, gbd == F)
+    update_fixed_effect_config_with_missing_release(fe)
     gbd <- subset(covs, gbd == T)
     gbd[measure != "output", `:=`(measure, "covariate")]  # FIXME: This is a hack for backwards compatability -- basically it assumes you meant 'covariate' if you specified anything other than 'outcome' (eg, mean or NA)
     fixed_effects <- paste0(fe$covariate, collapse = " + ")
     fixed_effects_measures <- paste0(fe$measure, collapse = " + ")
     gbd_fixed_effects <- paste0(gbd$covariate, collapse = " + ")
     gbd_fixed_effects_measures <- paste0(gbd$measure, collapse = " + ")
+
+    if(!("constraint" %in% names(covs))){
+      fixed_effects_constraints <- paste0("c(", paste(rep(0, nrow(fe)), collapse=", "), ")")
+      gbd_fixed_effects_constraints <- paste0("c(", paste(rep(0, nrow(gbd)), collapse=", "), ")")
+    }
+    else{
+      fixed_effects_constraints <- paste0("c(", paste(unname(fe$constraint), collapse=", "), ")")
+      gbd_fixed_effects_constraints <- paste0("c(", paste(unname(gbd$constraint), collapse=", "), ")")
+    }
     
     # Remove any other versions from original config and 
     # override with covariates config outputs
-    for(varz in c("fixed_effects", "fixed_effects_measures", "gbd_fixed_effects", "gbd_fixed_effects_measures")) {
+    all_varz <- c(
+      "fixed_effects", "fixed_effects_measures", "fixed_effects_constraints",
+      "gbd_fixed_effects", "gbd_fixed_effects_measures", "gbd_fixed_effects_constraints"
+    )
+    for(varz in all_varz) {
       if(!(varz %in% colnames(config))) {
         config <- rbindlist(list(config, data.table(V1 = varz, V2 = get(varz))))
       } else {
@@ -3119,35 +3214,44 @@ set_up_config <- function(repo,
   
   ###### Block 2: Add fields in config that are not in the default set ######
   
-  print("[2/6] Add fields in config that are not in the default set")
+  print("[2/6] Add fields that are in the default config set but not in user's config")
   
   ## Load in the default config dataset
-  config_values <- fread(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/config_values.csv'), header = TRUE, stringsAsFactors = FALSE)
-  
+  if (.in.package()) {
+    data("default_config_values", package = packageName())
+  } else {
+    default_config_values <- data.table::fread(file.path(core_repo, '/mbg_central/share_scripts/common_inputs/config_values.csv'), header = TRUE, stringsAsFactors = FALSE)
+  }
+
   ## Now, go through each of the values in `config_values` and 
   ## add on all the fields that are not in the user-specified config
-  for(conf_vars in names(config_values)) {
-    if(!(conf_vars %in% config$V1)) {
-      message(paste0(conf_vars, ' not found in config. Adding in default value of: ', config_values[1, conf_vars, with=F]))
-      config <- rbindlist(list(config, data.table(V1 = conf_vars, V2 = config_values[1, conf_vars, with=F] )))
-    }
-  }
+  config <- set_default_config_values(config, default_config_values)
   
   
   ###### Block 3: Extra parameters in config ######
   
-  print("[3/6] Add fields that are in in config but not in the default set")
+  print("[3/6] Add fields that are in user's config but not in the default config set")
   message("\nAdditional covariates: ")
-  extras <- config$V1[!(config$V1 %in% names(config_values))]
+  extras <- config$V1[!(config$V1 %in% names(default_config_values))]
   for (extra in extras) {
     message(paste0("  ", extra, ": ", config[V1 == extra, V2] ))
   }
   
-  ###### Block 4: Print out shapefile info from config ######
+  ###### Block 4: Print out shapefile info from config. Resolve 'current' to fixed version date ######
   
   print("[4/6] Print out shapefile info from config")
+
+  ## get the shapefile info
   m.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = config[V1 == 'modeling_shapefile_version', V2]))
   r.sf.info <- detect_adm_shapefile_date_type(shpfile_path = get_admin_shapefile(version = config[V1 == 'raking_shapefile_version', V2]))
+
+  ## replace shapefile version in config (and env variable) with the actual version date
+  ## if a specific date was already set, nothing changes.
+  ## if 'current' had been selected, then it will be replaced by the version date that is currently symlinked to 'current'
+  config[V1 == 'modeling_shapefile_version', V2 := m.sf.info$shpfile_date]
+  config[V1 == 'raking_shapefile_version', V2 := r.sf.info$shpfile_date]
+
+  ## print out the shapefile info
   message("\n\n\nSHAPEFILE VERSION INFORMATION: ")
   message(sprintf("\n--MODELING SHAPEFILE VERSION: %s -- which contains %s codes", m.sf.info$shpfile_date, toupper(m.sf.info$shpfile_type)))
   message(sprintf("\n--RAKING SHAPEFILE VERSION:   %s -- which contains %s codes\n", r.sf.info$shpfile_date, toupper(r.sf.info$shpfile_type)))
@@ -3156,11 +3260,15 @@ set_up_config <- function(repo,
   ###### Block 5: Run tests on all the configuration variables loaded ######
   if(run_tests) {
     print("[5/6] Running simple type-assertion tests on config parameters")
-    config_tests <- fread(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/config_tests.csv'), header = TRUE, stringsAsFactors = FALSE)
-    
+    if (.in.package()) {
+      data("config_tests", package = packageName())
+    } else {
+      config_tests <- data.table::fread(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/config_tests.csv'), header = TRUE, stringsAsFactors = FALSE)
+    }
+
     ## Test for params only in the config_tests list of params
     for (param in sort(config[, V1])) {
-      cat(paste0("Testing config parameter: ", param))
+      cat(paste0("Testing config parameter: ", param, " "))
       if(param %in% config_tests$variable) {
         test_call_1 <- config_tests[variable == param, test_call]
         test_call_2 <- config_tests[variable == param, extra_test1]
@@ -3172,8 +3280,12 @@ set_up_config <- function(repo,
           tryCatch(
             get(test_call_1)(ez_evparse(config[V1 == param, ], "V2")),
             error = function(e) {
-              if(attributes(e)$class[[1]] == 'simpleError' & test_call_1 == "is.string") {
-                message(paste0("Assertion on ", param, " errored out because it's tested as a string. Please check for the real type manually"))
+              if(attributes(e)$class[[1]] == 'simpleError') {
+                if (test_call_1 == "is.string") {
+                  message(paste0("Assertion on ", param, " errored out because it's tested as a string. Please check for the real type manually"))
+                } else {
+                  stop(sprintf("%s errored with message: %s", test_call_1, geterrmessage()))
+                }
               }
             }
           )
@@ -3197,6 +3309,20 @@ set_up_config <- function(repo,
         cat(" OK. \n")
       }
     }
+    
+    ## Stop if using z or poly aggregation strategies without TMB
+    if(as.logical(config[V1 == "poly_ag", "V2"]) | config[V1 == "zcol_ag", "V2"] != "NULL") {
+      if(!as.logical(config[V1 == "fit_with_tmb", "V2"])) {
+        stop("Must use TMB when incorporating polygon or aggregated z data")
+      }
+      if(as.logical(config[V1 == "makeholdouts", "V2"])) {
+        stop("There is aggregated data and functionality for making holdouts is 
+             not yet implemented. Set makeholdouts to FALSE.")
+      }
+      if(as.logical(config[V1 == "test", "V2"])) {
+        stop("Testing with aggregated data not yet implemented. Set test to FALSE.")
+      }
+    }
       
   } else {
     warning("[5/6] Skipping over type-assertion")
@@ -3212,24 +3338,45 @@ set_up_config <- function(repo,
     for (param in config[, V1]) { 
       assign(param, config[V1 == param, V2], envir = globalenv())
     }
+    if (!is.null(covs)) {
+      assign("fixed_effects_config", fe, envir = globalenv())
+      assign("gbd_fixed_effects_config", gbd, envir = globalenv())
+    }
+    # Processing of z config arguments
+    if (zcol_ag != "NULL") {
+      if (exists("z_ag_mat_file")) {
+        assign("z_ag_mat", read.csv(z_ag_mat_file, header=F), envir = globalenv())
+      } else {
+        assign("z_ag_mat", NULL, envir = globalenv())
+        assign("zcol_ag_id", NULL, envir = globalenv())
+      }
+      if (exists("z_map_file")) {
+        assign("z_map", read_z_mapping(z_map_file), envir = globalenv())
+      } else {
+        assign("z_map", NULL, envir = globalenv())
+      }
+    } else {
+      assign("zcol_ag", NULL, envir = globalenv())
+      assign("z_map", NULL, envir = globalenv())
+      assign("z_ag_mat", NULL, envir = globalenv())
+      assign("zcol_ag_id", NULL, envir = globalenv())
+    }
   } else {
     print("[6/6] Config parameters not passed into global environment")
   }
   
   ## Return the config data.table
   message("Saving out config...")
-  return(config)
-  
-  
+  if (return_list) {
+    return(list("config" = config, "fixed_effects_config" = fe))
+  } else {
+    return(config)
+  }
 }
 
 
-
-
-
-## proportional_area_map ################################################
-
-#' Create proportional area maps for count data at various admin levels
+#' @title Proportional Area Map
+#' @description Create proportional area maps for count data at various admin levels
 #'
 #' @param data data frame or data table with at least a value and ADMX_CODE column
 #' @param ad_level admin level to map (0,1,2)
@@ -3293,13 +3440,11 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
                                   legend_title_size = 18,
                                   shapefile_version = 'current') {
 
-  # Set up and define objects
   library("ggplot2")
   library("data.table")
   library("magrittr")
   library("raster")
   library("rgeos")
-
   # Set up admin column code
   adm_code_col <- paste0("ADM", ad_level, "_CODE")
 
@@ -3466,25 +3611,25 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
 ## New suite of functions to use for qsubbing ############################
 
 ## parallelize ################################################
-
-#' parallelize() is a versatile function to take an R script and run it in
+#' @title Parallelize
+#' @description parallelize() is a versatile function to take an R script and run it in
 #' parallel on the cluster combination of an arbitrary number of variables.
 #'
 #' This function is meant to replace the many qsub functions that are
 #' floating around and provide a single new function that can be used in
 #' almost all circumstances, with several additional features:
 #'
-#' - By pairing this function with a `load_from_parallelize()` call in the
+#' By pairing this function with a \code{load_from_parallelize()} call in the
 #'   child script itself, objects are loaded into the child script's
-#'   environment without having to ensure that a series of `commandArgs()`
+#'   environment without having to ensure that a series of \code{commandArgs()}
 #'   are in the appropriate order
 #'
-#' - `parallelize()` returns a list of job_ids and loop variables, along
-#'   with the original qsub call.  This object - when paired with `monitor_jobs()`,
-#'   which is a replacement for `waitformodelstofinish()` - allows closer tracking
+#' \code{parallelize()} returns a list of job_ids and loop variables, along
+#'   with the original qsub call.  This object - when paired with \code{monitor_jobs()},
+#'   which is a replacement for \code{waitformodelstofinish()} - allows closer tracking
 #'   of the jobs with respect to their status on the cluster, and eliminates
-#'   the need to write clunky empty files like `fin_[whatever]` to mark that
-#'   jobs are done.  Finally, the `monitor_jobs()` function can automatically
+#'   the need to write clunky empty files like \code{fin_[whatever]} to mark that
+#'   jobs are done.  Finally, the \code{monitor_jobs()} function can automatically
 #'   resubmit jobs and notify the user (in progress; Pushover notifications only
 #'   currently supported) when jobs fail.
 #'
@@ -3493,7 +3638,7 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
 #' @param memory memory to request (in GB) [required]
 #' @param script R script to be run in parallel. Assumes that script name
 #'               ends with '.R'. This script should have a
-#'               `load_from_parallelize()` call towards the top. [required]
+#'               \code{load_from_parallelize()} call towards the top. [required]
 #'
 #' @param geo_nodes If TRUE, your job will be submitted to the geos (LBD)
 #'   cluster, if FALSE, it will be submitted to the prod cluster. Note that if
@@ -3520,35 +3665,35 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
 #' @param ig indicator group [default = indicator_group]
 #' @param indic indicator [default = indicator]
 #' @param rd run date [default = run_date]
-#' @param expand_vars a named list of objects to `grid.expand()` over.  One job
+#' @param expand_vars a named list of objects to \code{grid.expand()} over.  One job
 #'                    will be submitted for each named item in the list, using
 #'                    the name of the item as the variable name.  For instance:
-#'                    `expand_vars = list(region = c("cssa", "essa", "sssa"))`
-#'                    would submit one job for each region with `region = "cssa"
-#'                    in the first job, `region = "essa"` in the second job, and
+#'                    \code{expand_vars = list(region = c("cssa", "essa", "sssa"))}
+#'                    would submit one job for each region with \code{region = "cssa"}
+#'                    in the first job, \code{region = "essa"} in the second job, and
 #'                    so forth. If a second item were added to that list, then
 #'                    all combinations will be submitted:
-#'                    `expand_vars = list(region = c("cssa", "essa", "sssa"),
-#'                                        raked = c(T,F))`
+#'                    \code{expand_vars = list(region = c("cssa", "essa", "sssa"),
+#'                                        raked = c(T,F))}
 #'                    would submit cssa-raked, cssa-unraked, essa-raked,
 #'                    essa-unraked, etc...
-#'                    Only `expand_vars` or `lv_table` can be given, but not both.
+#'                    Only \code{expand_vars} or \code{lv_table} can be given, but not both.
 #'                    [default = NULL]
 #' @param save_objs character vector of objects that should be available to all
-#'                  child scripts. Unlike `expand_vars`, these will be the *same*
+#'                  child scripts. Unlike \code{expand_vars}, these will be the *same*
 #'                  throughout all of the child scripts - they are saved to a
 #'                  temporary file and loaded by each child script. For instance,
-#'                  `save_objs = c("run_date", "indicator_group")` would load the
-#'                  `run_date` and `indicator_group` objects into the environment
+#'                  \code{save_objs = c("run_date", "indicator_group")} would load the
+#'                  \code{run_date} and \code{indicator_group} objects into the environment
 #'                  of each child script. [default = NULL]
 #' @param lv_table pass in the loop vars table? Pass in this table if you want to
 #'                 supply something more fine-tuned than what can by given by
-#'                 `grid.expand()` with `expand_vars`. Only `expand_vars` or
-#'                 `lv_table` can be given, but not both. [default = NULL]
+#'                 \code{grid.expand()} with `expand_vars`. Only \code{expand_vars} or
+#'                 \code{lv_table} can be given, but not both. [default = NULL]
 #' @param script_dir directory to look in for the R script that is to be run in
 #'                   parallel. If this is NULL, then script will look in
-#'                   'corerepo/mbg_central/share_scripts' (see `corerepo` below)
-#'                   for the script given in `script`. [default = NULL]
+#'                   'corerepo/mbg_central/share_scripts' (see \code{corerepo} below)
+#'                   for the script given in \code{script}. [default = NULL]
 #' @param prefix prefix to be appended to all jobs.  The jobs will have the naming
 #'               convention of prefix_[first_expand_var]_[second_expand_var]_[etc]
 #'               [default = 'job']
@@ -3592,8 +3737,8 @@ proportional_area_map <- function(data, # Needs to have ADM0_CODE, ADM1_CODE, AD
 #'   [default = NULL]
 #'
 #' @return a list containing:
-#'           -`lv`: data table of loop variables including qsub commands
-#'           -`fname`: filename of the temporary file containing `save_objs`
+#'           -\code{lv}: data table of loop variables including qsub commands
+#'           -\code{fname}: filename of the temporary file containing `save_objs`
 #'
 #' @examples
 #'
@@ -3743,12 +3888,10 @@ parallelize <- function(user = Sys.info()['user'],
   return(list(lv, fname, qsub))
 }
 
-## monitor_jobs() ################################################
-
-#' Function to monitor & resubmit jobs if they fail
-#'
-#' This is intended as a replacement for `waitformodelstofinish()`
-#' and its ilk.  This function takes output from `parallelize()`
+#' @title Monitor and resubmit jobs
+#' @description Function to monitor & resubmit jobs if they fail
+#' This is intended as a replacement for \code{waitformodelstofinish()}
+#' and its ilk.  This function takes output from \code{parallelize()}
 #' and periodically submits qstat and qacct requests to see how
 #' the jobs are running on the cluster.
 #'
@@ -3900,21 +4043,22 @@ monitor_jobs <- function(parallelize_output,
 }
 
 ## load_from_parallelize() ################################################
-
-#' This function takes the two things passed in a qsub created by
-#' `parallelize()` - the temp file name and which row in loopvars the current iteration
-#' of the child script should load from - and loads the appropriate `save_objs` and
-#' `expand_vars` from `parallelize()` into the environment of the child script.
+#' @title Load from parallelize
+#' @description This function takes the two things passed in a qsub created by
+#' \code{parallelize()} - the temp file name and which row in loopvars the current iteration
+#' of the child script should load from - and loads the appropriate \code{save_objs} and
+#' \code{expand_vars} from \code{parallelize()} into the environment of the child script.
 #'
-#' Note that this is meant to be run from the `child script`; by default
-#' both `fname` and `rownumber` should be loaded appropriately from
-#' `commandArgs()`
+#' Note that this is meant to be run from the \code{child script}; by default
+#' both \code{fname} and \code{rownumber} should be loaded appropriately from
+#' \code{commandArgs()}
 #'
-#' @param fname filename of the temp file created by `parallelize()`
+#' @param fname filename of the temp file created by \code{parallelize()}
 #' @param rownumber which row of the `lv` object should this particular
 #'                  instance of the child script load from
 #' @return nothing; assigns objects to child script global environment.
 #' @examples
+#' \dontrun{
 #' # Note: this is within the CHILD SCRIPT, not the master script
 #'
 #' # Ensure that you've first loaded your functions
@@ -3924,8 +4068,7 @@ monitor_jobs <- function(parallelize_output,
 #' # function to set up your environment:
 #'
 #' load_from_parallelize()
-#'
-
+#' }
 load_from_parallelize <- function(fname = as.character(commandArgs()[4]),
                                     rownumber = as.numeric(commandArgs()[5])) {
 
@@ -3948,8 +4091,8 @@ load_from_parallelize <- function(fname = as.character(commandArgs()[4]),
   }
 }
 
-## clean_path() --------------------------------------------------------------->
-#' Sometimes extra '/''s are added to file paths here and there when they are
+#' @title  Clean up path
+#' @description Sometimes extra '/''s are added to file paths here and there when they are
 #' constructed which makes it difficult to compare a file path (string) to
 #' another. This function will clean up an existing file path removing
 #' additional '/''s to make it possbile to compare them reliably
@@ -3969,9 +4112,9 @@ clean_path <- function(messy_path) {
   return(clean_path)
 }
 
-## get_git_status() ----------------------------------------------------------->
+#' @title Get Git Status
 #'
-#' Given a path to a directory, determine if it is a git repository, and if so,
+#' @description Given a path to a directory, determine if it is a git repository, and if so,
 #' return a string of git hash, branch, date of last commit, and status plus the
 #' diff if requested
 #'
@@ -4015,13 +4158,13 @@ get_git_status <- function(repo, repo_name, show_diff = FALSE) {
   return(report)
 }
 
-## record_git_status() ################################################
 
-#' Retrieve information about current git status (eg, branch, commit,
+#' @title Record Git Status
+#' @description Retrieve information about current git status (eg, branch, commit,
 #' uncommitted changes) for core repository and optionally a separate
 #' indicator repository. A check can also be made to see if your core
 #' repository is in sync with the LBD core repo
-#' (/share/code/geospatial/lbd_core) if a fork is being used.
+#' (\code{/share/code/geospatial/lbd_core}) if a fork is being used.
 #'
 #' Can be used at a minimum to print the git hash of the code being used
 #' for posterity.
@@ -4036,8 +4179,7 @@ get_git_status <- function(repo, repo_name, show_diff = FALSE) {
 #' @param file file path to a text file where output should be saved. This
 #'     is optional. If no file path is provided, the output will instead be
 #'     printed to the screen.
-#'
-
+#' @return Git status
 record_git_status <- function(core_repo,
                               indic_repo = NULL,
                               show_diff = FALSE,
@@ -4096,14 +4238,18 @@ record_git_status <- function(core_repo,
   if (!is.null(file)) sink()
 }
 
-## submit_aggregation_script ---------------------------------------------------
-# This origianlly was in the post_estimation_functions.R script, but was moved
-# to misc_functions.R since all of the other functions which construct qsub
-# commands are here and it needed to be updated to take arguments for
-# Singularity which requires some helper functions that are also defined in
-# misc_functions.R.
+
+#' @title Submit Aggregation Script
+#' @description This origianlly was in the post_estimation_functions.R script, but was moved
+#' to misc_functions.R since all of the other functions which construct qsub
+#' commands are here and it needed to be updated to take arguments for
+#' Singularity which requires some helper functions that are also defined in
+#' misc_functions.R.
+#'
 #
 #' Constructs a qsub string and executes it
+#'
+#' @param code Name of script, with relative path if desired.
 #'
 #' @param geo_nodes If TRUE, your job will be submitted to the geos (LBD)
 #'   cluster, if FALSE, it will be submitted to the prod cluster. Note that if
@@ -4130,6 +4276,10 @@ record_git_status <- function(core_repo,
 #' @param queue Queue to be used on the fair cluster.
 #'
 #' @param run_time Run-time to be used on the fair cluster.
+#'
+#' @param cores Number of threads
+#'
+#' @param memory RAM to be reserved, in GBs
 #'
 #' @param singularity Launch R from a Singularity image. The default is
 #   'default' indicating that you wish to launch a Singularity container from
@@ -4164,9 +4314,11 @@ record_git_status <- function(core_repo,
 #' @param raking_shapefile_version character string specifying which shapefile version was used in raking
 #' @param cores specify number of cores to use, defaults to NULL. If this is provided by the user, it is used to assign resources in get_resources
 #'
+#' @note Documentation missing some parameters
 submit_aggregation_script <- function(indicator,
                                       indicator_group,
                                       proj             = NULL,
+                                      code             = NULL,
                                       run_date,
                                       raked,
                                       pop_measure,
@@ -4182,31 +4334,30 @@ submit_aggregation_script <- function(indicator,
                                       run_time         = NULL,
                                       priority         = 0,
                                       slots            = cores,
-                                      cores            = 8,
+                                      cores            = 2,
                                       memory           = 20,
                                       singularity      = singularity_version,
-                                      singularity_opts = NULL,
+                                      singularity_opts = list(SET_OMP_THREADS = cores, SET_MKL_THREADS = cores),
                                       modeling_shapefile_version = 'current',
                                       raking_shapefile_version = 'current',
-                                      submit_qsubs     = TRUE,
-                                      measure          = 'prevalence') {
-  
+                                      submit_qsubs     = TRUE) {
+
   # Define project first (necessary to validate node options)
   proj <- get_project(proj, use_geo_nodes=geo_nodes)
-  
+
   # Validate arguments
   validate_singularity_options(singularity, singularity_opts)
   validate_node_option(geo_nodes, use_c2_nodes, proj)
-  
+
   # Create sharedir (TODO is this necessary?)
   sharedir = get_model_output_dir(indicator_group, indicator, run_date)
   dir.create(sharedir, showWarnings = FALSE)
-  
+
   # Determine where stdout and stderr files will go
   output_err = setup_log_location(log_dir, user, indic, ig, rd)
   output_log_dir = output_err[[1]]
   error_log_dir = output_err[[2]]
-  
+
   # Define remaining job attributes
   
   run_time <- get_run_time(use_geo_nodes=geo_nodes, use_c2_nodes=use_c2_nodes, queue=queue, run_time=run_time)
@@ -4219,24 +4370,26 @@ submit_aggregation_script <- function(indicator,
   if(!is.null(cores) & !is.null(slots)) warning("Slots and cores are both specified, cores will be used to assign resources")
   if(is.null(cores)) cores <- slots
   resources <- get_resources(use_geo_nodes=geo_nodes, cores=cores, ram_gb=memory, runtime=run_time)
-  
-  code <- path_join(corerepo, 'mbg_central', 'share_scripts', 'aggregate_results.R')
+
+  if(is.null(code)) {
+    code <- path_join(corerepo, "mbg_central", "share_scripts", "aggregate_results.R")
+  }
   
   qsubs_to_make <- expand.grid(regions, holdouts, ages, raked)
   
   aggregation_qsubs <- make_qsubs_aggregation(qsubs_to_make, error_log_dir, output_log_dir, proj, resources, singularity_str, queue, priority, slots, shell, code,
-                                              indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version, measure)
-  
+                                              indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version)
+
   if (submit_qsubs) {
-    for(qsub in aggregation_qsubs) {
-      system(qsub)
-    }
+      for(qsub in aggregation_qsubs) {
+          system(qsub)
+      }
   }
   return(aggregation_qsubs)
 }
 
 make_qsubs_aggregation <- function(qsubs_to_make, stderr_log, stdout_log, project, resources, singularity_str, queue = NULL, priority = 0, slots, shell, code,
-                                   indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version, measure) {
+                                   indicator, indicator_group, run_date, pop_measure, overwrite, corerepo, raking_shapefile_version, modeling_shapefile_version) {
   qsubs <- c()
   for (i in 1:nrow(qsubs_to_make)) {
     region <- qsubs_to_make[i, 1]
@@ -4267,8 +4420,7 @@ make_qsubs_aggregation <- function(qsubs_to_make, stderr_log, stdout_log, projec
                                   holdout,
                                   region,
                                   corerepo,
-                                  shapefile_version,
-                                  measure)
+                                  shapefile_version)
     qsubs <- c(qsubs, qsub)
   }
   return(qsubs)
@@ -4276,14 +4428,13 @@ make_qsubs_aggregation <- function(qsubs_to_make, stderr_log, stdout_log, projec
 
 
 
-## draw.mesh  ---------------------------------------------------
-# this function allows 3d drawing and imaging of a mesh.inla
-# object. it can plot either a mesh constructed on the R2 or S2
-# manifold. NOTE that it requires the 'rgl' R package and it spawns
-# interactive graphics windows. it is untested on the cluster and is
-# meant for use on local machines
-#
-#' @description Plots, in 3d, a s2-manifold or r2-manifold mesh
+#' @title Plots, in 3d, a s2-manifold or r2-manifold mesh
+#'
+#' @description This function allows 3d drawing and imaging of a mesh.inla
+#' object. it can plot either a mesh constructed on the R2 or S2
+#' manifold. NOTE that it requires the 'rgl' R package and it spawns
+#' interactive graphics windows. it is untested on the cluster and is
+#' meant for use on local machines
 #'
 #' @param mesh an inla.mesh object
 #'
@@ -4314,20 +4465,20 @@ make_qsubs_aggregation <- function(qsubs_to_make, stderr_log, stdout_log, projec
 #' @param returns nothing but spawns an interactive plot window
 #'
 #' @examples
-#'
-#' ## plot a mesh. add color to the background that results from
-#' ## the linear interpolation of randomly generated nodal (basis
-#' ## height) values
+#' \dontrun{
+#' # plot a mesh. add color to the background that results from
+#' # the linear interpolation of randomly generated nodal (basis
+#' # height) values
 #' draw.s2.mesh(mesh_s, draw.edges = T, draw.segments = T, col.type = 'col',
 #'              node.cols = rnorm(n = mesh_s$n), draw.plane = F)
 #'
 #' ## take a snapshot to save to file
-#' fig.path <- '/path/to/outputdir/
+#' fig.path <- '/path/to/outputdir/'
 #' rgl.snapshot(file.path(fig.path, "mesh.png"), top=TRUE)
 #'
 #' ## shut down the graphics window
 #' rgl.close()
-
+#' }
 draw.mesh <- function(mesh, draw.edges=TRUE, draw.segments=TRUE,
                       draw.plane = F, node.cols = NULL,
                       col.type = 'bw', window.dims = c(840, 400),
@@ -4342,9 +4493,9 @@ draw.mesh <- function(mesh, draw.edges=TRUE, draw.segments=TRUE,
   }
 
   if(col.type == 'bw')  cp <- function (n,...) { return (grey.colors(n,0.95,0.05,...))}
-  if(col.type == 'col') cp <- colorRampPalette(c("darkblue", "blue", "cyan",
-                                                 "yellow", "red", "darkred"))
-
+  if(col.type == 'col') cp <- grDevices::colorRampPalette(c("darkblue", "blue", "cyan",
+                                                            "yellow", "red", "darkred"))
+  
   mesh0 = inla.mesh.create(loc=cbind(0,0), extend=list(offset=1.1,n=4))
 
   mesh01 = mesh0
@@ -4361,7 +4512,7 @@ draw.mesh <- function(mesh, draw.edges=TRUE, draw.segments=TRUE,
   mesh1$loc[,1] = mesh1$loc[,1]-1.1
   mesh2$loc[,1] = mesh2$loc[,1]+1.1
 
-  open3d(windowRect=window.dims)
+  rgl::open3d(windowRect=window.dims)
   if(draw.plane){
     plot(mesh01, rgl=TRUE, col="white", color.palette=cp,
          draw.vertices=FALSE, draw.edges=FALSE, add=TRUE)
@@ -4379,19 +4530,15 @@ draw.mesh <- function(mesh, draw.edges=TRUE, draw.segments=TRUE,
          draw.segments=draw.segments)
   }
 
-  view3d(0,0,fov=0,zoom=0.4)
-  rgl.bringtotop()
+  rgl::view3d(0,0,fov=0,zoom=0.4)
+  rgl::rgl.bringtotop()
 }
 
 
-
-## lonlat3D ---------------------------------------------------
-# this function takes in a vector of longitude and a vector of
-# latitude and returns coordinates on the S2 sphere (globe living in
-# 3D) in (x, y, z) coords
-#'
-#' @description Converts from long-lat coords to corresponding 3D
-#'   coords, (x, y, z), on a sphere with radius 1
+#' @title lonlat3D
+#' @description  This function takes in a vector of longitude and a vector of
+#' latitude and returns coordinates on the S2 sphere (globe living in
+#' 3D) in (x, y, z) coords on a sphere with radius 1
 #'
 #' @param lon numeric vector of longitude coords
 #' @param lat numeric vector of latitude coords
@@ -4406,9 +4553,9 @@ lonlat3D <- function(lon,lat){
 }
 
 
-## get_output_regions  ---------------------------------------------------
-# this function takes in a directory where mbg modeling has stored
-# outputs (*cell_pred* objects) and infers the regions specirfied in
+#' @title Get output regions
+#' @description This function takes in a directory where mbg modeling has stored
+# outputs (*cell_pred* objects) and infers the regions specified in
 # the model
 #'
 #' @description Determines modeling regions from written output dir objects
@@ -4423,18 +4570,16 @@ get_output_regions <- function(in_dir) {
 }
 
 
-## delete_model_ouputs
-# Quickly delete the model outputs of a number of model runs will create
-# a unique combination for each indicator, indicator_group, run_date combination
-#'
-#' @description Deletes model outputs from share directories
+#' @title Deletes model outputs from share directories
+#' @description Quickly delete the model outputs of a number of model runs will create
+#'  a unique combination for each indicator, indicator_group, run_date combination
 #'
 #' @param indicator_group The indicator group level example "u5m"
 #' @param indicator The indicator level example "died"
 #' @param run_date The name of your model but often its just a run date
 #' @param dryrun Only print the directories that would be deleted dont actually
 #' @param ... Additional arguments passed to unlink function
-#' delete them
+#' @return None
 
 delete_model_outputs <- function(
   indicator_group, indicator, run_date, dryrun=FALSE, ...){
@@ -4465,7 +4610,6 @@ delete_model_outputs <- function(
 #' @export
 
 rank_draws <- function(df, ordr, columns) {
-  # load library
   library(data.table)
 
   # Ensure data.table class
@@ -4491,4 +4635,56 @@ rank_draws <- function(df, ordr, columns) {
   df <- cbind(df1, df2)
   return(df)
 
+}
+
+#' Return value if provided in function, else return global of same name.
+#'
+#' Returns the value named \code{name} from the calling function's environment. If that
+#' results in an error (e.g., beause the value was not provided) then return an identically
+#' named value from the global environment. If no such value exists in the global
+#' environment then error.
+#'
+#' @param name character name of the value to return.
+#'
+#' @return the value.
+#'
+#' @export
+use_global_if_missing <- function(name) {
+  tryCatch(
+    {
+      return(get(name, pos = parent.frame(1)))
+    },
+    error = function(e) {
+      if (name %in% names(.GlobalEnv)) {
+        return(.GlobalEnv[[name]])
+      } else {
+        stop(sprintf("Variable %s not provided to function and not available in global environment", name))
+      }
+    }
+  )
+}
+
+#' @title in a package?
+#' @description Predicate: is this code running in a package?
+#'
+#' @return TRUE if code is running in a package, FALSE otherwise.
+#' @export
+.in.package <- function() {
+  !is.null(utils::packageName())
+}
+
+
+#' @title Returns the stage master list
+#'
+#' @description Loads from J drive in lbd_core code and from a pre-saved data file in the
+#' lbd.mbg package.
+#'
+#' @export
+load_stage_list <- function() {
+  if (.in.package()) {
+    data("stage_master_list")
+    stage_master_list
+  } else {
+    data.table::fread("/home/j/WORK/11_geospatial/10_mbg/stage_master_list.csv")
+  }
 }

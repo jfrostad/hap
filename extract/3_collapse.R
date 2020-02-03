@@ -25,8 +25,9 @@ if (Sys.info()["sysname"] == "Linux") {
 } else {j_root <- "J:"; h_root <- "H:"}
 
 #load packages
+core_repo <- "/homes/jfrostad/_code/lbd/hap"
 pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, gargle, ellipsis, sf) 
-package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
+package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)

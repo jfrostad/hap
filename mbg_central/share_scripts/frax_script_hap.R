@@ -41,9 +41,9 @@ if (interactive) {
   config_par   <- 'hap_best'
   holdout <- 0
   age <- 0
-  run_date <- '2020_01_15_18_33_30'
+  run_date <- '2020_02_01_10_33_18'
   measure <- 'prevalence'
-  reg <- 'BRA'
+  reg <- 'THA'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {
@@ -64,7 +64,7 @@ if (interactive) {
 }
 
 ## Load MBG packages
-package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
+package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 

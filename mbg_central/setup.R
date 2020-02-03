@@ -76,6 +76,7 @@ is_singularity <- function(image_dir = "") {
 #'
 is_lbd_singularity <- function() {
   is_singularity(image_dir = "/share/singularity-images/lbd") ||
+  is_singularity(image_dir = "/share/singularity-images/lbd/releases") ||
   is_singularity(image_dir = "/share/singularity-images/lbd/test_deploy") ||
   is_singularity(image_dir = "/share/singularity-images/lbd/testing_INLA_builds")
 }
@@ -128,6 +129,7 @@ is_rstudio <- function(check_singularity = FALSE) {
 #' @description
 #' \code{load_R_packages} loads a list of R packages depending on where the
 #' script is being run.
+#' @note Deprecated since the library will load all dependent packages
 #'
 #' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
@@ -271,7 +273,7 @@ load_R_packages <- function(package_list) {
 #' @examples
 #' mbg_functions <- c('setup.R','mbg_functions.R', 'misc_functions.R')
 #' source_functions(paste0(
-#'                   /share/code/geospatial/imdavis/repos/lbd_core/mbg_central/',
+#'                   '/share/code/geospatial/imdavis/repos/lbd_core/mbg_central/',
 #'                   mbg_functions))
 #'
 source_functions <- function(functions) {
@@ -302,6 +304,7 @@ source_functions <- function(functions) {
 #' directory provided for 'repo'.
 #'
 #' @param repo Path to repository directory to attempt to load functions from
+#' @note There is an exception added to not pull from the 'testing' subdirectory
 #'
 #' @return None
 #'
@@ -361,7 +364,6 @@ is_lbd_core_repo <- function(path) {
   else return(FALSE)
 }
 
-## fix_raster_tmpdir() -------------------------------------------------------->
 #' @title
 #' Set temporary directory used by the raster package and clear old files.
 #'
@@ -375,20 +377,27 @@ is_lbd_core_repo <- function(path) {
 #' This is problematic as IHME machines are not configured to have a large
 #' amount of /tmp space, and multiple users will quickly fill the directory
 #' leading to a non-functioning computer. This function does two things: set the
-#' temporary directory to /share/scratch/tmp/geospatial-tempfiles (a location
+#' temporary directory to /share/scratch/tmp/geospatial-tempfiles/$USER (a location
 #' agreed to by IHME infrastructure) and also delete all files a week or older
 #' in that directory owned by whomever is running the function.
+#'
+#' Users may also override this value by setting the environment variable
+#' LBD_RASTER_TMPDIR. The value provided will be used as the temporary
+#' directory for raster files.
 #'
 #' @return NULL
 #'
 #' @seealso This is called by:
 #' \code{\link{mbg_setup}}
+#' @importFrom raster rasterOptions removeTmpFiles
 #'
 fix_raster_tmpdir <- function() {
     # Give the user a message about what is happening
     message("Loading and configuring the raster package...")
     # set temporary file dir. INFR does not regularly delete files from here
-    raster_tmp_dir <- paste("/share/scratch/tmp/geospatial-tempfiles", Sys.getenv("USER"), sep="/")
+    raster_tmp_dir <- Sys.getenv("LBD_RASTER_TMPDIR",
+      unset = file.path("/share/scratch/tmp/geospatial-tempfiles", Sys.getenv("USER"))
+    )
     if(!dir.exists(raster_tmp_dir)) dir.create(raster_tmp_dir)
     raster::rasterOptions(tmpdir = raster_tmp_dir)
     # delete files older than 25 days (maximum days in geospatial.q)
@@ -439,8 +448,11 @@ fix_raster_tmpdir <- function() {
 #'
 #' @return None
 #'
+#' @useDynLib LBDCore
+#'
 #' @family MBG setup functions
 #'
+#' @export
 #' @seealso Threads for MKL and OpenMP as well as MKL DYNAMIC and OMP NESTED
 #' are set here automatically and can be set to different values using these
 #' related functions:
@@ -452,13 +464,15 @@ fix_raster_tmpdir <- function() {
 load_setthreads <- function() {
   # This shared library will only exist in an LBD Singularity image
   if(is_lbd_singularity()) {
-    # but let's check anyway
-    if(!file.exists('/opt/compiled_code_for_R/setthreads.so')) {
-      stop(paste0("'setthreads.so' not found in /opt/compiled_code_for_R...\nExiting!"))
+    # but let's check anyway ... unless we're in the package, which auto-loads the dynamic library
+    if (!.in.package()) {
+      if(!file.exists('/opt/compiled_code_for_R/setthreads.so')) {
+        stop(paste0("'setthreads.so' not found in /opt/compiled_code_for_R...\nExiting!"))
+      }
+      # Load it and make sure that the two functions for setting threads are
+      # available
+      dyn.load("/opt/compiled_code_for_R/setthreads.so")
     }
-    # Load it and make sure that the two functions for setting threads are
-    # available
-    dyn.load("/opt/compiled_code_for_R/setthreads.so")
     if(!is.loaded("setMKLthreads")) {
       stop("C function 'setMKLthreads' not loaded...\nExiting!")
     }
@@ -591,6 +605,7 @@ mbg_setup <- function(package_list, repos) {
 #' mclapply(...)
 #' set_original_threads()
 #'
+#' @useDynLib LBDCore
 set_serial_threads <- function() {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -645,6 +660,7 @@ set_serial_threads <- function() {
 #' mclapply(...)
 #' set_original_threads()
 #'
+#' @useDynLib LBDCore
 set_original_threads <- function() {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -759,6 +775,7 @@ is_integer <- function(i) {
 #' @examples
 #' setmklthreads(2) # sets the MKL threads to 2
 #'
+#' @useDynLib LBDCore
 setmklthreads <- function(threads = 1) {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -823,6 +840,7 @@ setmklthreads <- function(threads = 1) {
 #' @examples
 #' setmkldynamic(enable = FALSE) # disables MKL dynamic
 #'
+#' @useDynLib LBDCore
 setmkldynamic <- function(enable = FALSE) {
   # Only logicals allowed for our only argument
   if(!is.logical(enable)) stop("Logical values only to enable/disable MKL dynamic...\nExiting!")
@@ -889,6 +907,7 @@ setmkldynamic <- function(enable = FALSE) {
 #' @examples
 #' setompthreads(2) # sets the OMP threads to 2
 #'
+#' @useDynLib LBDCore
 setompthreads <- function(threads = 1) {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -907,7 +926,7 @@ setompthreads <- function(threads = 1) {
       }
     }
     invisible(.C("setOMPthreads", as.integer(threads)))
-  } else message("WARNING: Not and LBD Singularity image. No OMP thread adjustment made.")
+  } else message("WARNING: Not an LBD Singularity image. No OMP thread adjustment made.")
 }
 
 
@@ -955,6 +974,7 @@ setompthreads <- function(threads = 1) {
 #' @examples
 #' setompnested(enable = TRUE) # disables OMP nesting
 #'
+#' @useDynLib LBDCore
 setompnested <- function(enable = TRUE) {
   # Only logicals allowed for our only argument
   if(!is.logical(enable)) stop("Logical values only to enable/disable OpenMP nested parallelism...\nExiting!")
@@ -1085,14 +1105,16 @@ get_omp_threads <- function() {
 #' This function is used by:
 #' \code{\link{get_max_forked_threads()}}
 #'
-#' @examples Set to serial operation, use \code{get_total_threads()} to
-#' determine how many total threads are available, run the parallel operation,
-#' then set the threads back to the original setting:
+#' @examples 
+#' \dontrun{
+#' # Set to serial operation, use \code{get_total_threads()} to
+#' # determine how many total threads are available, run the parallel operation,
+#' # then set the threads back to the original setting:
 #' set_serial_threads()
 #' cores <- get_total_threads()
 #' model <- fit_glmnet(...)
 #' set_original_threads()
-#'
+#' }
 get_total_threads <- function() {
   return(get_mkl_threads() * get_omp_threads())
 }
@@ -1138,9 +1160,10 @@ get_total_threads <- function() {
 #' \code{\link{set_serial_threads()}}
 #' \code{\link{set_original_threads()}}
 #'
-#' @examples Set to serial operation, use \code{get_max_forked_threads()} to
-#' determine how many threads to use, run the forked operation, then set the
-#' threads back to the original setting:
+#' @examples 
+#' # Set to serial operation, use \code{get_max_forked_threads()} to
+#' # determine how many threads to use, run the forked operation, then set the
+#' # threads back to the original setting:
 #' set_serial_threads()
 #' cores <- get_max_forked_threads(nobjs = length(folds))
 #' model <- mclapply(folds, ...)

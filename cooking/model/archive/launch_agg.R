@@ -1,7 +1,7 @@
 ## Script to run raking and aggregating for diarrhea after cell preds have been generated
 ## Author: Kirsten Wiens
 ## Date: 2010-01-04
-#source('/homes/jfrostad/_code/lbd/hap/cooking/model/launch_agg.R') 
+#source('/homes/jfrostad/_code/lbd/hap/cooking/model/archive/launch_agg.R') 
 
 # Setup ------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -14,11 +14,18 @@ if (interactive) {
   # set arguments
   indicator_group          <- 'cooking'
   indicator                <- 'cooking_fuel_solid'
-  regions                  <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
-                                'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
-                                'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
+  regions <- c('dia_afr_horn',  
+               'dia_cssa',
+               'dia_wssa-NGA', 'NGA',
+               'dia_name-ESH',
+               'dia_mcaca', 'dia_s_america-BRA-GUF', 'BRA',
+               'dia_central_asia', 'dia_chn_mng', 'MNG',
+               'dia_malay',
+               'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF', 'ZWE',
+               'dia_se_asia-VNM-THA', 'VNM', 'THA',
+               'dia_mid_east-AFG', 'dia_south_asia+AFG')
   #regions <- 'dia_chn_mng'
-  run_date                 <- '2020_01_23_10_27_23'
+  run_date                 <- '2020_02_01_10_33_29'
   makeholdout              <- F
   
 } else {
@@ -86,8 +93,7 @@ for (ho in holdouts) {
                       '-l fthread=2 -l h_rt=00:12:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
     r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
     script <- file.path(repo, 'mbg_central/share_scripts/frax_script_hap.R')
-    args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 
-                  use_geos_nodes, run_date, measure, ho)
+    args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, ho)
     
     # submit qsub
     system(paste(sys.sub, r_shell, script, args))

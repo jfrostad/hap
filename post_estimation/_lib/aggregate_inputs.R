@@ -92,8 +92,9 @@ aggregate_input_data <- function(reg,
   
   # Save regional data to single DT
     list(a0_input, a1_input) %>% 
-    rbindlist(use.names=T, fill=T) %>% 
-    write_fst(., path=output_file) %T>%
+      rbindlist(use.names=T, fill=T) %>% 
+      #.[, region := reg] %>% 
+      write_fst(., path=output_file) %T>%
     return
   # ----------------------------------------------------------------------------------------------------------------
   # otherwise just read them in and return to preserve pipeline
@@ -272,6 +273,7 @@ aggregate_child_stackers <- function(reg,
     # Save regional data to single DT
     list(a0_stackers, a1_stackers) %>% 
       rbindlist(use.names=T, fill=T) %>% 
+      #.[, region := reg] %>% 
       write_fst(., path=output_file) %T>%
       return
     # ----------------------------------------------------------------------------------------------------------------

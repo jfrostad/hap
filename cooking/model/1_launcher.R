@@ -15,11 +15,11 @@ rm(list = ls())
 user            <- Sys.info()['user']
 repo            <- file.path('/homes', user, '_code/lbd/hap/')
 indicator_group <- 'cooking'
-parallel_script <- file.path(indicator_group, 'model/3_model')
+parallel_script <- file.path('model/3_model')
 
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
-package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
+package_list <- c(t(read.csv(paste0(repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
 source(paste0(repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = repo)
 
@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_sp_no_re'
+config_par   <- 'hap_no_nid_re'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 

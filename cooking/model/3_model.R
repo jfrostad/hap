@@ -189,7 +189,7 @@ message('Setting seed 98112 for reproducibility')
 set.seed(98112)
 
 ## skip a large chunk if requested in config
-if(as.logical(skiptoinla) == FALSE){
+if (as.logical(skiptoinla) == FALSE) {
   
   message('You have chosen to not skip directly to inla.')
   
@@ -241,7 +241,7 @@ if(as.logical(skiptoinla) == FALSE){
   df <- as.data.table(df)
   
   ## Adding selective subnationals for state random effects
-  if(as.logical(use_subnat_res)) {
+  if (as.logical(use_subnat_res)) {
     message('Prepping for subnational REs')
     
     ## Prep subnat location info
@@ -503,25 +503,6 @@ if(as.logical(skiptoinla) == FALSE){
     message('Stacking is complete')
   }
   
-  # TODO pull out into custom function
-  # interrogate children
-  # covariate_list <- copy(all_cov_layers)
-  # tv_cov_names = c()
-  # for(lll in names(covariate_list)){
-  #   if(class(covariate_list[[lll]]) == 'RasterBrick'){
-  #     tv_cov_names = append(tv_cov_names, lll)
-  #     if (nrow(period_map) > 1)  names(covariate_list[[lll]]) = paste0('XXX',1:length(names(covariate_list[[lll]]))) #use XXX as a place holder
-  #   }
-  #   
-  # }
-  # 
-  # processCovs <- function(i) {
-  #   
-  #   
-  #   
-  # }
-  
-  
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   ## ~~~~~~~~~~~~~~~~~~~~~~~~ Final Pre-MBG Processing ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -588,7 +569,6 @@ if(as.logical(skiptoinla) == FALSE){
   ## Build temporal mesh (standard for now)
   mesh_t <- build_time_mesh(periods=eval(parse(text=mesh_t_knots)))
   
-  
   ## ## For raw covs, don't want to center-scale (as that will happen in `build_mbg_data_stack()`)
   ##
   ## ## This is a bit weird, but when stacking covs are used the oos-stackers (used in `fit_mbg()`)
@@ -598,13 +578,17 @@ if(as.logical(skiptoinla) == FALSE){
   ## ## For predict_mbg, non-center-scaled covs are pulled from cov_list (either stackes or raw) and
   ## ## center-scaled within the function.  So both fit and predict take place on center-scaled covs
   ##
-  ## ## TODO: move all center-scaling to a single location to avoid these crazy acrobatics.
+  ## ##TODO: move all center-scaling to a single location to avoid these crazy acrobatics.
   ## ## But for now, we just do this
   if (as.logical(use_raw_covs) == TRUE) {
     centre_scale_covs <- FALSE
   } else {
     centre_scale_covs <- TRUE
   }
+  
+  #produce covariate interrogation plots for 5 random pixels
+  #sourced from cov_interrogation_functions.R
+  covInterrogation(pixel_count=5) 
   
   ## Save all inputs for MBG model into correct location on /share
   cov_list <- lapply(cov_list, readAll)
