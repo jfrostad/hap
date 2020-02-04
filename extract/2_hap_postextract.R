@@ -21,10 +21,8 @@ rm(list=ls())
 topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja', 'kel15')
 redownload <- F #update the codebook from google drive
-cluster <- T #running on cluster true/false
-geos <- T #running on geos nodes true/false
 cores <- 15
-test_country <- 'AGO|BRA|ZAF|ZWE|IDN|CAF|SEN|NGA' #define in order to subset extractions to a single country for testing purposes
+test_country <- 'NPL|ZWE|ZMB|MLI|BEN' #define in order to subset extractions to a single country for testing purposes
 
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
@@ -32,11 +30,10 @@ h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()
 l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/") 
 folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic) #where your extractions are stored
 folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
-setwd(folder_in)
+  setwd(folder_in)
 
 package_lib    <- file.path(h, '_code/_lib/pkg')
-## Load libraries and  MBG project functions.
-.libPaths(package_lib)
+  .libPaths(package_lib)
 
 #Load packages
 pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, fst, parallel, doParallel, googledrive, readxl)
@@ -44,23 +41,16 @@ pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, fst, parall
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
 
-stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread #read info about stages
+#TODO can remove when drop issues are fixed, use mod dt to test for drops in PE reruns
+share.model.dir  <- file.path('/share/geospatial/mbg/input_data/')
+mod.dt <- file.path(share.model.dir, 'cooking_fuel_dirty.csv') %>% fread
+
+#read info about stages
+stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread 
 #####################################################################
 ######################## DEFINE FUNCTIONS ###########################
 #####################################################################
-#Read in geo codebook, add column with corresponding survey series
-read_add_name_col <- function(file){
-  #FOR GEOGRAPHY CODEBOOKS. READS THEM IN AND ADDS A COLUMN WITH THEIR CORRESPONDING SURVEY_SERIES
-  message(file)
-  rn <- gsub(".csv", "", file, ignore.case=T)
-  spl <- strsplit(rn, "/") %>% unlist()
-  svy <- spl[length(spl)]
-  df <- read.csv(file, encoding="windows-1252", stringsAsFactors = F) #this encoding scheme plays nice with the default excel format
-  df <- as.data.table(df)
-  df[, survey_series := svy]
-  df <- lapply(df, as.character, stringsAsFactors = FALSE)
-  return(df)
-}
+source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
 
 #####################################################################
 ######################## BIND UBCOV EXTRACTS ########################
@@ -73,32 +63,22 @@ codebook <- read_xlsx('hap.xlsx', sheet='codebook') %>% as.data.table
 #census is handled separately
 codebook <- codebook[!(survey_name %like% 'IPUMS')]
 
-#234353 is a massive India dataset that slows everything down and gets us killed on the cluster. It is handled separately.
-#233917 is another IND survey that isn't quite as large but it also has to be loaded and collapsed separately.
-#23219 is the same, causing our feather reads to crash.
-#157050 is IND DHS, size issues
-#TODO split the extracts in order to fix the feather reading issue
-#codebook <- codebook[!(nid %in% c("234353", "233917", "23219"))]
-#codebook <- codebook[nid != 157050]
-
 #angola mics based on negative comment about its quality in response to EBF paper (see dia_lri_modelers slack chat) 
 #TODO better to handle using outlier column with notes in the data vetting sheet
 codebook <- codebook[nid != 687]
 
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
-codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
+#codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
+
 #subset the codebook to ONLY the files that our extractors have worked on
 codebook <- codebook[assigned %in% extractor_ids]
-#get the names of all the new files
-new.files <- codebook[, output_name] %>% unique %>% paste(., collapse="|")
 
-#Generate list of extraction filepaths and crosscheck against the new files
+#Generate list of extraction filepaths
 extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F)
-extractions <- grep(new.files, extractions, invert=F, value=T)
 
 #subset to a country if testing
 if (exists('test_country')) extractions <- extractions %>% .[. %like% paste0(test_country, '_')]
-extractions <- extractions %>% .[!(. %like% 'IND_')] #TODO remove this 
+#extractions <- extractions %>% .[!(. %like% 'IND_')] #TODO remove this 
 
 #read in all extractions
 message('freading and appending all extractions')
@@ -159,56 +139,12 @@ if (!exists('test_country')) {
 #####################################################################
 ######################## PULL IN GEO CODEBOOKS ######################
 #####################################################################
-#Get all geog codebooks and package them together
-# message("Retrieve geo codebook filepaths")
-# files <- list.files(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks"), pattern=".csv$", ignore.case = T, full.names = T)
-# files <- grep("IPUMS|special", files, value = T, invert = T) # list any strings from geo codebooks you want excluded here
-# 
-# message("Read geo codebooks into list")
-# geogs <- lapply(files, read_add_name_col)
-# 
-# message("Append geo codebooks together")
-# geo <- rbindlist(geogs, fill=T, use.names=T)
-# geo[is.na(admin_level), admin_level := "NA"] #set NA values for admin_level to "NA" as a string to keep the following line from dropping them because of bad R logic
-# geo <- geo[admin_level != "0", ] #drop anything matched to admin0
-# geo <- geo[survey_module != "GSEC1"] #drop this geomatch which is creating a m:m mismatch on different keys issue
-# rm(geogs)
-# 
-# #Dedupe the geography codebook by geospatial_id, iso3, and nid
-# geo <- distinct(geo, nid, iso3, geospatial_id, .keep_all=T)
-# 
-# #coerce lat/longs to numeric
-# geo <- geo[, lat := as.numeric(lat)]
-# geo <- geo[, long := as.numeric(long)]
-
-#####################################################################
-######################## PREP DATA FOR MERGE ########################
-#####################################################################
-# #Reconcile ubCov & geo codebook data types
-# message("make types between merging datasets match")
-# if (class(topics$nid) == "numeric"){
-#   geo[, nid := as.numeric(nid)]
-# } else if (class(topics$nid) == "integer"){
-#   geo[, nid := as.integer(nid)]
-# } else if (class(topics$nid) == "character"){
-#   geo[, nid := as.character(nid)]
-# } else{
-#   message("update code to accomodate topics nid as")
-#   message(class(topics$nid))
-# }
-# 
-# #Drop unnecessary geo codebook columns
-# geo_keep <- c("nid", "iso3", "geospatial_id", "point", "lat", "long", "shapefile", "location_code", "survey_series")
-# geo_k <- geo[, geo_keep, with=F]
-## If the merge returns an 'allow.cartesian' error, we've likely over-dropped characters - contact Scott Swartz to address it ##
-
 #use new geodata database 
-source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
 geo_k <- get_geocodebooks(nids = unique(topics$nid))
+
 #####################################################################
 ############################### MERGE ###############################
 #####################################################################
-
 message("Merge ubCov outputs & geo codebooks together")
 geo_k[, geospatial_id := as.character(geospatial_id)]
 topics[, geospatial_id := as.character(geospatial_id)]
@@ -218,11 +154,12 @@ all[iso3 == "KOSOVO", iso3 := "SRB"] #GBD rolls Kosovo data into Serbia
 message(nrow(topics)-nrow(all), ' rows lost in geocodebook merge!')
 message(uniqueN(topics$nid)-uniqueN(all$nid), ' NIDs lost in geocodebook merge!')
 
+#TODO move this step before the fread stage by subsetting the codebook instead
 # Merge on stages to subset out stage 3 data and pre-2000
+all[, iso3 := substr(iso3, 1, 3)] #remove GBD subnational codes from iso3
 all <- merge(all, stages[, .(Stage, iso3)], by = 'iso3')
-all <- all[!(Stage %in% c('2x', '3') & year_end<2000),]
+all <- all[!(Stage %in% c('2x', '3') | year_end<2000),]
 all[, Stage := NULL]
-
 
 #####################################################################
 ############################### MERGE DIAGNOSTIC ####################
@@ -247,7 +184,6 @@ if (length(missing_nids) > 0){
 #####################################################################
 ######################### MAKE year_experiment COLUMN ###############
 #####################################################################
-
 message("Adding year_experiment column")
 
 all[, year_experiment := round(mean(year_start, na.rm=T)), by=.(nid, iso3)]
@@ -271,16 +207,17 @@ message("end of table")
 #####################################################################
 ######################### TOPIC-SPECIFIC CODE #######################
 #####################################################################
-
 message("HAP-specific Fixes")
-#replace missing pweights with hhweight
+#replace missing hhweight with pweights
 all[is.na(hhweight) & !is.na(pweight), hhweight := pweight]
 print(nrow(all))
 #drop useless vars
 drop <- c("line_id", "sex_id", "age_year", "age_month", "pweight", "latitude", "longitude")
 all <- all[, (drop):= NULL]
 print(nrow(all))
+
 #cleanup women module
+#TODO cleanup and move to data.table
 message("dropping duplicate women in single household (so household sizes aren't duplicated)")
 wn <- all[survey_module == "WN", ]
 wn_key <- c("psu", "hh_id")
@@ -316,6 +253,7 @@ length(unique(has_hh_size_id$uq_id)) - length(unique(has_hh_size_id$prev_uq_id))
 message(paste("\n There are", ., "more unique households from including spacetime than excluding."))
 hhhs <- distinct(has_hh_size_id, uq_id, .keep_all=T)
 print(nrow(all))
+
 #subset cases where all hh_sizes are missing and each row is not a HH. Set hh_size to 1
 missing_hh_size <- all[is.na(hh_size) & survey_module != 'HH', ]
 missing_hh_size[, hh_size := 1]
@@ -337,7 +275,7 @@ excluded_surveys <- c(8556, #dropping MEX/NATIONAL_HEALTH_SURVEY_ENSA due to bad
 packaged <- packaged[!(nid %in% excluded_surveys),]
 
 #check to see if any NIDs were lost in the process
-topic_nids %>% .[!(. %in% unique(packaged$nid))]
+if (exists('test_country')) mod.dt[ihme_loc_id %like% test_country & survey_series!='IPUMS_CENSUS', unique(nid)] %>% .[!(. %in% unique(packaged$nid))]
 
 message("Saving pts")
 pt_collapse <- packaged[!is.na(lat) & !is.na(long), ]
