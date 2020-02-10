@@ -33,7 +33,7 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(ccaPP, fst, mgsub, sf, stringr)
 
 #detect if running in rstudio IDE
-debug <- F
+debug <- T
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 ## if running interactively, set arguments
@@ -44,7 +44,7 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'dia_essa-SWZ-ZWE-LSO'
+  region <- 'dia_name'
 
 } else {
   
@@ -396,7 +396,7 @@ if (interactive) {
                                    lri='lri')
   indicators               <- list(hap='cooking_fuel_solid', 
                                    lri='has_lri')
-  run_dates                <- list(hap='2019_12_18_13_30_12', 
+  run_dates                <- list(hap='2020_02_07_23_37_07', 
                                    lri='2019_10_23_16_13_17')
   measures                 <- list(hap='count',
                                    lri='count')
@@ -405,8 +405,8 @@ if (interactive) {
   rks                      <- list(hap=F, 
                                    lri=F)
   shapefile                <- '2019_09_10' #NEEDS TO MATCH
-  covs                        <- c('ihmepm25', 'ghlsurbanicity')
-  cov_measures                <- c('mean', 'mean')
+  covs                        <- c('ihmepm25')
+  cov_measures                <- c('mean')
   
   # #TODO janky fix
   # if (region=='dia_name-ESH') {
@@ -480,6 +480,12 @@ age.cause <- ageCauseLister(cause.code='lri', gbd.version='GBD2019', lri.version
 all.rr <- lapply(1:nrow(age.cause), prepRR, rr.dir=rr.dir) #9 = LRI 
 lri.rr <- all.rr[[9]] %>% 
   .[, draw := paste0('V', draws)]
+
+#TODO 
+#create mean/CI
+# lri.ci <- lri.rr %>% 
+#   copy %>% 
+#   .[ mean := ]
 toc(log=TRUE)
 
 ## find the adm0s/iso3s of countries in this region

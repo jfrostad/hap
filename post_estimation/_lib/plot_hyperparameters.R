@@ -80,14 +80,20 @@ plot_hyperparameters <- function(indicator, indicator_group, run_date, age, hold
     return(NULL)
     
   }
+
   
   #make series of plots
   
   if (is.null(save_file)) save_file <- paste0(outputdir, '/diagnostic_plots/inla_hyperparameters.pdf')
   pdf(save_file, width = 14, height = 8)
   
-  distPlot(dist, reg='regional')
-  distPlot(dist, reg='country')
+  if (length(regions)>1) {
+    
+    distPlot(dist, reg='regional')
+    distPlot(dist, reg='country')
+    
+  } 
+  
   lapply(unique(dist$region), distPlot, dist_dt=dist)
 
   dev.off()

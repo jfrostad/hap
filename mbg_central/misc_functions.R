@@ -277,7 +277,7 @@ combine_aggregation <- function(rd = run_date,
        
         for (reg in regions) {
           message(paste0("  Region: ", reg))
-          
+
           load(paste0(dir_to_search, indic, "_", ifelse(rake, "raked", "unraked"),
                       "_admin_draws_eb_bin", age, "_", reg, "_", holdout, ".RData"))
           

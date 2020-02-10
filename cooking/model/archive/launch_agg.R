@@ -25,7 +25,7 @@ if (interactive) {
                'dia_se_asia-VNM-THA', 'VNM', 'THA',
                'dia_mid_east-AFG', 'dia_south_asia+AFG')
   #regions <- 'dia_chn_mng'
-  run_date                 <- '2020_02_01_10_33_29'
+  run_date                 <- '2020_02_01_10_33_18'
   makeholdout              <- F
   
 } else {

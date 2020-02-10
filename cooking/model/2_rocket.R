@@ -25,13 +25,17 @@ message(indicator)
 
 ## Singularity version
 sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
-which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg')
+# which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg')
 which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v4.simg')
+
+## Released Singularity imgs
+#sing_dir <- '/share/singularity-images/lbd/releases/'
+#which_sing <- file.path(sing_dir, 'lbd_full_20200128.simg')
 
 ## Load MBG packages
 package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
-mbg_setup(package_list = package_list, repos = core_repo)
+  mbg_setup(package_list = package_list, repos = core_repo)
 
 ## Throw a check for things that are going to be needed later
 message('Looking for things in the config that will be needed for this script to run properly')
@@ -242,9 +246,9 @@ for(i in 1:nrow(loopvars)){
   r <- as.character(loopvars[i,1])
   region_cores <- 8
   if(r == 'NGA' | r == 'PAK' | r == 'KEN' | r == 'ZWE' | r == 'VNM' | r == 'THA' | r == 'dia_central_asia') region_cores <- 4
-  if(r == 'dia_se_asia-VNM-THA' | r == 'dia_sssa' | r == 'MNG' | r == 'COD') region_cores <- 6
-  if(r == 'dia_malay' | r == 'dia_name') region_cores <- 10
-  if(r =='dia_south_asia' | r =='dia_south_asia+AFG' | r=='dia_s_america-BRA' | r == 'dia_afr_horn') region_cores <- 12
+  if(r == 'dia_se_asia-VNM-THA' | r == 'MNG' | r == 'COD') region_cores <- 6
+  if(r == 'dia_malay' | r == 'dia_name' | r == ' '| r == 'dia_cssa'| r == 'dia_se_asia') region_cores <- 10
+  if(r %like% 'dia_south_asia' | r %like% 'dia_essa' | r=='dia_s_america-BRA' | r == 'dia_afr_horn') region_cores <- 12
   if(r == 'dia_s_america' | r == 'dia_wssa'| r == 'dia_chn_mng' | r == 'dia_wssa-NGA' | r=='BRA') region_cores <- 25
   if(loopvars[i, 3] > 0) region_cores <- round(region_cores*0.8)
   

@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_no_nid_re'
+config_par   <- 'hap_sp_only'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
@@ -58,35 +58,35 @@ holdout <- TRUE # only matters if running aggregation, set to TRUE for holdouts
 # list all regions or countries
 # standard regions
 regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
-             'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
+             'dia_mcaca', 'dia_s_america-GUF', 'dia_central_asia', 'dia_chn_mng', 
              'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
 
 # africa only
-regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa', 'dia_afr_horn')
+#regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa', 'dia_afr_horn')
 
 # custom country-specifics
 #regions <- c('dia_sssa-zaf', 'ZAF', 'dia_se_asia-vnm-tha', 'VNM', 'THA')
-regions <- c('dia_afr_horn',  
-             'dia_cssa',
-             'dia_wssa-NGA', 'NGA',
-             'dia_name-ESH',
-             'dia_mcaca', 'dia_s_america-BRA-GUF', 'BRA',
-             'dia_central_asia', 'dia_chn_mng', 'MNG',
-             'dia_malay',
-             'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF', 'ZWE',
-             'dia_se_asia-VNM-THA', 'VNM', 'THA',
-             'dia_mid_east-AFG', 'dia_south_asia+AFG')
+# regions <- c('dia_afr_horn',  
+#              'dia_cssa',
+#              'dia_wssa-NGA', 'NGA',
+#              'dia_name-ESH',
+#              'dia_mcaca', 'dia_s_america-BRA-GUF', 'BRA',
+#              'dia_central_asia', 'dia_chn_mng',
+#              'dia_malay',
+#              'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
+#              'dia_se_asia-VNM-THA', 'VNM', 'THA',
+#              'dia_mid_east-AFG', 'dia_south_asia+AFG')
 
 # large regions
-#regions <- c('dia_chn_mng', 'dia_s_america', 'dia_wssa')
+#regions <- c('ZWE')
 
 # testing
 #regions <- c('VNM', 'dia_se_asia-VNM-THA')
 #regions <- c('dia_mid_east-AFG', 'dia_south_asia+AFG')
-# regions <- c('dia_chn_mng', 'dia_s_america')
-# regions <- c('dia_afr_horn', 'dia_name')
-# regions <- c('dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF', 'ZWE',
-#              'dia_cssa',
+#regions <- c('dia_chn_mng', 'dia_s_america')
+# regions <- c('dia_sssa-ZAF+SWZ+LSO+ZWE')
+# regions <- c('dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+LSO', 'ZAF', 'ZWE',
+#              'dia_chn_mng',
 #              'dia_mcaca')
 
 # list indicators

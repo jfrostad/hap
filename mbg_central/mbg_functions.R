@@ -276,17 +276,16 @@ build_mbg_formula_with_priors <- function(fixed_effects,
     }
   }
   
-  f_nugget <- as.formula(paste0('~f(IID.ID, model = "iid", hyper = list(theta=', nugget_prior, '), constr = TRUE)'))
-  f_nid_res <- as.formula(paste0('~f(NID, model = "iid", hyper = list(theta=', nugget_prior, '), constr = TRUE)'))
-  f_res <- as.formula(paste0('~f(CTRY.ID, model = "iid", hyper = list(theta=', ctry_re_prior, '), constr = ', as.logical(ctry_re_sum0), ')'))
-  f_subnat <- as.formula(paste0('~f(SUBNAT.ID, model = "iid", hyper = list(theta=', subnat_re_prior, '), constr = TRUE)'))  
-  
-  ## spatial gps correlated across grouping (usually time)
+  f_nugget <- as.formula(paste0('~f(IID.ID, model = "iid", hyper = list(theta=', nugget_prior, '))'))
+  f_nid_res <- as.formula(paste0('~f(NID, model = "iid", hyper = list(theta=', nugget_prior, '))'))
+  f_res <- as.formula(paste0('~f(CTRY.ID, model = "iid", hyper = list(theta=', ctry_re_prior, '))'))
+  f_subnat <- as.formula(paste0('~f(SUBNAT.ID, model = "iid", constr=TRUE, hyper = list(theta=', subnat_re_prior, "))"))
+
+    ## spatial gps correlated across grouping (usually time)
   test_rho_priors(temporal_model_theta1_prior) ## Report how priors for theta1 (Rho) are being used in Rho space.
   f_space_time <- as.formula(paste0('~f(space,
                                     model = spde,
                                     group = space.group,
-                                    constr = ', as.logical(spde_integrate0), ',
                                     control.group = list(model = ', temporal_model_type, ", ",
                                     "hyper = list(theta = ", temporal_model_theta_prior, ", theta1 = ", temporal_model_theta1_prior, ")))"))
   ## space only gp

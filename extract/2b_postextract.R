@@ -9,7 +9,7 @@
 
 # INSTRUCTIONS:
 # UBCOV OUTPUTS MUST BE SAVED IN LIMITED USE DIRECTORY
-# source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract.R')
+# source('/homes/jfrostad/_code/lbd/hap/extract/2b_hap_postextract.R')
 #####################################################################
 
 #####################################################################
@@ -22,7 +22,30 @@ topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja', 'kel15')
 redownload <- F #update the codebook from google drive
 cores <- 15
-test_country <- 'NPL|ZWE|ZMB|MLI|BEN' #define in order to subset extractions to a single country for testing purposes
+year_cutoff <- 2000 #only modelling >2000
+#test_country <- 'ZAF' #define in order to subset extractions to a single country for testing purposes
+
+#detect if running in rstudio IDE
+debug <- F
+interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
+
+## if running interactively, set arguments
+if (interactive) {
+
+  ## set arguments
+  this_stage <- '2b'
+  core_repo <- "/homes/jfrostad/_code/lbd/hap"
+  indicator_group <- 'cooking'
+
+} else {
+  
+  ## otherwise, grab arguments from qsub
+  ## note this requires a shell script with "<$1 --no-save $@", because its starting at 4
+  this_stage <- as.character(commandArgs()[4])
+  core_repo <- as.character(commandArgs()[5])
+  indicator_group <- as.character(commandArgs()[6])
+
+} 
 
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
@@ -37,6 +60,7 @@ package_lib    <- file.path(h, '_code/_lib/pkg')
 
 #Load packages
 pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, fst, parallel, doParallel, googledrive, readxl)
+package_list <- paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv') %>% fread %>% t %>% c
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -45,13 +69,20 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 share.model.dir  <- file.path('/share/geospatial/mbg/input_data/')
 mod.dt <- file.path(share.model.dir, 'cooking_fuel_dirty.csv') %>% fread
 
-#read info about stages
-stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread 
+#read info about stages, subset to current stage
+stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
+  fread %>% 
+  .[Stage==this_stage]
+these_countries <- unique(stages$iso3)
 #####################################################################
 ######################## DEFINE FUNCTIONS ###########################
 #####################################################################
-source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
+# Load MBG packages and functions
+message('Loading in required R packages and MBG functions')
+source(paste0(core_repo, '/mbg_central/setup.R'))
+mbg_setup(package_list = package_list, repos = core_repo)
 
+source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
 #####################################################################
 ######################## BIND UBCOV EXTRACTS ########################
 #####################################################################
@@ -67,14 +98,22 @@ codebook <- codebook[!(survey_name %like% 'IPUMS')]
 #TODO better to handle using outlier column with notes in the data vetting sheet
 codebook <- codebook[nid != 687]
 
-#create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
-#codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
-
 #subset the codebook to ONLY the files that our extractors have worked on
 codebook <- codebook[assigned %in% extractor_ids]
 
-#Generate list of extraction filepaths
-extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F)
+#if requested, subset to working indicators
+#TODO make more flexible
+if (indicator_group=='cooking') codebook <- codebook[!is.na(cooking_fuel)]
+
+#subset the codebook to working stage and year
+codebook <- codebook[ihme_loc_id %in% these_countries & year_end>=year_cutoff]
+these_tails <- unique(codebook$nid) %>% 
+  paste0(., '.csv', collapse='|') 
+
+#Generate list of extraction filepaths, subset to region & to our extractions
+extractions <- list.files(folder_in, full.names=T, pattern = ".csv", ignore.case=T, recursive = F) %>% 
+  .[basename(.) %>% substr(., 1, 3) %in% these_countries] %>% #check that string starts with iso3 for stage
+  .[str_ends(., these_tails)] #check that string ends in NID.csv with our extracted NIDs for stage
 
 #subset to a country if testing
 if (exists('test_country')) extractions <- extractions %>% .[. %like% paste0(test_country, '_')]
@@ -90,7 +129,7 @@ topics <- mclapply(extractions,
 
 ##Save raw data file, if desired
 #TODO need to split this file because its getting the null embedded error too
-if (!exists('test_country')) write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_", today, ".feather"))
+if (!exists('test_country')) write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_stage_",  this_stage, '_', today, ".feather"))
 
 #####################################################################
 ######################## VERIFY EXTRACTIONS##########################
@@ -110,7 +149,7 @@ if (!exists('test_country')) {
                                 is.na(cooking_fuel) |
                                 is.na(hh_size)), nid] %>% unique
   broken_extractions <- codebook.nids[!(codebook.nids %in% unique(topics$nid))]
-  write.csv(broken_extractions, paste0(folder_out, "/broken_extractions.csv"), na="", row.names=F)
+  write.csv(broken_extractions, paste0(folder_out, "/stage_",  this_stage, "_broken_extractions.csv"), na="", row.names=F)
   
   #make a vector of the expected variables
   var.list <- c('cooking_fuel', 'cooking_location', 'cooking_type', 'cooking_type_chimney',
@@ -132,7 +171,7 @@ if (!exists('test_country')) {
   verification[, failures := rowSums(.SD), .SDcols=var.list]
   #also merge on the notes column from the codebook, to help ID cases where there was missingess in the raw data
   verification <- merge(verification, codebook[, .(nid, notes)], by='nid', all.x=T)
-  write.csv(verification[failures>0], paste0(folder_out, "/problem_extractions.csv"), na="", row.names=F)
+  write.csv(verification[failures>0], paste0(folder_out, "/stage_",  this_stage, "_problem_extractions.csv"), na="", row.names=F)
 
 }
 
@@ -153,13 +192,6 @@ all <- merge(geo_k, topics, by.x=c("nid", "iso3", "geospatial_id"), by.y=c("nid"
 all[iso3 == "KOSOVO", iso3 := "SRB"] #GBD rolls Kosovo data into Serbia
 message(nrow(topics)-nrow(all), ' rows lost in geocodebook merge!')
 message(uniqueN(topics$nid)-uniqueN(all$nid), ' NIDs lost in geocodebook merge!')
-
-#TODO move this step before the fread stage by subsetting the codebook instead
-# Merge on stages to subset out stage 3 data and pre-2000
-all[, iso3 := substr(iso3, 1, 3)] #remove GBD subnational codes from iso3
-all <- merge(all, stages[, .(Stage, iso3)], by = 'iso3')
-all <- all[!(Stage %in% c('2x', '3') | year_end<2000),]
-all[, Stage := NULL]
 
 #####################################################################
 ############################### MERGE DIAGNOSTIC ####################
@@ -221,9 +253,9 @@ print(nrow(all))
 message("dropping duplicate women in single household (so household sizes aren't duplicated)")
 wn <- all[survey_module == "WN", ]
 wn_key <- c("psu", "hh_id")
-wn <- distinct(wn, psu, hh_id, .keep_all=T)
-all <- all[survey_module != "WN", ]
-all <- rbind(all, wn, fill=T, use.names=T)
+wn <- distinct(wn, psu, hh_id, .keep_all=T) #TODO make data.table
+all <- list(all[survey_module != "WN", ], wn) %>% 
+  rbindlist(fill=T, use.names=T)
 
 message("drop duplicate HH entries and cleanup hh_sizes")
 print(nrow(all))
@@ -260,35 +292,30 @@ missing_hh_size[, hh_size := 1]
 
 missing_hh_size_hh <- all[is.na(hh_size) & survey_module == 'HH', ]
 
-packaged <- rbind(hhhs, has_hh_size_no_id, fill=T)
-packaged <- rbind(packaged, missing_hh_size, fill=T)
-packaged <- rbind(packaged, missing_hh_size_hh, fill=T)
+all <- list(hhhs, has_hh_size_no_id, missing_hh_size, missing_hh_size_hh) %>% 
+  rbindlist(fill=T, use.names=T)
 
 nids_that_need_hh_size_crosswalk <- c(20998, #MACRO_DHS_IN UGA 1995 WN
                                       32144, 32138, 1301, 1308, 1322, #BOL/INTEGRATED_HH_SURVEY_EIH
                                       7375) # KEN 2007 Household Health Expenditure Utilization Survey KEN/HH_HEALTH_EXPENDITURE_UTILIZATION_SURVEY
-packaged[nid %in% nids_that_need_hh_size_crosswalk, hh_size := NA]
+all[nid %in% nids_that_need_hh_size_crosswalk, hh_size := NA]
 
 #TODO push into HAP tracking sheet
 excluded_surveys <- c(8556, #dropping MEX/NATIONAL_HEALTH_SURVEY_ENSA due to bad weighting
                       261889, 261887) #MAL_ED due to non-representative sample from hospital visits
-packaged <- packaged[!(nid %in% excluded_surveys),]
+all <- all[!(nid %in% excluded_surveys),]
 
-#check to see if any NIDs were lost in the process
-if (exists('test_country')) mod.dt[ihme_loc_id %like% test_country & survey_series!='IPUMS_CENSUS', unique(nid)] %>% .[!(. %in% unique(packaged$nid))]
+#check to see if any NIDs were lost in the process by comparing to model dt
+#TODO better comparison point?
+if (exists('test_country')) { 
+  
+  mod.dt[ihme_loc_id %like% test_country & survey_series!='IPUMS_CENSUS', unique(nid)] %>% 
+    .[!(. %in% unique(all$nid))]
+  
+} else mod.dt[survey_series!='IPUMS_CENSUS' & ihme_loc_id %in% these_countries, unique(nid)] %>% .[!(. %in% unique(all$nid))]
 
-message("Saving pts")
-pt_collapse <- packaged[!is.na(lat) & !is.na(long), ]
-#set start_year to int_year for point data
-pt_collapse[, year_experiment := year_start]
-pt_collapse[!is.na(int_year), year_experiment := int_year]
-if (!exists('test_country')) write.fst(pt_collapse, path=paste0(folder_out, "/points_", today, ".fst"))
-
-message("saving polygons")
-poly_collapse <- packaged[(is.na(lat) | is.na(long)) & !is.na(shapefile) & !is.na(location_code), ]
-#set polygon years to a weighted mean
-poly_collapse[, year_experiment := weighted.mean(int_year, weight=hhweight, na.rm=T), by=c("nid")]
-if (!exists('test_country')) write.fst(poly_collapse, path=paste0(folder_out, "/poly_", today, ".fst"))
+message("Saving data")
+if (!exists('test_country')) write.fst(all, path=paste0(folder_out, "/stage_",  this_stage, "_", today, ".fst"))
 
 #####################################################################
 ######################### CLEAN UP & SAVE ###########################
@@ -303,7 +330,8 @@ if (!exists('test_country')) {
     .[, .(nid, iso3, year_start, survey_name)] %>% 
     distinct %>% 
     merge(., stages, by='iso3', all.x=T) %>% 
-    write.csv(., file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched", topic, "new_geographies_to_match.csv"), 
+    write.csv(., 
+              file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched_", topic, "_stage_",  this_stage, "_new_geographies_to_match.csv"), 
               row.names=F, na="")
   print(nrow(all))
 

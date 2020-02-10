@@ -59,8 +59,7 @@ mbg_setup(package_list = package_list, repos = core_repo)
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2018_08_14_14_43_37'
-run_date <- '2019_12_18_13_30_12'
+run_date <- '2020_02_07_23_37_07'
 indicator_group <- 'cooking'
 indicator <- 'hap'
 type <- 'mean'
@@ -104,7 +103,7 @@ annotations <- load_map_annotations()
 dt <-
 list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>% 
   lapply(., fread) %>% 
-  rbindlist %T>% 
+  rbindlist(use.names=T, fill=T) %T>% 
   write.csv(., file.path(data.dir, 'admin_2_summary.csv'), row.names = F)
 
 #merge sr region names/IDs
@@ -182,6 +181,31 @@ ggplot(dt[year %in% c(2000,2017)], aes(x=(hap_pct-.5), y=tap_pc, color=super_reg
   theme_bw() 
 ggsave(filename=file.path(out.dir, 'hap_share_change_facet.png'),
        width=15, height=10, units='in', dpi=900)
+
+#testplots for nature pre-sub
+ggplot(dt[year %in% c(2000,2017) & iso3 %in% c('KEN', 'AFG', 'NGA')], aes(x=(hap_pct-.5), y=tap_pc, color=region_name)) + 
+  geom_point() + 
+  geom_vline(xintercept=0) +
+  facet_wrap(~year) +
+  #scale_size_area('TAP dose', max_size=3) +
+  scale_color_brewer(palette='Dark2') +
+  xlim(c(-.6, .6)) +
+  #ylim(c(-.6, .3))  +
+  coord_flip() +
+  theme_bw() 
+
+ggplot(dt[year %in% c(2000,2017) & iso3 %in% c('KEN', 'ZAF', 'NGA')], 
+       aes(x=hap_pct, y=tap_paf, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
+  geom_point() + 
+  geom_line(alpha=.1) +
+  geom_vline(xintercept=.5) +
+  #scale_size_area('TAP dose', max_size=3) +
+  scale_color_brewer(palette='Dark2') +
+  scale_shape_manual(values=c(1, 16)) +
+  xlim(c(0, 1)) +
+  #ylim(c(0, .1))  +
+  coord_flip() +
+  theme_bw() 
 
 
 #read in input data and prepare it for mapping
@@ -441,13 +465,13 @@ toc()
 
 tic('ggsaving 2017')
 ggsave(filename=file.path(out.dir, 'hap_pct_2017.png'), plot=gg_2017$hap_pct, 
-       width=10, height=6, units='in', dpi=600)
+       width=10, height=6, units='in', dpi=300)
 
 ggsave(filename=file.path(out.dir, 'dfu_2017.png'), plot=gg_2017$dfu, 
-       width=10, height=6, units='in', dpi=600)
+       width=10, height=6, units='in', dpi=300)
 
 ggsave(filename=file.path(out.dir, 'tap_paf_2017.png'), plot=gg_2017$tap_paf, 
-       width=10, height=6, units='in', dpi=600)
+       width=10, height=6, units='in', dpi=300)
 toc()
 
 tic('ggsaving 2000')
@@ -494,3 +518,12 @@ toc()
 #***********************************************************************************************************************
 
 # ---SCRAPS-------------------------------------------------------------------------------------------------------------
+#testing
+tmp <- data_d$dfu_d$admin2 %>% copy
+plot_map(tmp[tmp$NAME_0 %like% 'Kenya',], annotations, limits=c(-.2, .2), title='change from 2000-2017', 
+         legend_colors=d_colors, legend_color_values=d_values,
+         legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+         legend_title='dfu %', custom_scale=T,
+         pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+         zoom=zoom.global,
+         debug=F)

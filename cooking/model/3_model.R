@@ -2,7 +2,7 @@
 ## Generic parallel script for running MBG models                  ##
 ## Roy Burstein, Nick Graetz, Aaron Osgood-Zimmerman, Jon Mosser   ##
 #####################################################################
-# source('/homes/jfrostad/_code/lbd/hap/cooking/model/parallel_hap.R') 
+# source('/homes/jfrostad/_code/lbd/hap/cooking/model/3_model.R') 
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~ SETUP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -42,9 +42,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'ZWE'
+  reg                      <- 'dia_central_asia'
   age                      <- 0
-  run_date                 <- "2020_01_31_12_17_51"
+  run_date                 <- "2020_02_07_09_50_17"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -590,6 +590,11 @@ if (as.logical(skiptoinla) == FALSE) {
   #sourced from cov_interrogation_functions.R
   covInterrogation(pixel_count=5) 
   
+  #TODO make a more stable fix
+  #test to see if rounding the ind will fix this issue
+  df[, N := round(N)]
+  df[, (indicator) := get(indicator) %>% round]
+  
   ## Save all inputs for MBG model into correct location on /share
   cov_list <- lapply(cov_list, readAll)
   save_mbg_input(indicator         = indicator,
@@ -691,7 +696,6 @@ mbg_formula <- build_mbg_formula_with_priors(fixed_effects = all_fixed_effects,
                                              add_ctry_res  = use_inla_country_res,
                                              ctry_re_prior = ctry_re_prior,
                                              ctry_re_sum0  = ctry_re_sum0,
-                                             spde_integrate0 = spde_integrate0,
                                              temporal_model_theta1_prior = rho_prior,
                                              temporal_model_theta_prior = theta_prior,
                                              no_gp         = !as.logical(use_gp),
@@ -702,6 +706,7 @@ mbg_formula <- build_mbg_formula_with_priors(fixed_effects = all_fixed_effects,
                                              use_time_only_gmrf = as.logical(use_time_only_gmrf),
                                              time_only_gmrf_type = time_only_gmrf_type,
                                              nid_RE        = use_nid_res)
+
 
 ## If needed, add fake data to make sure INLA estimates all years
 missing_years <- setdiff(year_list, df$year)
@@ -1057,8 +1062,7 @@ sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ',
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
 r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
 script <- file.path(repo, 'mbg_central/share_scripts/frax_script_hap.R')
-args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, proj_arg, 
-                    use_geos_nodes, run_date, measure, holdout)
+args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout)
                     
 
 # submit qsub

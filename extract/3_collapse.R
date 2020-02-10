@@ -26,8 +26,8 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load packages
 core_repo <- "/homes/jfrostad/_code/lbd/hap"
-pacman::p_load(data.table, dplyr, feather, fst, googledrive, readxl, gargle, ellipsis, sf) 
-package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+pacman::p_load(data.table, dplyr, magrittr, feather, fst, googledrive, readxl, gargle, ellipsis, sf) 
+package_list <- paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv') %>% fread %>% t %>% c
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -37,10 +37,10 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 cores <- 10
 this.family='cooking'
 modeling_shapefile_version <- "2019_09_10"
-manual_date <- "2019_12_23" #set this value to use a manually specified extract date
+#manual_date <- "2019_12_23" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- T #set to TRUE if you have new data and want to recollapse
+run_collapse <- F #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 new_vetting <- F #set to TRUE to refresh the vetting diagnostic
@@ -94,15 +94,12 @@ stages <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %
 #automatically pull latest date if manual date not provided
 # get input version from most recently modified data file
 if (latest_date) { 
-  file_date <- gsub('.fst|points_|poly_', 
-                    '', 
-                    sort(list.files(data.dir, pattern = '*points'), decreasing=T)[1]) #pull latest poitns filename
-  
-  #pull latest points filename
-  file_date <- list.files(data.dir, pattern = '*points') %>% 
+
+  #pull latest filedate
+  file_date <- list.files(data.dir, pattern = '.fst') %>% 
     sort(., decreasing=T) %>% 
-    .[1] %>% 
-    gsub('.fst|points_|poly_',  '', .)
+    .[1] %>% #pull only the latest file to save
+    str_sub(., start=-14, end=-5) #extract from the location of the filedate (end of file -'.fst')
   
 } else file_date <- manual_date
   
@@ -126,16 +123,15 @@ collapseData <- function(this.family,
   } else {
     census <- F
     # Load data
-    pt <- paste0(data.dir, 'points_', file_date, ".fst") %>% read.fst(., as.data.table=T)
-    poly <- paste0(data.dir, 'poly_', file_date, ".fst") %>% read.fst(., as.data.table=T)
+    raw <- list.files(data.dir, pattern=paste0(file_date, '.fst'), full.names = T) %>% 
+      lapply(., read.fst, as.data.table=T) %>% 
+      rbindlist(use.names = T, fill=T)
 
     dt <- list(
-      initialClean(pt, var.fam=this.family),
-      initialClean(poly, var.fam=this.family)
+      initialClean(raw[!is.na(lat) & !is.na(long)], var.fam=this.family),
+      initialClean(raw[is.na(lat) & is.na(long)], var.fam=this.family)
     ) %>% rbindlist
     
-    #cleanup
-    raw <- list(pt, poly) %>% rbindlist
   } 
   
   message("Loading data...[census=", census, "]")
@@ -337,7 +333,8 @@ vars <- c('cooking_fuel_solid', 'cooking_fuel_dirty')
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]
 
 #shapefile issues: document here shapefiles that cause resample_polygons to fail
-shapefile_issues <- c('IRQ_ADM3_2019_OCHA', 'TLS_regions', 'g2015_2004_2')
+#shapefile_issues <- c('IRQ_ADM3_2019_OCHA', 'TLS_regions', 'g2015_2004_2')
+shapefile_issues <- c('If_g2015_2004_2')
 shapefile_issues_nids <- cooking[shapefile %in% shapefile_issues, unique(nid)]
 message('shapfile issues with the following iso3s: ', cooking[shapefile %in% shapefile_issues, unique(ihme_loc_id)])
 

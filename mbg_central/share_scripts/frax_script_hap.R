@@ -31,6 +31,8 @@ pacman::p_load(data.table, dplyr, mgsub, raster, sf, fasterize, fst)
 debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
+print(commandArgs())
+
 if (interactive) {
   
   ## Set repo location, indicator group, and some arguments
@@ -38,12 +40,12 @@ if (interactive) {
   core_repo <- "/homes/jfrostad/_code/lbd/hap"
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_best'
+  config_par   <- 'hap_sp_no_re'
   holdout <- 0
   age <- 0
-  run_date <- '2020_02_01_10_33_18'
+  run_date <- '2020_02_01_10_33_29'
   measure <- 'prevalence'
-  reg <- 'THA'
+  reg <- 'dia_essa-SWZ-ZWE-LSO'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {
@@ -56,9 +58,9 @@ if (interactive) {
   config_par      <- commandArgs()[8]
   cov_par         <- commandArgs()[9]
   reg             <- commandArgs()[10]
-  run_date        <- commandArgs()[13]
-  measure         <- commandArgs()[14]
-  holdout         <- as.numeric(commandArgs()[15])
+  run_date        <- commandArgs()[11]
+  measure         <- commandArgs()[12]
+  holdout         <- as.numeric(commandArgs()[13])
   age             <- 0
 
 }

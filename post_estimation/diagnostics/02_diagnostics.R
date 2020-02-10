@@ -42,11 +42,11 @@ debug.args <- c('simulate',
                 "/homes/jfrostad/_code/lbd/hap",
                 'cooking',
                 'cooking_fuel_solid',
-                'config_hap_best',
+                'config_hap_standard',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_02_01_10_33_18',
+                '2020_02_07_23_37_07',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
@@ -204,7 +204,7 @@ dat <- lapply(Regions,function(x)
                        indicator_group, 
                        run_date,
                        modeling_shapefile_version, 
-                       build=T)
+                       build=F)
   ) %>% 
   rbindlist
 
@@ -216,7 +216,7 @@ stack <- lapply(Regions, function(x)
                            run_date, 
                            modeling_shapefile_version,
                            pop_measure='total',
-                           build=T)
+                           build=F)
   ) %>% 
   rbindlist
 
@@ -260,12 +260,12 @@ if (raked) {
 
 # stackers
 mbg <- merge(mbg, stack,
-             by =  names(mbg) %>% .[grep('CODE|year|lvl|region', .)],
+             by =  names(mbg) %>% .[grep('CODE|year|lvl', .)],
              all.x = T)
 
 # data
 mbg <- merge(mbg, dat,
-             by = names(mbg) %>% .[grep('CODE|year|lvl|region', .)],
+             by = names(mbg) %>% .[grep('CODE|year|lvl', .)],
              all.x = T)
 
 # save

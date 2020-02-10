@@ -50,22 +50,22 @@
                'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
   #regions <- c('dia_s_america-GUF')
   
-  regions <- c('dia_afr_horn',  
-               'dia_cssa',
-               'dia_wssa-NGA', 'NGA',
-               'dia_name',
-               'dia_mcaca', 'dia_s_america-BRA', 'BRA',
-               'dia_central_asia', 'dia_chn_mng', 'MNG',
-               'dia_malay',
-               'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
-               'dia_se_asia-VNM-THA', 'VNM', 'THA',
-               'dia_mid_east-AFG', 'dia_south_asia+AFG')
+  # regions <- c('dia_afr_horn',  
+  #              'dia_cssa',
+  #              'dia_wssa-NGA', 'NGA',
+  #              'dia_name',
+  #              'dia_mcaca', 'dia_s_america-BRA-GUF', 'BRA',
+  #              'dia_central_asia', 'dia_chn_mng', 'MNG',
+  #              'dia_malay',
+  #              'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
+  #              'dia_se_asia-VNM-THA', 'VNM', 'THA',
+  #              'dia_mid_east-AFG', 'dia_south_asia+AFG')
   
 for (region in regions) {
  
       # set memory based on region
       if (region %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
-      } else if (region == 'dia_wssa') { mymem <- '500G'
+      } else if (region %in% c('dia_wssa', 'dia_s_america-BRA')) { mymem <- '500G'
       } else mymem <- '350G'
       
       #name job
