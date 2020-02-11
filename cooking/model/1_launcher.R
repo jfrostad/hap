@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_sp_only'
+config_par   <- 'hap_gp_no_re'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
@@ -57,7 +57,7 @@ holdout <- TRUE # only matters if running aggregation, set to TRUE for holdouts
 
 # list all regions or countries
 # standard regions
-regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
+regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_sssa', 
              'dia_mcaca', 'dia_s_america-GUF', 'dia_central_asia', 'dia_chn_mng', 
              'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
 
@@ -78,7 +78,7 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa',
 #              'dia_mid_east-AFG', 'dia_south_asia+AFG')
 
 # large regions
-#regions <- c('ZWE')
+#regions <- c('dia_s_america-GUF')
 
 # testing
 #regions <- c('VNM', 'dia_se_asia-VNM-THA')

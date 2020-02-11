@@ -29,8 +29,8 @@ sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
 which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v4.simg')
 
 ## Released Singularity imgs
-#sing_dir <- '/share/singularity-images/lbd/releases/'
-#which_sing <- file.path(sing_dir, 'lbd_full_20200128.simg')
+sing_dir <- '/share/singularity-images/lbd/releases/'
+which_sing <- file.path(sing_dir, 'lbd_full_20200128.simg')
 
 ## Load MBG packages
 package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))

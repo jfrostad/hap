@@ -33,7 +33,7 @@ if (Sys.info()["sysname"] == "Linux") {
 pacman::p_load(ccaPP, fst, mgsub, sf, stringr)
 
 #detect if running in rstudio IDE
-debug <- T
+debug <- F
 interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
 
 ## if running interactively, set arguments
@@ -396,7 +396,7 @@ if (interactive) {
                                    lri='lri')
   indicators               <- list(hap='cooking_fuel_solid', 
                                    lri='has_lri')
-  run_dates                <- list(hap='2020_02_07_23_37_07', 
+  run_dates                <- list(hap='2020_02_10_12_38_26', 
                                    lri='2019_10_23_16_13_17')
   measures                 <- list(hap='count',
                                    lri='count')

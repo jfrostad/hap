@@ -59,7 +59,10 @@ mbg_setup(package_list = package_list, repos = core_repo)
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
+run_date <- '2020_02_10_12_38_26'
 run_date <- '2020_02_07_23_37_07'
+lri_run_date <- '2019_10_23_16_13_17'
+lri_filepath <- 'has_lri_c_admin_2_raked_mortality_summary.csv'
 indicator_group <- 'cooking'
 indicator <- 'hap'
 type <- 'mean'
@@ -73,9 +76,6 @@ cores <- 10
 ###Input###
 #raw data
 data.dir <- file.path('/ihme/geospatial/mbg/cooking/pafs', run_date)
-# u5m.paths <- data.table(raster=file.path(data.dir, 'died_under5_mean_raked_2000_2017.tif'),
-#                         admin1=file.path(data.dir, 'died_under5_mean_raked_ad1.csv'),
-#                         admin2=file.path(data.dir, 'died_under5_mean_raked_ad2.csv'))
 hap.paths <- data.table(admin2=file.path(data.dir, 'admin_2_summary.csv'))
 hap.paths.d <- data.table(admin2=file.path(data.dir, 'admin_2_delta_summary.csv'))
 
@@ -98,6 +98,7 @@ file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
 #read in the proper annotations (borders, lakes, mask)
 annotations <- load_map_annotations()
+annotations_sf <- load_map_annotations(use.sf=T)
 
 #combine and save all ad2 level results
 dt <-
@@ -105,6 +106,10 @@ list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>%
   lapply(., fread) %>% 
   rbindlist(use.names=T, fill=T) %T>% 
   write.csv(., file.path(data.dir, 'admin_2_summary.csv'), row.names = F)
+
+#merge LRI counts
+has_lri <- file.path('/ihme/geospatial/mbg/lri/has_lri/output', 
+                     lri_run_date, 'pred_derivatives/admin_summaries', lri_filepath) %>% fread
 
 #merge sr region names/IDs
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
@@ -194,18 +199,29 @@ ggplot(dt[year %in% c(2000,2017) & iso3 %in% c('KEN', 'AFG', 'NGA')], aes(x=(hap
   coord_flip() +
   theme_bw() 
 
-ggplot(dt[year %in% c(2000,2017) & iso3 %in% c('KEN', 'ZAF', 'NGA')], 
+plot.dt <- dt %>% copy %>% .[year %in% c(2000, 2017)] %>% .[year==2017, year := 2018]
+
+plot <- 
+  ggplot(plot.dt[iso3 %in% c('KEN', 'ZAF', 'NGA')], 
        aes(x=hap_pct, y=tap_paf, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
   geom_point() + 
   geom_line(alpha=.1) +
   geom_vline(xintercept=.5) +
-  #scale_size_area('TAP dose', max_size=3) +
-  scale_color_brewer(palette='Dark2') +
-  scale_shape_manual(values=c(1, 16)) +
-  xlim(c(0, 1)) +
-  #ylim(c(0, .1))  +
+  scale_color_brewer('Country', palette='Dark2') +
+  scale_shape_manual('Year', values=c(1, 16)) +
+  scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
+  scale_y_continuous("Population Attributable Fraction of LRI to TAP") +
   coord_flip() +
-  theme_bw() 
+  theme_bw(base_size = 16) +
+  theme(
+    legend.position = c(.10, .90),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6)
+  )
+
+ggsave(filename=file.path(out.dir, 'presub_figure_2.png'),
+       width=12, height=8, units='in', dpi=900)
 
 
 #read in input data and prepare it for mapping
@@ -337,28 +353,28 @@ gg_2017 <- list(
                legend_colors=colors, legend_color_values=color_values,
                legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
                legend_title='hap/tap', custom_scale=T,
-               pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+               pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                zoom=zoom.global,
                debug=F),
   # 'tap_pc'=plot_map(data_2017$tap_pc$admin2, annotations, limits=c(0, 1), title='2017', 
   #          legend_colors=colors, legend_color_values=color_values,
   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-  #          pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+  #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
   #          zoom=zoom.global,
   #          debug=F),
   'dfu'=plot_map(data_2017$dfu$admin2, annotations, limits=c(0, 1), title='2017', 
            legend_colors=colors, legend_color_values=color_values,
            legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
            legend_title='dfu %', custom_scale=T,
-           pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+           pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
            zoom=zoom.global,
            debug=F),
   'tap_paf'=plot_map(data_2017$tap_paf$admin2, annotations, limits=c(0, .75), title='2017', 
                      legend_colors=colors, legend_color_values=paf_values,
                      legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
                      legend_title='tap PAF', custom_scale=T,
-                     pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                     pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                      zoom=zoom.global,
                      debug=F)
 )
@@ -370,28 +386,28 @@ gg_2000 <- list(
                      legend_colors=colors, legend_color_values=color_values,
                      legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
                      legend_title='hap/tap', custom_scale=T,
-                     pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                     pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                      zoom=zoom.global,
                      debug=F),
   # 'tap_pc'=plot_map(data_2000$tap_pc$admin2, annotations, limits=c(0, 1), title='2000', 
   #          legend_colors=colors, legend_color_values=color_values,
   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-  #          pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+  #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
   #          zoom=zoom.global,
   #          debug=F),
   'dfu'=plot_map(data_2000$dfu$admin2, annotations, limits=c(0, 1), title='2000', 
                  legend_colors=colors, legend_color_values=color_values,
                  legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
                  legend_title='dfu %', custom_scale=T,
-                 pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                 pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                  zoom=zoom.global,
                  debug=F),
   'tap_paf'=plot_map(data_2000$tap_paf$admin2, annotations, limits=c(0, .75), title='2000', 
                      legend_colors=colors, legend_color_values=paf_values,
                      legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
                      legend_title='tap PAF', custom_scale=T,
-                     pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                     pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                      zoom=zoom.global,
                      debug=F)
 )
@@ -403,28 +419,28 @@ gg_d <- list(
                      legend_colors=d_colors, legend_color_values=d_values,
                      legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
                      legend_title='hap/tap', custom_scale=T,
-                     pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                     pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                      zoom=zoom.global,
                      debug=F),
   # 'tap_pc'=plot_map(data_2017$tap_pc$admin2, annotations, limits=c(0, 1), title='2017', 
   #          legend_colors=colors, legend_color_values=color_values,
   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-  #          pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+  #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
   #          zoom=zoom.global,
   #          debug=F),
   'dfu_d'=plot_map(data_d$dfu_d$admin2, annotations, limits=c(-.2, .2), title='change from 2000-2017', 
                  legend_colors=d_colors, legend_color_values=d_values,
                  legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
                  legend_title='dfu %', custom_scale=T,
-                 pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                 pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                  zoom=zoom.global,
                  debug=F)
   # 'tap_paf'=plot_map(data_2017$tap_paf$admin2, annotations, limits=c(0, 1), title='change from 2000-2017', 
   #                    legend_colors=colors, legend_color_values=paf_values,
   #                    legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
   #                    legend_title='tap PAF', custom_scale=T,
-  #                    pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+  #                    pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
   #                    zoom=zoom.global,
   #                    debug=F)
 )
@@ -436,28 +452,28 @@ gg_dr <- list(
                        legend_colors=d_colors, legend_color_values=dr_values,
                        legend_breaks=seq(-1, 1, .2), legend_labels=seq(-1, 1, .2),
                        legend_title='hap/tap', custom_scale=T,
-                       pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                       pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                        zoom=zoom.global,
                        debug=F),
   # 'tap_pc'=plot_map(data_2017$tap_pc$admin2, annotations, limits=c(0, 1), title='2017', 
   #          legend_colors=colors, legend_color_values=color_values,
   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-  #          pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+  #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
   #          zoom=zoom.global,
   #          debug=F),
   'dfu_dr'=plot_map(data_d$dfu_dr$admin2, annotations, limits=c(-1, 1), title='change rate from 2000-2017', 
                    legend_colors=d_colors, legend_color_values=dr_values,
                    legend_breaks=seq(-1, 1, .2), legend_labels=seq(-1, 1, .2),
                    legend_title='dfu %', custom_scale=T,
-                   pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+                   pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
                    zoom=zoom.global,
                    debug=F)
   # 'tap_paf'=plot_map(data_2017$tap_paf$admin2, annotations, limits=c(0, 1), title='change from 2000-2017', 
   #                    legend_colors=colors, legend_color_values=paf_values,
   #                    legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
   #                    legend_title='tap PAF', custom_scale=T,
-  #                    pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
+  #                    pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
   #                    zoom=zoom.global,
   #                    debug=F)
 )
@@ -465,13 +481,13 @@ toc()
 
 tic('ggsaving 2017')
 ggsave(filename=file.path(out.dir, 'hap_pct_2017.png'), plot=gg_2017$hap_pct, 
-       width=10, height=6, units='in', dpi=300)
+       width=10, height=6, units='in', dpi=200)
 
 ggsave(filename=file.path(out.dir, 'dfu_2017.png'), plot=gg_2017$dfu, 
-       width=10, height=6, units='in', dpi=300)
+       width=10, height=6, units='in', dpi=200)
 
 ggsave(filename=file.path(out.dir, 'tap_paf_2017.png'), plot=gg_2017$tap_paf, 
-       width=10, height=6, units='in', dpi=300)
+       width=10, height=6, units='in', dpi=200)
 toc()
 
 tic('ggsaving 2000')
@@ -519,11 +535,56 @@ toc()
 
 # ---SCRAPS-------------------------------------------------------------------------------------------------------------
 #testing
-tmp <- data_d$dfu_d$admin2 %>% copy
-plot_map(tmp[tmp$NAME_0 %like% 'Kenya',], annotations, limits=c(-.2, .2), title='change from 2000-2017', 
-         legend_colors=d_colors, legend_color_values=d_values,
-         legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+ctry.dt <- data_2017$dfu$admin2 %>% copy
+ctry.name <- 'Nigeria'
+#ctry.name <- 'Kenya'
+#ctry.zoom <- data.table(x1=34, x2=42, y1=-4, y2=4) #KEN
+ctry.zoom <- data.table(x1=-1, x2=13, y1=3, y2=15) #NGA
+  
+ctry.dfu <- 
+  plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations, limits=c(0, 1), title='2017', 
+         legend_colors=colors, legend_color_values=color_values,
+         legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
          legend_title='dfu %', custom_scale=T,
-         pop.mask=F, lake.mask=T, stage3.mask=T, borders=T,
-         zoom=zoom.global,
+         pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
+         zoom=ctry.zoom,
          debug=F)
+
+ggsave(filename=file.path(out.dir, paste0(ctry.name, '_dfu.png')), plot=ctry.dfu, 
+       width=6, height=6, units='in', dpi=100)
+
+ctry.dt <- data_d$hap_pct_d$admin2 %>% copy
+ctry.map <- 
+  plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations, limits=c(-.2, .2), title='change from 2000-2017', 
+           legend_colors=d_colors, legend_color_values=d_values,
+           legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='hap/tap', custom_scale=T,
+           pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
+           zoom=ctry.zoom,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_d.png')), plot=ctry.map, 
+       width=6, height=6, units='in', dpi=100)
+
+ctry.dt <- data_2017$tap_paf$admin2 %>% copy
+ctry.map <- 
+  plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations, limits=c(0, .75), title='2017', 
+           legend_colors=colors, legend_color_values=paf_values,
+           legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
+           legend_title='tap PAF', custom_scale=T,
+           pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
+           zoom=ctry.zoom,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_paf.png')), plot=ctry.map, 
+       width=6, height=6, units='in', dpi=100)
+
+plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations_sf, limits=c(0, 1), title='2017', 
+         legend_colors=colors, legend_color_values=color_values,
+         legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
+         legend_title='hap/tap', custom_scale=T,
+         pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
+         zoom=ctry.zoom,
+         debug=F)
+
+

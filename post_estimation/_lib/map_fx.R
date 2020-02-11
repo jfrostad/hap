@@ -10,31 +10,59 @@
 ####################################################################################################
 ## load_map_annotations ----------------------------------------------------------------------------
 
-load_map_annotations <- function() {
+load_map_annotations <- function(use.sf=F) {
 
-  ## Base shapefile (country outlines)
-  message('->loading country borders')
-  stage1 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad0_gadm.shp')
-  stage2 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad0_gadm.shp')
-  adm0 <- bind(stage1, stage2) %>% fortify
-
-  ## Lakes
-  message('-->loading lake mask')
-  lakes <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_lakes.tif') %>% 
-    rasterToPoints %>% 
-    as.data.table %>% 
-    setnames(., c("long", 'lat', 'lakes'))
-
-  ## Population mask
-  message('--->loading population mask')
-  mask <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_mask_master.tif') %>% 
-  rasterToPoints %>% 
-    as.data.table %>% 
-    setnames(., c("long", 'lat', 'mask'))
+  if(use.sf) {
+    
+    ## Base shapefile (country outlines)
+    message('->loading country borders')
+    stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad0_gadm.shp')
+    stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad0_gadm.shp')
+    adm0 <- rbind(stage1, stage2)
+    
+    ## Lakes
+    message('-->loading lake mask')
+    lakes <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_lakes.tif') %>% 
+      as(., 'SpatialPolygonsDataFrame') %>% 
+    st_as_sf
+    
+    ## Population mask
+    message('--->loading population mask')
+    mask <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_mask_master.tif') %>% 
+      as(., 'SpatialPolygonsDataFrame') %>% 
+      st_as_sf
+    
+    ## Stage 3 mask
+    message("---->loading stage 3 mask")
+    stage3 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/stage_3_mask.shp')
+    
+  } else {
   
-  ## Stage 3 mask
-  message("---->loading stage 3 mask")
-  stage3 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/stage_3_mask.shp') %>% fortify
+    ## Base shapefile (country outlines)
+    message('->loading country borders')
+    stage1 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad0_gadm.shp')
+    stage2 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad0_gadm.shp')
+    adm0 <- bind(stage1, stage2) %>% fortify
+  
+    ## Lakes
+    message('-->loading lake mask')
+    lakes <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_lakes.tif') %>% 
+      rasterToPoints %>% 
+      as.data.table %>% 
+      setnames(., c("long", 'lat', 'lakes'))
+  
+    ## Population mask
+    message('--->loading population mask')
+    mask <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_mask_master.tif') %>% 
+    rasterToPoints %>% 
+      as.data.table %>% 
+      setnames(., c("long", 'lat', 'mask'))
+    
+    ## Stage 3 mask
+    message("---->loading stage 3 mask")
+    stage3 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/stage_3_mask.shp') %>% fortify
+  
+  }
 
   return(list(adm0 = adm0, lakes = lakes, mask = mask, stage3 = stage3))
 
@@ -46,7 +74,10 @@ load_map_results <- function(indicator, indicator_group, run_date, type, raked, 
                              geo_levels = c("raster", "admin1", "admin2"),
                              custom_path, custom_vars,
                              use.sf,
-                             cores=1) {
+                             cores=1, 
+                             debug=T) {
+  
+  if (debug) browser()
   
   years <- paste(start_year, end_year, sep="_")
   
@@ -103,7 +134,7 @@ load_map_results <- function(indicator, indicator_group, run_date, type, raked, 
     pred <- pred[year %in% year_list, c('ADM1_CODE', 'year', type), with = F]
     setnames(pred, type, 'outcome')
 
-    if(use.sf==T) {
+    if(use.sf) {
       
       admin1 <- get_admin_shapefile(1) %>% st_read
       admin1 <- admin1[admin1$ADM1_CODE %in% pred$ADM1_CODE,]
@@ -143,7 +174,7 @@ load_map_results <- function(indicator, indicator_group, run_date, type, raked, 
     pred <- pred[year %in% year_list, c('ADM2_CODE', 'year', type), with = F]
     setnames(pred, type, 'outcome')
     
-    if(use.sf==T) {
+    if(use.sf) {
 
       admin2 <- get_admin_shapefile(2) %>% st_read
       admin2 <- admin2[admin2$ADM2_CODE %in% pred$ADM2_CODE,]
@@ -188,20 +219,27 @@ calc_diff_map <- function(pred, diff_years) {
 }
 
 ## plot_map ----------------------------------------------------------------------------------------
-plot_map <- function(map_data, annotations, title, limits, 
+plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
                      legend_colors, legend_color_values, legend_breaks, legend_labels, legend_title, custom_scale=F,
-                     pop.mask=T, lake.mask=T, borders=T, stage3.mask=T,
+                     pop_mask=T, lake_mask=T, borders=T, stage3_mask=T,
                      zoom,
                      debug=F) {
   
   if (debug) browser()
   
-  ## Enforce limits
-  map_data$plot_var <- pmax(limits[1], pmin(limits[2], map_data$outcome)) #TODO set in to enforce lower limit as well?
+  message('checking arguments')
+  #set function arguments based on argument classes
+  map_sf <- 'sf' %in% class(map_data)
+  annotate_sf <- 'sf' %in% sapply(annotations, class)
+  
+  message('building limits/scale')
+  
+  ## Enforce limits & define plot_var for simplicity
+  map_data$plot_var <- pmax(limits[1], pmin(limits[2], as.data.frame(map_data)[, this_var])) #TODO set in to enforce lower limit as well?
 
   if (!custom_scale) {
 
-    start_range <- range(map_data$outcome, na.rm = T)
+    start_range <- range(map_data$plot_var, na.rm = T)
 
     ## Create breaks
     breaks <- pretty(limits, 5)
@@ -217,39 +255,62 @@ plot_map <- function(map_data, annotations, title, limits,
       labels[length(labels)] <- paste0(labels[length(labels)], divider, format(ceiling(100*start_range[2])/100, nsmall=2))
     }
     
-  } else {
-    breaks <- legend_breaks
-    labels <- legend_labels
+  } else {breaks <- legend_breaks; labels <- legend_labels}
+  
+  message('plotting canvas')
+  
+  ## Zoom the annotations for speed
+  if (!missing(zoom) & annotate_sf) { 
+    annotations <- lapply(annotations, st_crop, xmin=zoom$x1, xmax=zoom$x2, ymin=zoom$y1, ymax=zoom$y2)
   }
+  #TODO add non.sf option
   
   ## Plot the base map (this is what shows in places with no estimates and no mask)
-    canvas <- ggplot() + 
+  if (annotate_sf) canvas <- ggplot() + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill = 'gray90')
+  else {
+    canvas <- ggplot() +
       geom_polygon(data = annotations$adm0, aes(x = long, y = lat, group = group), color = 'gray90', fill = 'gray90')
+  }
   
+  message('zooming')  
+    
   ## Zoom
   if (!missing(zoom)) {
     canvas <- canvas + 
       xlim(zoom$x1, zoom$x2)  +
       ylim(zoom$y1, zoom$y2)
   }
+  
+  message('plotting outcome')
 
   ## Plot predictions
-  if ("group" %in% names(map_data)) {
-    gg <- canvas + geom_polygon(data = map_data, aes(fill = plot_var, y = lat, x = long, group = group)) + 
-      coord_equal(ratio = 1)
-  } else if (class(map_data)[1] =='sf') {
+  if (map_sf) {
     gg <- canvas + geom_sf(data = map_data, aes(fill = plot_var), lwd=0) + coord_sf(datum = NA)
+  } else if ("group" %in% names(map_data)) {
+    gg <- canvas + geom_polygon(data = map_data, aes(fill = plot_var, y = lat, x = long, group = group)) + 
+      coord_equal(ratio = 1) 
   } else {
     gg <- canvas + geom_raster(data = map_data, aes(fill = plot_var, y = lat, x = long)) + 
       coord_equal(ratio = 1)
   }
 
-  ## Plot mask, lakes, and adm boarders
-  if (pop.mask==T) gg <- gg + annotate(geom = 'raster', x = annotations$mask$long, y = annotations$mask$lat, fill = 'gray70')
-  if (lake.mask==T) gg <- gg + annotate(geom = 'raster', x = annotations$lakes$long, y = annotations$lakes$lat, fill = 'lightblue')
-  if (borders==T) gg <- gg + geom_path(data = annotations$adm0, aes(x = long, y = lat, group = group), color = 'black', size = 0.2)
-  if (stage3.mask==T) gg <- gg + geom_path(data = annotations$stage3, aes(x = long, y = lat, group = group), color = 'gray70', size = 0.2)
+  message('plotting annotations')
+  
+  ## Plot mask, lakes, and adm boarders using SF
+  if (annotate_sf & pop_mask) gg <- gg + geom_sf(data = annotations$mask, lwd=0, color = 'gray70', fill = 'gray70')
+  if (annotate_sf & lake_mask) gg <- gg + geom_sf(data = annotations$lakes, lwd=0, color = 'gray70', fill = 'lightblue')
+  if (annotate_sf & borders) gg <- gg + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill=NA)
+  if (annotate_sf & stage3_mask) gg <- gg + geom_sf(data = annotations$stage3, color = 'gray70')
 
+  ## Plot mask, lakes, and adm boarders using polygons
+  if (!annotate_sf & pop_mask) gg <- gg + annotate(geom = 'raster', x = annotations$mask$long, y = annotations$mask$lat, fill = 'gray70')
+  if (!annotate_sf & lake_mask) gg <- gg + annotate(geom = 'raster', x = annotations$lakes$long, y = annotations$lakes$lat, fill = 'lightblue')
+  if (!annotate_sf & borders) gg <- gg + geom_path(data = annotations$adm0, aes(x = long, y = lat, group = group), color = 'black', size = 0.2)
+  if (!annotate_sf & stage3_mask) gg <- gg + geom_path(data = annotations$stage3, aes(x = long, y = lat, group = group), color = 'gray70', size = 0.2)
+
+  
+  message('defining aesthetics')
+  
   ## Scales
   gg <- gg +
     scale_fill_gradientn(colors = legend_colors, values = legend_color_values,

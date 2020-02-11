@@ -45,10 +45,10 @@
   
   # list all regions or countries
   # standard regions
-  regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_sssa', 
-               'dia_mcaca', 'dia_s_america-GUF', 'dia_central_asia', 'dia_chn_mng', 
+  regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_name', 'dia_sssa', 
+               'dia_mcaca', 'dia_s_america-GUF', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
                'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
-  #regions <- c('dia_s_america-GUF')
+  #regions <- c('dia_s_america-GUF', 'dia_name')
   
   # regions <- c('dia_afr_horn',  
   #              'dia_cssa',
