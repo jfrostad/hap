@@ -44,7 +44,7 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'dia_name'
+  region <- 'dia_s_america-GUF'
 
 } else {
   

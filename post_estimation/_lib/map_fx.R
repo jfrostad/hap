@@ -70,21 +70,75 @@ load_map_annotations <- function(use.sf=F) {
 
 ## load_map_results --------------------------------------------------------------------------------
 
-load_map_results <- function(indicator, indicator_group, run_date, type, raked, start_year, end_year, single_year=0,
+load_map_results <- function(indicator, indicator_group, run_date, raked, 
+                             start_year, end_year, single_year,
                              geo_levels = c("raster", "admin1", "admin2"),
-                             custom_path, custom_vars,
-                             use.sf,
+                             custom_path=NULL, subvars=NULL,
+                             use.sf=T,
                              cores=1, 
-                             debug=T) {
+                             debug=F) {
   
   if (debug) browser()
   
   years <- paste(start_year, end_year, sep="_")
   
-  if (single_year == 0) year_list <- start_year:end_year else year_list <- single_year
+  if (missing(single_year)) year_list <- start_year:end_year 
+  else year_list <- single_year
 
   ## Set the input directory
   maps_path <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date)
+  
+  ## Helper function to prepare the admin level results
+  prep_admin_x <- function(x) {
+    
+    #setup the column name with requested division
+    code_var <- paste0('ADM', x, '_CODE')
+    
+    #read from standard location if not provided with custom path
+    if(custom_path %>% is.null) {
+      pred <- paste0(maps_path, "/pred_derivatives/admin_summaries/", indicator, "_admin_", x, 
+                     ifelse(raked, "_raked", "_unraked"), 
+                     "_summary.csv") %>% fread
+    } else pred <- custom_path[[ paste0('admin', x)]] %>% fread
+    
+    message('-> admin', x, ' found and fread')
+    
+    
+    if (subvars %>% is.null) pred <- pred[year %in% year_list] 
+    else {
+      pred <- pred[year %in% year_list] %>% 
+        .[, c('ADM0_CODE', code_var, 'year', subvars), with = F] #subset vars if requested
+    }
+    
+    if (use.sf) {
+      
+      shp <- get_admin_shapefile(x) %>% 
+        st_read %>% 
+        filter(get(code_var) %in% pred[,  get(code_var)]) %>% 
+        merge(., pred, by=c('ADM0_CODE', code_var), allow.cartesian=T)
+      
+      message('--> admin', x, ' results merged to sf')
+      
+    } else {
+      
+      #TODO update or deprecate, currently broken
+      
+      # admin2 <- shapefile(get_admin_shapefile(2))
+      # admin2 <- admin2[admin2@data$ADM2_CODE %in% pred$ADM2_CODE,]
+      # admin2 <- SpatialPolygonsDataFrame(gSimplify(admin2, tol = 0.1, topologyPreserve = T), data = admin2@data)
+      # for (i in 1:length(admin2)) admin2@polygons[[i]]@ID <- as.character(admin2@data[i, "ADM2_CODE"])
+      # admin2 <- data.table(fortify(admin2))
+      # admin2[, ADM2_CODE := as.numeric(id)]
+      # admin2 <- merge(admin2, pred, by="ADM2_CODE", allow.cartesian=T)
+      # setkey(admin2, id, group, order, year)
+      # 
+      # message('--> admin2 results merged to shapefile')
+      
+    }
+    
+    return(shp)
+    
+  }
 
   ## raster estimates
   if ("raster" %in% geo_levels) {
@@ -119,85 +173,12 @@ load_map_results <- function(indicator, indicator_group, run_date, type, raked, 
   }
 
   ## admin1 estimates and shape file
-  if ("admin1" %in% geo_levels) {
-    message('loading admin1 data')
-    
-    if(missing(custom_path)) {
-      pred <- paste0(maps_path, "/pred_derivatives/admin_summaries/", indicator, "_admin_1_", 
-                     ifelse(raked, "raked", "unraked"), "_summary.csv") %>% fread
-    } else {
-      pred <- fread(custom_path$admin1)
-      if(!missing(custom_vars)) setnames(pred, custom_vars$admin1, type) 
-    }
-    message('-> admin1 found and fread')
+  if ("admin1" %in% geo_levels) admin1 <- prep_admin_x(1)
 
-    pred <- pred[year %in% year_list, c('ADM1_CODE', 'year', type), with = F]
-    setnames(pred, type, 'outcome')
-
-    if(use.sf) {
-      
-      admin1 <- get_admin_shapefile(1) %>% st_read
-      admin1 <- admin1[admin1$ADM1_CODE %in% pred$ADM1_CODE,]
-      admin1 <-merge(admin1, pred, by="ADM1_CODE", allow.cartesian=T)
-      
-      message('--> admin1 results merged to sf')
-      
-    } else {
-    
-      admin1 <- shapefile(get_admin_shapefile(1)) #TODO: allow to select GAUL vs GADM version
-      admin1 <- admin1[admin1@data$ADM1_CODE %in% pred$ADM1_CODE,]
-      admin1 <- SpatialPolygonsDataFrame(gSimplify(admin1, tol = 0.1, topologyPreserve = T), data = admin1@data)
-      for (i in 1:length(admin1)) admin1@polygons[[i]]@ID <- as.character(admin1@data[i, "ADM1_CODE"])
-      admin1 <- data.table(fortify(admin1))
-      admin1[, ADM1_CODE := as.numeric(id)]
-      admin1 <- merge(admin1, pred, by="ADM1_CODE", allow.cartesian=T)
-      setkey(admin1, id, group, order, year)
-      
-      message('--> admin1 results merged to shapefile')
-      
-    }
-  }
 
   ## admin2 estimates and shape file
-  if ("admin2" %in% geo_levels) {
-    message('loading admin2 data')
+  if ("admin2" %in% geo_levels) admin2 <- prep_admin_x(2)
     
-    if(missing(custom_path)) {
-      pred <- paste0(maps_path, "/pred_derivatives/admin_summaries/", indicator, "_admin_2_", 
-                     ifelse(raked, "raked", "unraked"), "_summary.csv") %>% fread
-    } else {
-      pred <- fread(custom_path$admin2)
-      if(!missing(custom_vars)) setnames(pred, custom_vars$admin2, type) 
-    }
-    message('-> admin2 found and fread')
-
-    pred <- pred[year %in% year_list, c('ADM2_CODE', 'year', type), with = F]
-    setnames(pred, type, 'outcome')
-    
-    if(use.sf) {
-
-      admin2 <- get_admin_shapefile(2) %>% st_read
-      admin2 <- admin2[admin2$ADM2_CODE %in% pred$ADM2_CODE,]
-      admin2 <-merge(admin2, pred, by="ADM2_CODE", allow.cartesian=T)
-      
-      message('--> admin2 results merged to sf')
-      
-    } else {
-
-      admin2 <- shapefile(get_admin_shapefile(2))
-      admin2 <- admin2[admin2@data$ADM2_CODE %in% pred$ADM2_CODE,]
-      admin2 <- SpatialPolygonsDataFrame(gSimplify(admin2, tol = 0.1, topologyPreserve = T), data = admin2@data)
-      for (i in 1:length(admin2)) admin2@polygons[[i]]@ID <- as.character(admin2@data[i, "ADM2_CODE"])
-      admin2 <- data.table(fortify(admin2))
-      admin2[, ADM2_CODE := as.numeric(id)]
-      admin2 <- merge(admin2, pred, by="ADM2_CODE", allow.cartesian=T)
-      setkey(admin2, id, group, order, year)
-      
-      message('--> admin2 results merged to shapefile')
-    
-    }
-  }
-
   ## combine and return all estimates
   mget(geo_levels) %>% return
 
@@ -220,7 +201,8 @@ calc_diff_map <- function(pred, diff_years) {
 
 ## plot_map ----------------------------------------------------------------------------------------
 plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
-                     legend_colors, legend_color_values, legend_breaks, legend_labels, legend_title, custom_scale=F,
+                     legend_colors, legend_color_values, legend_breaks, legend_labels, legend_title, 
+                     custom_scale=F, flip_legend=F,
                      pop_mask=T, lake_mask=T, borders=T, stage3_mask=T,
                      zoom,
                      debug=F) {
@@ -235,7 +217,8 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   message('building limits/scale')
   
   ## Enforce limits & define plot_var for simplicity
-  map_data$plot_var <- pmax(limits[1], pmin(limits[2], as.data.frame(map_data)[, this_var])) #TODO set in to enforce lower limit as well?
+  #TODO set in to enforce lower limit as well?
+  map_data$plot_var <- pmax(limits[1], pmin(limits[2], as.data.frame(map_data)[, this_var])) 
 
   if (!custom_scale) {
 
@@ -259,8 +242,9 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   
   message('plotting canvas')
   
-  ## Zoom the annotations for speed
+  ## Crop the annotations for speed
   if (!missing(zoom) & annotate_sf) { 
+    message('cropping canvas to zoom')
     annotations <- lapply(annotations, st_crop, xmin=zoom$x1, xmax=zoom$x2, ymin=zoom$y1, ymax=zoom$y2)
   }
   #TODO add non.sf option
@@ -270,17 +254,15 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   else {
     canvas <- ggplot() +
       geom_polygon(data = annotations$adm0, aes(x = long, y = lat, group = group), color = 'gray90', fill = 'gray90')
-  }
-  
-  message('zooming')  
     
-  ## Zoom
-  if (!missing(zoom)) {
-    canvas <- canvas + 
-      xlim(zoom$x1, zoom$x2)  +
-      ylim(zoom$y1, zoom$y2)
+    if (!missing(zoom)) {
+      canvas <- canvas +
+        xlim(zoom$x1, zoom$x2)  +
+        ylim(zoom$y1, zoom$y2)
+    }
+    
   }
-  
+
   message('plotting outcome')
 
   ## Plot predictions
@@ -315,141 +297,17 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   gg <- gg +
     scale_fill_gradientn(colors = legend_colors, values = legend_color_values,
                          limits = range(breaks), breaks = breaks, labels = labels, name = legend_title)
-  
+
   ## Labels & aesthetics
   gg <- gg +
     labs(x="", y="", title=title) +
     theme_classic() +
     theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
-          legend.position = c(0, 0), legend.justification = c(0, 0),
+          legend.position = c(ifelse(flip_legend, .8, 0), 0), legend.justification = c(0, 0),
           #legend.text=element_text(size=10),
           plot.title = element_text(hjust=0.5), plot.margin=unit(c(0, 0, 0, 0), "in")) +
     guides(fill = guide_colorbar(barwidth = 0.5, barheight = 7))
 
   return(gg)
   
-}
-
-## map_model_results -------------------------------------------------------------------------------
-
-map_model_results <- function(indicator,
-                              indicator_group,
-                              run_date,
-                              type = 'mean',
-                              raked = T,
-                              lvl_years = c(2000, 2005, 2010, 2016),
-                              lvl_colors = c('#FDE0DD', '#FCC5C0', '#FA9FB5', '#F768A1', '#DD3497', '#AE017E', '#7A0177', '#49006A'),
-                              lvl_limits = c(0, 0.25),
-                              diff_years = list(c(2000, 2005), c(2005, 2010), c(2010, 2016), c(2000, 2016)),
-                              diff_colors = c('#003C30', '#01665E', '#35978F', '#80CDC1', '#F6E8C3', '#DFC27D', '#BF812D', '#8C510A', '#543005'),
-                              diff_limits = c(-0.10, 0.10),
-                              include_diff = TRUE,
-                              limits_type = "absolute",
-                              geo_levels = c("raster", "admin1", "admin2"),
-                              plot_by_year = TRUE,
-                              plot_combined = TRUE,
-                              file_type = "pdf") {
-
-  ## Quick argument checks
-  if (!limits_type %in% c("absolute", "quantile")) stop("limits_type must be 'absolute' or 'quantile'")
-  if (length(lvl_limits) != 2 | length(diff_limits) != 2) stop("lvl_limits & diff_limits must both be length 2")
-  if (sum(!geo_levels %in% c("raster", "admin1", "admin2")) > 0) stop("geo_levels can only include 'raster', 'admin1', and 'admin2'")
-  if (!file_type %in% c("pdf", "png")) stop("file_type must be 'pdf' or 'png'")
-  if (!type %in% c("mean", "cirange", "cfb")) stop("type must be 'mean', 'cirange', or 'cfb'")
-
-  ## Create output directory
-  out_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/results_maps/')
-  dir.create(out_dir, showWarnings = F)
-
-  ## Load data
-  message("Loading data")
-  annotations <- load_map_annotations()
-  pred <- load_map_results(indicator, indicator_group, run_date, type, raked, unique(c(lvl_years, unlist(diff_years))), geo_levels)
-
-  ## Make level maps
-  message("Make levels maps")
-  if (limits_type == "quantile") {
-    lvl_limits <- quantile(unlist(lapply(pred, function(x) x$outcome)), probs = lvl_limits, na.rm = T)
-    lvl_limits <- c(plyr::round_any(lvl_limits[1], 0.01, floor), plyr::round_any(lvl_limits[2], 0.01, ceiling))
-  }
-
-  legend_title <- c(mean = "Prev.", cirange = "UI range", cfb = "CFB")[type]
-
-  for (g in names(pred)) {
-    message(paste0("...", g))
-
-    # make maps and plot by year
-    plot_list <- lapply(lvl_years, function(y) {
-      message(paste0("......", y))
-      gg <- plot_map(map_data = pred[[g]][year == y,], annotations = annotations, title = y,
-                     legend_title = legend_title, limits = lvl_limits, legend_colors = lvl_colors)
-      if (plot_by_year) {
-        file_name <- paste0(out_dir, indicator, '_', type, if (raked) '_raked_' else '_unraked_', g, '_', y, '.', file_type)
-        if (file_type == "pdf") pdf(file_name, height=7, width=7)
-        if (file_type == "png") png(file_name, height=7, width=7, units = "in", res = 1200)
-        plot(gg)
-        dev.off()
-      }
-      return(gg)
-    })
-
-    # plot combined
-    if (plot_combined & length(lvl_years) > 1) {
-      message("......combined")
-      file_name <- paste0(out_dir, indicator, '_', type, if (raked) '_raked_' else '_unraked_', g, '_combined.', file_type)
-      if (file_type == "pdf") pdf(file_name, height=14, width=14)
-      if (file_type == "png") png(file_name, height=14, width=14, units = "in", res = 1200)
-      do.call("grid.arrange", plot_list)
-      dev.off()
-    }
-
-    rm(plot_list)
-  }
-
-  ## Make difference maps
-  if (include_diff) {
-    message("Make differences maps")
-    diff <- calc_diff_map(pred, diff_years)
-    if (limits_type == "quantile") {
-      diff_limits <- quantile(unlist(lapply(diff, function(x) x$outcome)), probs = diff_limits, na.rm = T)
-      if (diff_limits[1] < 0 & diff_limits[2] > 0) diff_limits <- c(-1, 1)*max(abs(diff_limits)) # if crossing zero, ensure symmetry.
-      diff_limits <- c(plyr::round_any(diff_limits[1], 0.01, floor), plyr::round_any(diff_limits[2], 0.01, ceiling))
-    }
-
-    legend_title <- paste0("Change in\n", legend_title)
-
-    for (g in names(diff)) {
-      message(paste0("...", g))
-
-      # make maps and plot by year
-      plot_list <- lapply(diff_years, function(y) {
-        yrs <- paste(y, collapse = "-")
-        message(paste0("......", yrs))
-        gg <- plot_map(map_data = diff[[g]][years == yrs,], annotations = annotations, title = yrs,
-                       legend_title = legend_title, limits = diff_limits, legend_colors = diff_colors)
-        if (plot_by_year) {
-          file_name <- paste0(out_dir, indicator, '_diff_', type, if (raked) '_raked_' else '_unraked_', g, '_', y[1], '_', y[2], '.', file_type)
-          if (file_type == "pdf") pdf(file_name, height=7, width=7)
-          if (file_type == "png") png(file_name, height=7, width=7, units = "in", res = 1200)
-          plot(gg)
-          dev.off()
-        }
-        return(gg)
-      })
-
-      # plot combined
-      if (plot_combined & length(diff_years) > 1) {
-        message("......combined")
-        file_name <- paste0(out_dir, indicator, '_diff_', type, if (raked) '_raked_' else '_unraked_', g, '_combined.', file_type)
-        if (file_type == "pdf") pdf(file_name, height=14, width=14)
-        if (file_type == "png") png(file_name, height=14, width=14, units = "in", res = 1200)
-        do.call("grid.arrange", plot_list)
-        dev.off()
-      }
-
-      rm(plot_list)
-    }
-  }
-
-  return("Maps saved!")
 }

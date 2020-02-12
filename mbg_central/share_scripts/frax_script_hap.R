@@ -40,12 +40,12 @@ if (interactive) {
   core_repo <- "/homes/jfrostad/_code/lbd/hap"
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_sp_no_re'
+  config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_02_01_10_33_29'
+  run_date <- '2020_02_11_09_16_45'
   measure <- 'prevalence'
-  reg <- 'dia_essa-SWZ-ZWE-LSO'
+  reg <- 'dia_s_america-GUF'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {

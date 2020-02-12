@@ -42,9 +42,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'dia_central_asia'
+  reg                      <- 'dia_s_america-GUF'
   age                      <- 0
-  run_date                 <- "2020_02_07_09_50_17"
+  run_date                 <- "2020_02_10_12_38_26"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -1054,7 +1054,7 @@ mymem <- 200
 if (as.logical(individual_countries) & reg != 'IND') mymem <- 50
 if(r == 'dia_malay' | r == 'dia_name') mymem <- 225
 if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') mymem <- 250
-if(r == 'dia_s_america' | r == 'BRA') mymem <- 300
+if(r %like% 'dia_s_america' | r == 'BRA') mymem <- 300
 
 # set up qsub
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
