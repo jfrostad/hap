@@ -1053,8 +1053,8 @@ individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
 mymem <- 200
 if (as.logical(individual_countries) & reg != 'IND') mymem <- 50
 if(r == 'dia_malay' | r == 'dia_name') mymem <- 225
-if(r == 'dia_chn_mng' | r == 'dia_wssa' | r =='dia_south_asia') mymem <- 250
-if(r %like% 'dia_s_america' | r == 'BRA') mymem <- 300
+if(r %like% 'chn_mng' | r %like% 'wssa' | r %like% 'south_asia') mymem <- 250
+if(r %like% 's_america' | r == 'BRA') mymem <- 300
 
 # set up qsub
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 

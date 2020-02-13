@@ -59,7 +59,7 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_02_10_12_38_26'
+run_date <- '2020_02_01_10_33_29'
 #run_date <- '2020_02_07_23_37_07'
 lri_run_date <- '2019_10_23_16_13_17'
 
@@ -253,7 +253,7 @@ plot <-
     legend.justification = c("right", "top"),
     legend.box.just = "right",
     legend.margin = margin(6, 6, 6, 6)
-  )s
+  )
 
 ggsave(filename=file.path(out.dir, 'presub_figure_2b.png'),
        width=12, height=8, units='in', dpi=900)
@@ -331,8 +331,7 @@ ctry.dfu <-
            annotations_sf, limits=c(0, 1), title='DFU% in 2017', 
            legend_colors=colors, legend_color_values=color_values,
            legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-           legend_title='DFU %', custom_scale=T, flip_legend=T,
-           pop_mask=T, lake_mask=T, stage3_mask=T, borders=T,
+           legend_title='DFU %', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
 
@@ -347,9 +346,9 @@ ctry_pct_values <- c(seq(0, .6, length.out = 2), seq(.6, .9, length.out = 8), se
 ctry.pct <- 
   plot_map(ctry_data, this_var='hap_pct',
            annotations_sf, limits=c(0, 1), title='HAP/TAP in 2017', 
-           legend_colors=colors, legend_color_values=ctry_pct_values,
-           legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-           legend_title='HAP/TAP', custom_scale=T, flip_legend=T,
+           # legend_colors=colors, legend_color_values=ctry_pct_values,
+           # legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
+           legend_title='HAP/TAP', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
 
@@ -366,7 +365,7 @@ ctry.paf <-
            annotations_sf, limits=c(0, .75), title='PAF of LRI Attributable to TAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_paf_values,
            legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
-           legend_title='TAP PAF', custom_scale=T, flip_legend=T,
+           legend_title='TAP PAF', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
 
@@ -383,7 +382,29 @@ ctry.lri <-
            annotations_sf, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 10, 2), legend_labels=seq(0, 10, 2),
-           legend_title='TAP LRI Rate', custom_scale=T, flip_legend=T,
+           legend_title='TAP LRI Rate', legend_flip=T,
+           zoom=ctry.zoom,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri.png')), plot=ctry.lri, 
+       width=6, height=6, units='in', dpi=600)
+
+ctry.lri <- 
+  plot_map(ctry_data, this_var='tap_lri',
+           annotations_sf, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
+           legend_title='TAP LRI Rate', legend_flip=T,
+           zoom=ctry.zoom,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri_default.png')), plot=ctry.lri, 
+       width=6, height=6, units='in', dpi=600)
+
+ctry.lri <- 
+  plot_map(ctry_data, this_var='tap_lri',
+           annotations_sf, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
+           legend_colors=colors, legend_color_values=ctry_lri_values,
+           legend_breaks=seq(0, 10, 2), legend_labels=seq(0, 10, 2),
+           legend_title='TAP LRI Rate', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
 
@@ -395,7 +416,7 @@ ctry.lri <-
            annotations_sf, limits=c(0, 9), title='Rate/1000 of LRI Attributable to HAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 9, 2), legend_labels=seq(0, 9, 2),
-           legend_title='HAP LRI Rate', custom_scale=T, flip_legend=T,
+           legend_title='HAP LRI Rate', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
 
@@ -407,7 +428,7 @@ ctry.lri <-
            annotations_sf, limits=c(0, 9), title='Rate/1000 of LRI Attributable to AAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 9, 2), legend_labels=seq(0, 9, 2),
-           legend_title='AAP LRI Rate', custom_scale=T, flip_legend=T,
+           legend_title='AAP LRI Rate', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
 
@@ -423,7 +444,7 @@ ctry.lri <-
            annotations_sf, limits=c(0, 3), title='Rate/1000 of LRI Attributable to AAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 3, .5), legend_labels=seq(0, 3, .5),
-           legend_title='AAP LRI Rate', custom_scale=T, flip_legend=T,
+           legend_title='AAP LRI Rate', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
 
@@ -444,7 +465,7 @@ ctry.d.map <-
            annotations_sf, limits=c(-.1, .05), title='TAP PAF, Change from 2000-2017', 
            legend_colors=d_colors, legend_color_values=ctry_d_values,
            legend_breaks=seq(-.1, .05, .025), legend_labels=seq(-.1, .05,.025),
-           legend_title='Change in PAF of TAP', custom_scale=T,
+           legend_title='Change in PAF of TAP', legend_flip=T,
            pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
            zoom=ctry.zoom,
            debug=F)
@@ -462,7 +483,7 @@ ctry.d.map <-
            annotations_sf, limits=c(-.5, 0), title='HAP Share, Change from 2000-2017', 
            legend_colors=d_colors, legend_color_values=ctry_d_values,
            legend_breaks=seq(-.5, 0, .1), legend_labels=seq(-.5, 0,.1),
-           legend_title='Change in HAP/TAP', custom_scale=T,
+           legend_title='Change in HAP/TAP', legend_flip=T,
            pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
            zoom=ctry.zoom,
            debug=F)

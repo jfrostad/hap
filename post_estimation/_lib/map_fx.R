@@ -202,9 +202,9 @@ calc_diff_map <- function(pred, diff_years) {
 ## plot_map ----------------------------------------------------------------------------------------
 plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
                      legend_colors, legend_color_values, legend_breaks, legend_labels, legend_title, 
-                     custom_scale=F, flip_legend=F,
+                     legend_flip=F,
                      pop_mask=T, lake_mask=T, borders=T, stage3_mask=T,
-                     zoom,
+                     subset_var, subset_value, zoom,
                      debug=F) {
   
   if (debug) browser()
@@ -213,14 +213,51 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   #set function arguments based on argument classes
   map_sf <- 'sf' %in% class(map_data)
   annotate_sf <- 'sf' %in% sapply(annotations, class)
+  if(map_sf&annotate_sf) message('-> using SF to render plots, vroom!')
+  else message('sorry, geom_polygons have been deprecated, please provide data & annotations as sf objects')
+  
+  
+  if(!missing(subset_var)) {
+    message('subsetting data to ', subset_var, '==', subset_value)
+    map_data <- filter(map_data, get(subset_var)==subset_value)
+  }
   
   message('building limits/scale')
-  
   ## Enforce limits & define plot_var for simplicity
-  #TODO set in to enforce lower limit as well?
   map_data$plot_var <- pmax(limits[1], pmin(limits[2], as.data.frame(map_data)[, this_var])) 
+  
+  ##Setup legend and scales if not provided by user
+  if(missing(legend_colors)) { #Default is a 10 color magma from viridis scale
+    
+    message('->color scale not provided, using MAGMA from viridis scales')
+    
+    
+    legend_colors <- c("#FCFDBFFF", "#FEC98DFF", "#FD9567FF", "#F1605DFF", "#CD4071FF",
+                       "#9F2F7FFF", "#721F81FF", "#451077FF", "#180F3EFF", "#000004FF")
+    
+  }
+  
+  if(missing(legend_color_values)) { #Default is to use the distribution of data to build a color scale
+    
+    message('->color values not provided, building from data IQR')
+    
+    data_min <- map_data$plot_var %>% min(na.rm=T) %>% floor
+    data_p25 <- map_data$plot_var %>% quantile(probs=.2, na.rm=T)
+    data_p75 <- map_data$plot_var %>% quantile(probs=.8, na.rm=T)
+    data_max <- map_data$plot_var %>% max(na.rm=T) %>% ceiling
+    
+    legend_color_values <- c(seq(data_min, data_p25, length.out = 2), 
+                             seq(data_p25, data_p75, length.out = 8), #bring out the variation in the IQR
+                             seq(data_p75, data_max, length.out = 2)) %>%
+      unique %T>% 
+      print %>%
+      rescale
+      
+  }
 
-  if (!custom_scale) {
+  if (missing(legend_breaks) & missing(legend_labels)) {
+    
+    message('->labels not provided, building from color values')
 
     start_range <- range(map_data$plot_var, na.rm = T)
 
@@ -244,33 +281,39 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   
   ## Crop the annotations for speed
   if (!missing(zoom) & annotate_sf) { 
-    message('cropping canvas to zoom')
-    annotations <- lapply(annotations, st_crop, xmin=zoom$x1, xmax=zoom$x2, ymin=zoom$y1, ymax=zoom$y2)
-  }
-  #TODO add non.sf option
+    message('->cropping canvas to zoom')
+    
+    if(zoom %>% is.data.table) { 
+      
+      message('-->using custom zoom')
+      annotations <- lapply(annotations, st_crop, xmin=zoom$x1, xmax=zoom$x2, ymin=zoom$y1, ymax=zoom$y2)
+    
+    } else {
+      
+      message('-->using zoom from data with 1 degree buffer')
+      
+      coords <- st_coordinates(map_data) %>% as.data.table
+      zoom <- data.table(
+        x1=floor(min(coords$X)) - 1,
+        x2=ceiling(max(coords$X)) + 1,
+        y1=floor(min(coords$Y)) - 1, 
+        y2=ceiling(max(coords$Y)) + 1
+      )
+      
+      annotations <- lapply(annotations, st_crop, xmin=zoom$x1, xmax=zoom$x2, ymin=zoom$y1, ymax=zoom$y2)
+      
+    }
+  }  
+  #TODO add non.sf option?
   
   ## Plot the base map (this is what shows in places with no estimates and no mask)
-  if (annotate_sf) canvas <- ggplot() + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill = 'gray90')
-  else {
-    canvas <- ggplot() +
-      geom_polygon(data = annotations$adm0, aes(x = long, y = lat, group = group), color = 'gray90', fill = 'gray90')
-    
-    if (!missing(zoom)) {
-      canvas <- canvas +
-        xlim(zoom$x1, zoom$x2)  +
-        ylim(zoom$y1, zoom$y2)
-    }
-    
-  }
+  canvas <- ggplot() + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill = 'gray90')
 
   message('plotting outcome')
 
   ## Plot predictions
   if (map_sf) {
     gg <- canvas + geom_sf(data = map_data, aes(fill = plot_var), lwd=0) + coord_sf(datum = NA)
-  } else if ("group" %in% names(map_data)) {
-    gg <- canvas + geom_polygon(data = map_data, aes(fill = plot_var, y = lat, x = long, group = group)) + 
-      coord_equal(ratio = 1) 
   } else {
     gg <- canvas + geom_raster(data = map_data, aes(fill = plot_var, y = lat, x = long)) + 
       coord_equal(ratio = 1)
@@ -279,18 +322,11 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   message('plotting annotations')
   
   ## Plot mask, lakes, and adm boarders using SF
-  if (annotate_sf & pop_mask) gg <- gg + geom_sf(data = annotations$mask, lwd=0, color = 'gray70', fill = 'gray70')
-  if (annotate_sf & lake_mask) gg <- gg + geom_sf(data = annotations$lakes, lwd=0, color = 'gray70', fill = 'lightblue')
-  if (annotate_sf & borders) gg <- gg + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill=NA)
-  if (annotate_sf & stage3_mask) gg <- gg + geom_sf(data = annotations$stage3, color = 'gray70')
+  if (pop_mask) gg <- gg + geom_sf(data = annotations$mask, lwd=0, color = 'gray70', fill = 'gray70')
+  if (lake_mask) gg <- gg + geom_sf(data = annotations$lakes, lwd=0, color = 'gray70', fill = 'lightblue')
+  if (borders) gg <- gg + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill=NA)
+  if (stage3_mask) gg <- gg + geom_sf(data = annotations$stage3, color = 'gray70')
 
-  ## Plot mask, lakes, and adm boarders using polygons
-  if (!annotate_sf & pop_mask) gg <- gg + annotate(geom = 'raster', x = annotations$mask$long, y = annotations$mask$lat, fill = 'gray70')
-  if (!annotate_sf & lake_mask) gg <- gg + annotate(geom = 'raster', x = annotations$lakes$long, y = annotations$lakes$lat, fill = 'lightblue')
-  if (!annotate_sf & borders) gg <- gg + geom_path(data = annotations$adm0, aes(x = long, y = lat, group = group), color = 'black', size = 0.2)
-  if (!annotate_sf & stage3_mask) gg <- gg + geom_path(data = annotations$stage3, aes(x = long, y = lat, group = group), color = 'gray70', size = 0.2)
-
-  
   message('defining aesthetics')
   
   ## Scales
@@ -303,7 +339,7 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
     labs(x="", y="", title=title) +
     theme_classic() +
     theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
-          legend.position = c(ifelse(flip_legend, .8, 0), 0), legend.justification = c(0, 0),
+          legend.position = c(ifelse(legend_flip, .8, 0), 0), legend.justification = c(0, 0),
           #legend.text=element_text(size=10),
           plot.title = element_text(hjust=0.5), plot.margin=unit(c(0, 0, 0, 0), "in")) +
     guides(fill = guide_colorbar(barwidth = 0.5, barheight = 7))

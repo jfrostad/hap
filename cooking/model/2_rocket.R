@@ -260,7 +260,7 @@ for(i in 1:nrow(loopvars)){
   region_mem <- region_cores*35 #TODO qpid dawg
   
   # set thread options
-  threads <- ifelse(region_cores>10, 1, 6)
+  threads <- ifelse(region_cores>10, 3, 6)
   
   # make a qsub string
   qsub <- make_qsub_share(age           = loopvars[i,2],
