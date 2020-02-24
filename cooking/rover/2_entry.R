@@ -4,7 +4,7 @@
 ## Modified for ORT and diarrhea by Kirsten Wiens on 2019/06/03
 ##
 ###############################################################################
-# source('/homes/jfrostad/_code/lbd/hap/mbg_central/share_scripts/frax_script_hap.R') 
+# source('/homes/jfrostad/_code/lbd/hap/cooking/rover/2_entry.R') 
 
 ## Setup ---------------------------------------------------------------------------------------------------
 # runtime configuration
@@ -27,11 +27,10 @@ if (Sys.info()["sysname"] == "Linux") {
 #load external packages
 pacman::p_load(data.table, dplyr, mgsub, raster, sf, fasterize, fst)
 
-#detect if running in rstudio IDE
-debug <- F
-interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
-
-print(commandArgs())
+#detect if running interactively
+interactive <- F  %>% #manual override
+  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
+  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
 
 if (interactive) {
   
@@ -43,9 +42,9 @@ if (interactive) {
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_02_11_09_16_45'
+  run_date <- '2020_02_24_07_58_32'
   measure <- 'prevalence'
-  reg <- 'dia_s_america-GUF'
+  reg <- 'dia_se_asia-VNM-THA'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {
@@ -440,7 +439,37 @@ stack <- aggregate_child_stackers(reg,
 write(NULL, file = paste0(outputdir, '/fin_', pathaddin))
 
 ## All done
-message('Done with post-estimation and aggregation for ', reg)
+message('Done with aggregation for ', reg, ' moving on to post-est')
 
-
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ POST-EST ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## Launch post-estimation (TAP calculation)
+
+# Define best LRI run_date and cluster specs
+lri_run_date = '2019_10_23_16_13_17'
+proj_arg <- 'proj_geo_nodes'
+use_geos_nodes <- T
+
+# set memory based on region
+if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- 900
+} else if (reg %in% c('dia_wssa', 'dia_s_america-BRA')) { mymem <- 500
+} else mymem <- 350
+
+jname           <- paste('EdL', reg, indicator, sep = '_')
+
+# set up qsub
+sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
+                  '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                  '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
+script <- file.path(repo, indicator_group, 'rover/3_descent.R')
+args <- paste(reg, run_date, lri_run_date)
+
+
+# submit qsub
+paste(sys.sub, r_shell, script, args) %>% 
+  system
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ FIN ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

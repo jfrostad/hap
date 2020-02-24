@@ -31,20 +31,21 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(ccaPP, fasterize, fst, mgsub, randtoolbox)
+pacman::p_load(ccaPP, fasterize, fst, mgsub, randtoolbox, magrittr)
 
-#detect if running in rstudio IDE
-debug <- F
-interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
+#detect if running interactively
+interactive <- F  %>% #manual override
+  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
+  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
 
 ## if running interactively, set arguments
 if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'dia_s_america-GUF'
+  reg                      <- 'dia_central_asia'
   age                      <- 0
-  run_date                 <- "2020_02_10_12_38_26"
+  run_date                 <- "2020_02_23_22_17_16"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -86,6 +87,10 @@ if (interactive) {
     # xg_second_best <- T #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
 
   }
+  
+  ## Override skip options
+  skiptoinla <- F
+  skipinla <- F
   
 } else {
   
@@ -210,38 +215,48 @@ if (as.logical(skiptoinla) == FALSE) {
   
   ## Load input data based on stratification and holdout, OR pull in data as normal and run with the whole dataset if holdout == 0.
   ## For holdouts, we have depreciated val level, so each val level must be recorded in a different run date
-  if(holdout!=0) {
+  if(holdout==0) {
+    message('Holdout == 0 so loading in full dataset using load_input_data()')
+    if(!exists("loadinputdata_from_rundate")) {
+      df <- load_input_data(indicator   = gsub(paste0('_age',age),'',indicator),
+                            agebin      = age,
+                            removeyemen = FALSE,
+                            pathaddin   = pathaddin,
+                            years       = yearload,
+                            withtag     = as.logical(withtag),
+                            datatag     = datatag,
+                            use_share   = as.logical(use_share),
+                            yl          = year_list,
+                            region      = reg)
+      
+      ## Create df with pixel ids (and polygon centroids and age group weights if aggregation)
+      df <- process_input_data(df, 
+                               pop_release                = pop_release, 
+                               interval_mo                = interval_mo, 
+                               modeling_shapefile_version = modeling_shapefile_version,
+                               poly_ag                    = as.logical(poly_ag), 
+                               zcol                       = zcol, 
+                               zcol_ag                    = zcol_ag, 
+                               zcol_ag_id                 = zcol_ag_id, 
+                               z_map                      = z_map, 
+                               z_ag_mat                   = z_ag_mat)
+      save(df, file=paste0(outputdir,"processed_input_data", pathaddin,".rda"))
+    } else {
+      load(paste0('/share/geospatial/mbg/',indicator_group,"/",indicator,'/output/',loadinputdata_from_rundate,"/","processed_input_data", pathaddin,".rda"))
+      save(df, file=paste0(outputdir,"processed_input_data", pathaddin,".rda")) # save to current rundate dir
+    }
+  } else {
     message(paste0('Holdout != 0 so loading holdout data only from holdout ',holdout))
     message('Please be sure you have a list object called stratum_ho in your environment.')
     ## if stratifies by age then make sure loads correctly
     if(age!=0) df <- as.data.table(stratum_ho[[paste('region',reg,'_age',age,sep='__')]])
     if(age==0) df <- as.data.table(stratum_ho[[paste('region',reg,sep='__')]])
     df <- df[fold != holdout, ]
-  }
-  if(holdout==0) {
-    message('Holdout == 0 so loading in full dataset using load_input_data()')
-    df <- load_input_data(indicator   = gsub(paste0('_age',age),'',indicator),
-                          simple      = simple_polygon,
-                          agebin      = age,
-                          removeyemen = TRUE,
-                          pathaddin   = pathaddin,
-                          years       = yearload,
-                          withtag     = as.logical(withtag),
-                          datatag     = datatag,
-                          use_share   = as.logical(use_share),
-                          yl          = year_list)
+    df$first_entry <- 1
+    df$agg_weight <- 1
   }
   
-  ## Remove any data outside of region
-  reg_list <- fread('/share/geospatial/kewiens/custom_regions/dia_region_iso.csv')
-  reg_list[, gadm_adm0_code := get_adm0_codes(iso3, shapefile_version = modeling_shapefile_version), by = iso3]
-  iso3_list <- filter(reg_list, gadm_adm0_code %in% gaul_list)
-  iso3_list <- unique(iso3_list$iso3)
-  df <- filter(df, country %in% iso3_list)
-  df <- as.data.table(df)
-  
-  ## Adding selective subnationals for state random effects
-  if (as.logical(use_subnat_res)) {
+  if(as.logical(use_subnat_res)) {
     message('Prepping for subnational REs')
     
     ## Prep subnat location info
@@ -309,26 +324,20 @@ if (as.logical(skiptoinla) == FALSE) {
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
   ## Define modeling space. In years only for now.
-  if(yearload=='annual') period_map <-
-    make_period_map(modeling_periods = c(min(year_list):max(year_list)))
-  if(yearload=='five-year') period_map <-
-    make_period_map(modeling_periods = seq(min(year_list),max(year_list),by=5))
+  if(yearload=='annual') period_map <- make_period_map(modeling_periods = c(min(year_list):max(year_list)))
+  if(yearload=='five-year') period_map <- make_period_map(modeling_periods = seq(min(year_list), max(year_list), by = 5))
   
   ## Make placeholders for covariates
   cov_layers <- gbd_cov_layers <- NULL
   
   ## Pull all covariate bricks/layers
-  if (nchar(fixed_effects) > 0) {
+  if (nrow(fixed_effects_config) > 0) {
     message('Grabbing raster covariate layers')
-    
-    effects <- trim(strsplit(fixed_effects, "\\+")[[1]])
-    measures <- trim(strsplit(fixed_effects_measures, "\\+")[[1]])
-    cov_layers <- load_and_crop_covariates_annual(covs            = effects,
-                                                  measures        = measures,
-                                                  simple_polygon  = simple_polygon,
-                                                  start_year      = min(year_list),
-                                                  end_year        = max(year_list),
-                                                  interval_mo     = as.numeric(interval_mo))
+    loader <- MbgStandardCovariateLoader$new(start_year = min(year_list),
+                                             end_year = max(year_list),
+                                             interval = as.numeric(interval_mo),
+                                             covariate_config = fixed_effects_config)
+    cov_layers <- loader$get_covariates(simple_polygon)
   }
   
   ## Pull country level gbd covariates
@@ -358,14 +367,17 @@ if (as.logical(skiptoinla) == FALSE) {
   ## Set Up Country Fixed Effects
   if(use_child_country_fes == TRUE | use_inla_country_fes == TRUE) {
     message('Setting up country fixed effects')
-    fe_gaul_list <- unique(c(gaul_convert(unique(df[, country]), shapefile_version = modeling_shapefile_version), gaul_list))
+    fe_gaul_list <- unique(c(gaul_convert(unique(df[, country]),
+                                          shapefile_version =
+                                            modeling_shapefile_version),
+                             gaul_list))
     fe_template  <- cov_layers[[1]][[1]]
     simple_polygon_list <- load_simple_polygon(gaul_list   = fe_gaul_list,
                                                buffer      = 0.4,
                                                subset_only = TRUE,
                                                shapefile_version = modeling_shapefile_version)
     fe_subset_shape     <- simple_polygon_list[[1]]
-    gaul_code <- rasterize(fe_subset_shape, fe_template, field = 'GAUL_CODE')
+    gaul_code <- rasterize_check_coverage(fe_subset_shape, fe_template, field = 'ADM0_CODE')
     gaul_code <- setNames(gaul_code,'gaul_code')
     gaul_code <- create_categorical_raster(gaul_code)
     
@@ -385,30 +397,6 @@ if (as.logical(skiptoinla) == FALSE) {
     all_fixed_effects = paste(all_fixed_effects, gaul_fes, sep = " + ")
   }
   
-  ## Plot covariate rasters, if desired
-  if (plot_covariates == TRUE) {
-    
-    # get covariates and plot rasters
-    message('Saving covariate raster maps')
-    
-    # create directory
-    dir.create(paste0(outputdir, '/covariates/'))
-    
-    # get covariate names
-    covariates <- names(all_cov_layers)
-    
-    # plot covariate rasters
-    for (cov in covariates) {
-      png(paste0(outputdir, '/covariates/', cov, '_', reg, '.png'), 1800, 1200)
-      print(spplot(all_cov_layers[[cov]],
-                   main=list(label=cov,cex=2)))
-      dev.off()
-    }
-    
-  }
-  
-  ## Stop here if just running covariate selection
-  if (covariate_plotting_only == TRUE) stop('You have chosen to stop here to select covariates before running stacking and MBG.')
   
   ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   ## ~~~~~~~~~~~~~~~~~~~~~~~~ Stacking ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -417,11 +405,10 @@ if (as.logical(skiptoinla) == FALSE) {
   tic("Stacking - all") ## Start stacking master timer
   
   ## Figure out which models we're going to use
-  child_model_names <- stacked_fixed_effects %>%
-    gsub(" ", "", .) %>%
+  child_model_names <- stacked_fixed_effects        %>%
+    gsub(" ", "", .)          %>%
     strsplit(., "+", fixed=T) %>%
     unlist
-  
   message(paste0('Child stackers included are: ',paste(child_model_names,collapse=' // ')))
   
   the_covs <- format_covariates(all_fixed_effects)
@@ -429,9 +416,13 @@ if (as.logical(skiptoinla) == FALSE) {
   ## copy the dataset to avoid unintended namespace conflicts
   the_data <- copy(df)
   
+  ## only use data where we know what age group or point
+  ag_data <- the_data[the_data$agg_weight!=1, ]
+  the_data <- the_data[the_data$agg_weight==1, ]
+  
   ## shuffle the data into six folds
   the_data <- the_data[sample(nrow(the_data)),]
-  the_data[, fold_id := cut(seq(1,nrow(the_data)),breaks=as.numeric(n_stack_folds),labels=FALSE)]
+  the_data[,fold_id := cut(seq(1,nrow(the_data)),breaks=as.numeric(n_stack_folds),labels=FALSE)]
   
   ## add a row id column
   the_data[, a_rowid := seq(1:nrow(the_data))]
@@ -445,8 +436,22 @@ if (as.logical(skiptoinla) == FALSE) {
                                 period_var          = 'year',
                                 period_map          = period_map)
   
+  # A check to see if any of the variables do not vary across the data. This could break model later so we check and update some objects
+  covchecklist <- check_for_cov_issues(check_pixelcount = check_cov_pixelcount,
+                                       check_pixelcount_thresh = ifelse(exists("pixelcount_thresh"), as.numeric(pixelcount_thresh), 0.95))
+  for(n in names(covchecklist)){
+    assign(n, covchecklist[[n]])
+  }
+  
+  # plot covariates as a simple diagnostic here
+  pdf(sprintf('%s/raw_covariates_%s.pdf',outputdir,pathaddin), height=12, width=12)
+  for(covname in names(all_cov_layers)){
+    plot(all_cov_layers[[covname]],main=covname,maxpixel=1e6)
+  }
+  dev.off()
+  
   ## Check for data where covariate extraction failed
-  rows_missing_covs <- nrow(the_data) - nrow(cs_covs[[1]])
+  rows_missing_covs <- nrow(the_data) - nrow(cs_covs[[1]] %>% na.omit(., the_covs))
   if (rows_missing_covs > 0) {
     pct_missing_covs <- round((rows_missing_covs/nrow(the_data))*100, 2)
     warning(paste0(rows_missing_covs, " out of ", nrow(the_data), " rows of data ",
@@ -463,8 +468,10 @@ if (as.logical(skiptoinla) == FALSE) {
   ## store the centre scaling mapping
   covs_cs_df  <-  cs_covs[[2]]
   
-  ## this will drop rows with NA covariate values
-  the_data    <- na.omit(the_data, c(indicator, 'N', the_covs))
+  if(as.logical(use_raw_covs) | as.logical(use_stacking_covs)) {
+    ## this will drop rows with NA covariate values
+    the_data    <- na.omit(the_data, c(indicator, 'N', the_covs))
+  }
   
   ## stop if this na omit demolished the whole dataset
   if(nrow(the_data) == 0) stop('You have an empty df, make sure one of your covariates was not NA everywhere.')
@@ -1046,7 +1053,7 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # set specific arguments
 measure         <- 'prevalence'
-jname           <- paste('agg', reg, indicator, sep = '_')
+jname           <- paste('eDL', reg, indicator, sep = '_')
 
 # set memory by region
 individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
@@ -1061,7 +1068,7 @@ sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ',
                   '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
 r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(repo, 'mbg_central/share_scripts/frax_script_hap.R')
+script <- file.path(repo, indicator_group, 'rover/2_entry.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout)
                     
 

@@ -1100,7 +1100,7 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
   if(!is.null(simple_raster_subnats)) {
     template_subnat <- simple_raster_subnats
     subnat_cell_idx <- seegSDM:::notMissingIdx(template_subnat)
-    subnat_coords <- raster::xyFromCell(template_subnat, notMissingIdx(template_subnat))
+    subnat_coords <- raster::xyFromCell(template_subnat, seegSDM:::notMissingIdx(template_subnat))
   }
   
   

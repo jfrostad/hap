@@ -32,9 +32,11 @@ if (Sys.info()["sysname"] == "Linux") {
 #TODO request adds to lbd singularity
 pacman::p_load(data.table, fasterize, fst, gargle, googledrive, magrittr, mgsub, sf, farver)
 
-#running interactively?
-interactive <- T
-debug <-  ifelse(interactive, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check for IDE
+#detect if running interactively
+interactive <- F  %>% #manual override
+  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
+  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
+
 debug.args <- c('simulate',
                 'command',
                 'args',
@@ -46,17 +48,17 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_02_10_12_38_26',
+                '2020_02_24_12_20_17',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
-new_vetting <- F
+new_vetting <- T
 
 #is this a raked model?
 raked <- F
 
 #pull args from the job submission if !interactive
-args <- ifelse(debug %>% rep(., length(debug.args)), debug.args, commandArgs()) 
+args <- ifelse(interactive %>% rep(., length(debug.args)), debug.args, commandArgs()) 
 
 ## Set repo location, indicator group, and some arguments
 user            <- args[4]
@@ -338,9 +340,7 @@ if (use_stacking_covs) {
 # Plot priors for spatial hyperparameters --------------------------------------------------
 
 message('Plotting spatial hyperparameters prior and posteriors')
-# 
-# if (measure == 'prevalence') {
-  
+
 # Plot a la HIV team
 plot_hyperparameters(indicator = indicator,
                      indicator_group = indicator_group,
@@ -350,7 +350,6 @@ plot_hyperparameters(indicator = indicator,
                      save_file = NULL,
                      regs = Regions,
                      debug=F)
-# }
 
 stop("this is all so far")
 

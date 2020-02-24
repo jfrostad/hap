@@ -44,17 +44,26 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'dia_s_america-GUF'
+  region <- 'dia_central_asia'
 
 } else {
   
   ## otherwise, grab arguments from qsub
   ## note this requires a shell script with "<$1 --no-save $@", because its starting at 4
   region                      <- as.character(commandArgs()[4])
+  hap_run_date                <- as.character(commandArgs()[5])
+  lri_run_date                <- as.character(commandArgs()[6])
 
 } 
 
-#analysis options
+# collect date
+today <- Sys.Date()
+#***********************************************************************************************************************
+
+# ---OPTIONS------------------------------------------------------------------------------------------------------------
+## set arguments
+
+#gbd lri options
 # bwga.ier.version <- 38
 # ier.version <- "33power2_simsd_source_priors"
 rr.data.version <- "33" #rr data version
@@ -62,9 +71,36 @@ rr.model.version <-"power2_simsd_source_priors" #rr model version
 rr.functional.form <- "power2" #rr functional form
 format <- T #set T if needing to reformat the cellpreds to long data.table
 
-# collect date
-today <- Sys.Date()
-#today <- '2019-11-21' #if using old run
+#mbg options
+indicator_groups         <- list(hap='cooking', 
+                                 lri='lri')
+indicators               <- list(hap=r, 
+                                 lri='has_lri')
+run_dates                <- list(hap=hap_run_date, 
+                                 lri=lri_run_date)
+measures                 <- list(hap='count',
+                                 lri='count')
+suffixes                 <- list(hap='_eb_bin0_0', 
+                                 lri='_eb_bin0_0')
+rks                      <- list(hap=F, 
+                                 lri=F)
+shapefile                <- '2019_09_10' #NEEDS TO MATCH
+covs                        <- c('ihmepm25')
+cov_measures                <- c('mean')
+
+# #TODO janky fix
+# if (region=='dia_name-ESH') {
+#   hap.region <- 'dia_name'
+# } else if (region=='dia_sssa') {
+#   hap.region <- c('dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF')
+# } else if (region=='dia_s_america-GUF') {
+#   hap.region <- 'dia_s_america'
+# } else hap.region <- region
+
+hap.region <- region
+
+# print out session info so we have it on record
+sessionInfo()
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -333,10 +369,22 @@ link_cell_pred <- function(ind_gp,
       merge(cell_pred, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing covariate values?
     
   }
+  
+  #if collapsing by other pop measure than total, include total pop as well
+  if (measure!='total') {
+    
+    cell_pred <- load_populations_cov(reg, pop_measure='total', measure = measure, simple_polygon, 
+                                  simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
+      setnames(., 'pop', 'pop_total') %>% 
+      merge(., cell_pred, by=c('pixel_id', 'year'))
+    
+  }
 
   #subset to relevant columns and return
   keep_vars <- c('ADM0_CODE', 'ADM1_CODE', 'ADM2_CODE', 
-                 'pixel_id', 'year', 'pop', 'area_fraction', unlist(covs), paste0('V', 1:n_draws))
+                 'pixel_id', 'year', 'pop',
+                 ifelse(pop_measure!='total', 'pop_total', 'pop'),
+                 'area_fraction', unlist(covs), paste0('V', 1:n_draws)) %>% unique
   cell_pred[, (keep_vars), with=F] %>% 
     return
   
@@ -382,54 +430,6 @@ meltAndSave <- function(country, type, dt, debug=F) {
 }
 
 #***********************************************************************************************************************
-
-# ---OPTIONS------------------------------------------------------------------------------------------------------------
-## indicate whether running interactively
-interactive <- TRUE
-
-## if running interactively, set arguments
-if (interactive) {
-  warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
-  
-  ## set arguments
-  indicator_groups         <- list(hap='cooking', 
-                                   lri='lri')
-  indicators               <- list(hap='cooking_fuel_solid', 
-                                   lri='has_lri')
-  run_dates                <- list(hap='2020_02_10_12_38_26', 
-                                   lri='2019_10_23_16_13_17')
-  measures                 <- list(hap='count',
-                                   lri='count')
-  suffixes                 <- list(hap='_eb_bin0_0', 
-                                   lri='_eb_bin0_0')
-  rks                      <- list(hap=F, 
-                                   lri=F)
-  shapefile                <- '2019_09_10' #NEEDS TO MATCH
-  covs                        <- c('ihmepm25')
-  cov_measures                <- c('mean')
-  
-  # #TODO janky fix
-  # if (region=='dia_name-ESH') {
-  #   hap.region <- 'dia_name'
-  # } else if (region=='dia_sssa') {
-  #   hap.region <- c('dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF')
-  # } else if (region=='dia_s_america-GUF') {
-  #   hap.region <- 'dia_s_america'
-  # } else hap.region <- region
-  
-  hap.region <- region
-
-
-} else {
-  
-  ## otherwise, grab arguments from qsub
-  ## note this requires a shell script with "<$1 --no-save $@", because its starting at 4
-  #TODO
-
-} 
-
-# print out session info so we have it on record
-sessionInfo()
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -679,7 +679,7 @@ calcTAP <- function(country, dir,
         message('Aggregating at the level of ', by_cols)
         
         #distinguish that count columns should be a weighted sum instead of a weighted mean
-        sum_cols <- agg_cols %>% .[. %like% '_c|_pm'] %T>% 
+        sum_cols <- agg_cols %>% .[. %like% '_c|_pm|pop'] %T>% 
           message('Using a weighted sum to aggregate: ', .) 
         mean_cols <- agg_cols %>% .[!(. %in% sum_cols)] %T>% 
           message('Using a weighted mean to aggregate: ', .) 
@@ -688,14 +688,18 @@ calcTAP <- function(country, dir,
         null_cols <- c('pixel_id', 'area_fraction', 
                        names(agg) %>% .[(. %like% 'ADM')] %>% .[!(. %in% by_cols)])
         
+        #check which pop columns were returned (pop_total is produced if using a non-total pop to aggregate)
+        #append them to sum_cols, they will be likewise summed in the aggregation step
+        pop_cols <- names(agg) %>% .[(. %like% 'pop')]
+        sum_cols <- c(sum_cols, pop_cols)
+        
         #aggregate and return dt
         copy(agg) %>% 
           setkeyv(., by_cols) %>% 
           #fractional aggregation
           .[, (mean_cols) := lapply(.SD, weighted.mean, w=pop*area_fraction, na.rm=T), .SDcols=mean_cols, by=key(.)] %>% 
           .[, (sum_cols) := lapply(.SD, function(x, w) sum(x*w, na.rm=T), w=area_fraction), .SDcols=sum_cols, by=key(.)] %>% 
-          .[, pop := sum(pop*area_fraction), by=key(.)] %>% #aggregate pop as well
-          .[, tap_pc := tap_pm / pop] %>% 
+          .[, tap_pc := tap_pm / pop] %>% #generate pm per capita
           .[, (null_cols) := NULL] %>%  #remove unecessary columns
           unique(., by=key(.)) %>% 
           return

@@ -60,6 +60,10 @@
   #              'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
   #              'dia_se_asia-VNM-THA', 'VNM', 'THA',
   #              'dia_mid_east-AFG', 'dia_south_asia+AFG')
+
+  hap_run_date = '2020_02_12_13_44_44'
+  lri_run_date = '2019_10_23_16_13_17'
+
   
 for (region in regions) {
  
@@ -76,9 +80,9 @@ for (region in regions) {
                         '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                         '-l fthread=1 -l h_rt=16:00:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
       r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
-      script <- file.path('/homes', user, '_code/lbd/hap/post_estimation/calc_tap.R')
-      args <- paste(region)
-  
+      script <- file.path(repo, indicator_group, 'rover/2_entry.R')
+      args <- paste(region, hap_run_date, lri_run_date)
+      
       # run launch script
       paste(sys.sub, r_shell, script, args) %>% 
         system

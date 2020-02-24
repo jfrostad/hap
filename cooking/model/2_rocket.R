@@ -276,7 +276,7 @@ for(i in 1:nrow(loopvars)){
                           geo_nodes     = as.logical(use_geos_nodes),
                           corerepo      = core_repo,
                           code          = parallel_script,
-                          addl_job_name = paste0(indicator, '_', as.character(loopvars[i,1]), '_parallel'),
+                          addl_job_name = paste0('orbit_',indicator_group, '_', as.character(loopvars[i,1])),
                           singularity   = which_sing,
                           singularity_opts = list(SET_OMP_THREADS=threads, SET_MKL_THREADS=threads))
   

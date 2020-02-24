@@ -4,7 +4,7 @@
 ## Modified for ORT and diarrhea by Kirsten Wiens on 2019/06/03
 ##
 ###############################################################################
-# source('/homes/jfrostad/_code/lbd/hap/mbg_central/share_scripts/frax_script_hap.R') 
+# source('/homes/jfrostad/_code/lbd/hap/cooking/model/4_descent.R') 
 
 ## Setup ---------------------------------------------------------------------------------------------------
 # runtime configuration
@@ -440,7 +440,35 @@ stack <- aggregate_child_stackers(reg,
 write(NULL, file = paste0(outputdir, '/fin_', pathaddin))
 
 ## All done
-message('Done with post-estimation and aggregation for ', reg)
+message('Done with aggregation for ', reg, ' moving on to post-est')
 
-
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ POST-EST ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## Launch post-estimation (TAP calculation)
+
+# Define best LRI run_date
+lri_run_date = '2019_10_23_16_13_17'
+
+# set memory based on region
+if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
+} else if (reg %in% c('dia_wssa', 'dia_s_america-BRA')) { mymem <- '500G'
+} else mymem <- '350G'
+
+jname           <- paste('rover_', reg, indicator, sep = '_')
+
+# set up qsub
+sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
+                  '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                  '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
+script <- file.path(repo, indicator_group, 'rover/1_spirit.R')
+args <- paste(reg, run_date, lri_run_date)
+
+
+# submit qsub
+paste(sys.sub, r_shell, script, args) %>% 
+  system
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ FIN ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -69,8 +69,6 @@ extract_covariates = function(df, covariate_list, id_col = NULL, reconcile_timev
 
   }
 
-
-
   #extract the rasters by points
   locations = SpatialPoints(coords = as.matrix(df[,.(longitude,latitude)]), proj4string = CRS(proj4string(covariate_list[[1]])))
 

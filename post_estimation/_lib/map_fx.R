@@ -10,7 +10,7 @@
 ####################################################################################################
 ## load_map_annotations ----------------------------------------------------------------------------
 
-load_map_annotations <- function(use.sf=F) {
+load_map_annotations <- function(use.sf=T, mask_stage3=T) {
 
   if(use.sf) {
     
@@ -20,22 +20,25 @@ load_map_annotations <- function(use.sf=F) {
     stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad0_gadm.shp')
     adm0 <- rbind(stage1, stage2)
     
+    ## Stage 3 mask
+    message("---->loading stage 3 mask")
+    stage3 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/stage_3_mask.shp')
+
     ## Lakes
     message('-->loading lake mask')
     lakes <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_lakes.tif') %>% 
+      { if (mask_stage3) mask(x=., mask=stage3, inverse=T) %>% crop(., adm0) else . } %>% 
       as(., 'SpatialPolygonsDataFrame') %>% 
-    st_as_sf
+      st_as_sf
+
     
     ## Population mask
     message('--->loading population mask')
     mask <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_mask_master.tif') %>% 
+      { if (mask_stage3) mask(x=., mask=stage3, inverse=T) %>% crop(., adm0) else . } %>% 
       as(., 'SpatialPolygonsDataFrame') %>% 
       st_as_sf
-    
-    ## Stage 3 mask
-    message("---->loading stage 3 mask")
-    stage3 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/stage_3_mask.shp')
-    
+
   } else {
   
     ## Base shapefile (country outlines)
@@ -204,7 +207,7 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
                      legend_colors, legend_color_values, legend_breaks, legend_labels, legend_title, 
                      legend_flip=F,
                      pop_mask=T, lake_mask=T, borders=T, stage3_mask=T,
-                     subset_var, subset_value, zoom,
+                     subset, zoom,
                      debug=F) {
   
   if (debug) browser()
@@ -214,12 +217,19 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   map_sf <- 'sf' %in% class(map_data)
   annotate_sf <- 'sf' %in% sapply(annotations, class)
   if(map_sf&annotate_sf) message('-> using SF to render plots, vroom!')
-  else message('sorry, geom_polygons have been deprecated, please provide data & annotations as sf objects')
+  else stop('sorry, geom_polygons have been deprecated, please provide data & annotations as sf objects')
   
   
-  if(!missing(subset_var)) {
-    message('subsetting data to ', subset_var, '==', subset_value)
-    map_data <- filter(map_data, get(subset_var)==subset_value)
+  ##subset map_data
+  if(!missing(subset)) {
+    
+    if(subset %>% is.list) {
+      
+      message('subsetting data to ', subset$var, '==', subset$value)
+      map_data <- filter(map_data, get(subset$var)==subset$value)
+      
+    } else stop('subset must be provided as a list with named objects var and value')
+    
   }
   
   message('building limits/scale')
@@ -229,7 +239,7 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   ##Setup legend and scales if not provided by user
   if(missing(legend_colors)) { #Default is a 10 color magma from viridis scale
     
-    message('->color scale not provided, using MAGMA from viridis scales')
+    message('->color scale not provided, using -magma- from viridis scales')
     
     
     legend_colors <- c("#FCFDBFFF", "#FEC98DFF", "#FD9567FF", "#F1605DFF", "#CD4071FF",
@@ -304,7 +314,6 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
       
     }
   }  
-  #TODO add non.sf option?
   
   ## Plot the base map (this is what shows in places with no estimates and no mask)
   canvas <- ggplot() + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill = 'gray90')
@@ -313,19 +322,21 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
 
   ## Plot predictions
   if (map_sf) {
+    message('-> outcome is aggregated')
     gg <- canvas + geom_sf(data = map_data, aes(fill = plot_var), lwd=0) + coord_sf(datum = NA)
   } else {
+    message('-> outcome is at pixel level')
     gg <- canvas + geom_raster(data = map_data, aes(fill = plot_var, y = lat, x = long)) + 
       coord_equal(ratio = 1)
   }
 
   message('plotting annotations')
   
-  ## Plot mask, lakes, and adm boarders using SF
+  ## Plot mask, lakes, and adm borders using SF
   if (pop_mask) gg <- gg + geom_sf(data = annotations$mask, lwd=0, color = 'gray70', fill = 'gray70')
   if (lake_mask) gg <- gg + geom_sf(data = annotations$lakes, lwd=0, color = 'gray70', fill = 'lightblue')
   if (borders) gg <- gg + geom_sf(data = annotations$adm0, lwd=0.1, color = 'black', fill=NA)
-  if (stage3_mask) gg <- gg + geom_sf(data = annotations$stage3, color = 'gray70')
+  if (stage3_mask) gg <- gg + geom_sf(data = annotations$stage3, lwd=0, color = 'gray70')
 
   message('defining aesthetics')
   

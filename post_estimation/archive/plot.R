@@ -1,8 +1,8 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
 # Author: JF
 # Date: 09/05/2018
-# Purpose: Run custom function to create U5M maps
-# source("/homes/jfrostad/_code/lbd/u5m_mapping/plot.R", echo=T)
+# Purpose: Run custom functions to create HAP plots 
+# source("/homes/jfrostad/_code/lbd/hap/post_estimation/plot.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -59,7 +59,7 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_02_01_10_33_29'
+run_date <- '2020_02_12_13_44_44'
 #run_date <- '2020_02_07_23_37_07'
 lri_run_date <- '2019_10_23_16_13_17'
 
@@ -97,8 +97,7 @@ file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
 #read in the proper annotations (borders, lakes, mask)
-#annotations <- load_map_annotations()
-annotations_sf <- load_map_annotations(use.sf=T)
+annotations <- load_map_annotations()
 
 #read LRI counts
 lri_rate <- 'has_lri_admin_2_raked_mortality_summary.csv'
@@ -128,7 +127,7 @@ list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>%
 
 #merge sr region names/IDs
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
-  .[, .(iso3=ihme_loc_id, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
+  .[, .(iso3=ihme_loc_id, location_name, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
 dt <- merge(dt, locs, by='iso3', all.x=T)
 
 #calculate GINI/MAD at country level
@@ -200,30 +199,21 @@ ggplot(dt[year %in% c(2000,2017)], aes(x=(hap_pct-.5), y=tap_pc, color=super_reg
 ggsave(filename=file.path(out.dir, 'hap_share_change_facet.png'),
        width=15, height=10, units='in', dpi=900)
 
-#testplots for nature pre-sub
-ggplot(dt[year %in% c(2000,2017) & iso3 %in% c('KEN', 'AFG', 'NGA')], aes(x=(hap_pct-.5), y=tap_pc, color=region_name)) + 
-  geom_point() + 
-  geom_vline(xintercept=0) +
-  facet_wrap(~year) +
-  #scale_size_area('TAP dose', max_size=3) +
-  scale_color_brewer(palette='Dark2') +
-  xlim(c(-.6, .6)) +
-  #ylim(c(-.6, .3))  +
-  coord_flip() +
-  theme_bw() 
-
-plot.dt <- dt %>% copy %>% .[year %in% c(2000, 2017)] %>% .[year==2017, year := 2018]
+plot.dt <- dt %>% 
+  copy %>% 
+  .[year %in% c(2000, 2017)] %>% 
+  .[year==2017, year := 2018]
 
 plot <- 
-  ggplot(plot.dt[iso3 %in% c('KEN', 'ZAF', 'NGA')], 
-         aes(x=hap_pct, y=tap_paf*lri, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
+  ggplot(plot.dt[iso3 %in% c('ETH', 'KEN', 'IND', 'MNG', 'THA')], 
+         aes(x=hap_pct, y=tap_paf*lri*1e3, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
   geom_point() + 
   geom_line(alpha=.1) +
   geom_vline(xintercept=.5) +
   scale_color_brewer('Country', palette='Dark2') +
   scale_shape_manual('Year', values=c(1, 16)) +
   scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
-  scale_y_continuous("Rate of LRI Attributable to TAP") +
+  scale_y_continuous("Rate/1000 of LRI Attributable to TAP", limits=c(0,4)) +
   coord_flip() +
   theme_bw(base_size = 16) +
   theme(
@@ -234,23 +224,23 @@ plot <-
   )
 
 ggsave(filename=file.path(out.dir, 'presub_figure_2a.png'),
-       width=12, height=8, units='in', dpi=900)
+       width=16, height=8, units='in', dpi=900)
 
 plot <- 
-  ggplot(plot.dt[iso3 %in% c('KEN', 'ZAF', 'NGA')], 
-       aes(x=hap_pct, y=tap_paf, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
+  ggplot(plot.dt[iso3 %in% c('ETH', 'KEN', 'IND', 'MNG', 'THA')], 
+         aes(x=hap_pct, y=tap_paf, color=location_name, shape=year %>% as.factor, group=ADM2_CODE)) + 
   geom_point() + 
   geom_line(alpha=.1) +
   geom_vline(xintercept=.5) +
   scale_color_brewer('Country', palette='Dark2') +
   scale_shape_manual('Year', values=c(1, 16)) +
   scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
-  scale_y_continuous("Population Attributable Fraction of LRI to TAP") +
+  scale_y_continuous("Population Attributable Fraction of LRI to TAP", limits=c(.2,.6)) +
   coord_flip() +
   theme_bw(base_size = 16) +
   theme(
-    legend.position = c(.10, .90),
-    legend.justification = c("right", "top"),
+    legend.position = c(.87, .65),
+    legend.justification = c("left", "top"),
     legend.box.just = "right",
     legend.margin = margin(6, 6, 6, 6)
   )
@@ -258,6 +248,42 @@ plot <-
 ggsave(filename=file.path(out.dir, 'presub_figure_2b.png'),
        width=12, height=8, units='in', dpi=900)
 
+makeFigure2 <- function(country) {
+  
+  message('plotting ', country)
+  
+  plot <- 
+    ggplot(plot.dt[iso3 %in% country], 
+           aes(x=hap_pct, y=tap_paf, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
+    geom_point() + 
+    geom_line(alpha=.1) +
+    geom_vline(xintercept=.5) +
+    scale_color_brewer('Country', palette='Dark2') +
+    scale_shape_manual('Year', values=c(1, 16)) +
+    scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
+    scale_y_continuous("Population Attributable Fraction of LRI to TAP", limits=c(0,1)) +
+    ggtitle(country) +
+    coord_flip() +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = c(.10, .90),
+      legend.justification = c("right", "top"),
+      legend.box.just = "right",
+      legend.margin = margin(6, 6, 6, 6)
+    )
+  
+  print(plot)
+  
+  return(NULL)
+  
+}
+
+pdf(paste0(out.dir, '/presub_figure_2_all_countries.pdf'),
+    height=8, width=12)
+
+  lapply(unique(plot.dt$iso3), makeFigure2)
+  
+dev.off()
 
 #read in input data and prepare it for mapping
 tic('total')
@@ -304,21 +330,85 @@ dr_values <- c(seq(-1, -.5, length.out = 2), seq(-.5, .5, length.out = 8), seq(.
   unique %>%
   rescale
 
-dfu <-
+global <-
   plot_map(data$admin2, this_var='dfu',
-           annotations_sf, limits=c(0, 1), title='DFU% in 2017', 
-           legend_colors=colors, legend_color_values=color_values,
-           legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-           legend_title='DFU %', custom_scale=T,
-           pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-           zoom=zoom.global,
+           annotations, limits=c(0, 1), title='DFU% in 2017', 
+           legend_title='DFU %',
+           #zoom=zoom.global,
            debug=F)
 
-ggsave(filename=file.path(out.dir, 'global_dfu.png'), plot=ctry.dfu, 
-       width=6, height=6, units='in', dpi=100)
+ggsave(filename=file.path(out.dir, 'global_dfu.png'), plot=global, 
+       width=12, height=8, units='in', dpi=600)
+
+global <-
+  plot_map(data$admin2, this_var='tap_paf',
+           annotations, limits=c(0, 1), title='TAP PAF in 2017', 
+           legend_title='TAP PAF',
+           #zoom=zoom.global,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_tap_paf.png'), plot=global, 
+       width=12, height=8, units='in', dpi=600)
+
+global <-
+  plot_map(data$admin2, this_var='hap_pct',
+           annotations, limits=c(0, 1), title='HAP Share in 2017', 
+           legend_title='HAP/TAP',
+           #zoom=zoom.global,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_hap_pct.png'), plot=global, 
+       width=12, height=8, units='in', dpi=600)
+
+global <-
+  plot_map(data_d$admin2, this_var='dfu_d',
+           annotations, limits=c(-.2, .2), title='DFU% Change from 2000-2017', 
+           legend_colors=d_colors, legend_color_values=d_values,
+           legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='dfu%', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_dfu_d.png'), plot=global, 
+       width=12, height=8, units='in', dpi=600)
+
+global <-
+  plot_map(data_d$admin2, this_var='tap_paf_d',
+           annotations, limits=c(-.2, .2), title='PAF Change from 2000-2017', 
+           legend_colors=d_colors, legend_color_values=d_values,
+           legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='PAF', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_paf_d.png'), plot=global, 
+       width=12, height=8, units='in', dpi=600)
+
+global <-
+  plot_map(data_d$admin2, this_var='hap_pct_d',
+           annotations, limits=c(-1, 1), title='HAP Share Change from 2000-2017', 
+           # legend_colors=d_colors, legend_color_values=d_values,
+           # legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='HAP/TAP', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_hap_pct_d.png'), plot=global, 
+       width=12, height=8, units='in', dpi=600)
+
 #***********************************************************************************************************************
 
 # ---COUNTRY------------------------------------------------------------------------------------------------------------
+india <-
+  plot_map(data$admin2, this_var='dfu',
+           annotations, limits=c(0, 1), title='DFU% in 2017', 
+           legend_title='DFU %',
+           zoom=T, subset=list(var='iso3', value='IND'),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'india_dfu2.png'), plot=india, 
+       width=6, height=6, units='in', dpi=100)
+
 #testing
 ctry.name <- 'Nigeria'
 ctry_data <- data$admin2 %>% 
@@ -328,7 +418,7 @@ ctry.zoom <- data.table(x1=1, x2=15, y1=3, y2=15) #NGA
 
 ctry.dfu <-
   plot_map(ctry_data, this_var='dfu',
-           annotations_sf, limits=c(0, 1), title='DFU% in 2017', 
+           annotations, limits=c(0, 1), title='DFU% in 2017', 
            legend_colors=colors, legend_color_values=color_values,
            legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
            legend_title='DFU %', legend_flip=T,
@@ -345,7 +435,7 @@ ctry_pct_values <- c(seq(0, .6, length.out = 2), seq(.6, .9, length.out = 8), se
 
 ctry.pct <- 
   plot_map(ctry_data, this_var='hap_pct',
-           annotations_sf, limits=c(0, 1), title='HAP/TAP in 2017', 
+           annotations, limits=c(0, 1), title='HAP/TAP in 2017', 
            # legend_colors=colors, legend_color_values=ctry_pct_values,
            # legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
            legend_title='HAP/TAP', legend_flip=T,
@@ -362,7 +452,7 @@ ctry_paf_values <- c(seq(.2, .45, length.out = 2), seq(.45, .55, length.out = 8)
   
 ctry.paf <- 
   plot_map(ctry_data, this_var='tap_paf',
-           annotations_sf, limits=c(0, .75), title='PAF of LRI Attributable to TAP in 2017', 
+           annotations, limits=c(0, .75), title='PAF of LRI Attributable to TAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_paf_values,
            legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
            legend_title='TAP PAF', legend_flip=T,
@@ -379,7 +469,7 @@ ctry_lri_values <- c(seq(0, 1, length.out = 2), seq(1, 5, length.out = 8), seq(5
 
 ctry.lri <- 
   plot_map(ctry_data, this_var='tap_lri',
-           annotations_sf, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
+           annotations, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 10, 2), legend_labels=seq(0, 10, 2),
            legend_title='TAP LRI Rate', legend_flip=T,
@@ -391,7 +481,7 @@ ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri.png')), plot=ctry
 
 ctry.lri <- 
   plot_map(ctry_data, this_var='tap_lri',
-           annotations_sf, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
+           annotations, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
            legend_title='TAP LRI Rate', legend_flip=T,
            zoom=ctry.zoom,
            debug=F)
@@ -401,7 +491,7 @@ ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri_default.png')), p
 
 ctry.lri <- 
   plot_map(ctry_data, this_var='tap_lri',
-           annotations_sf, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
+           annotations, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 10, 2), legend_labels=seq(0, 10, 2),
            legend_title='TAP LRI Rate', legend_flip=T,
@@ -413,7 +503,7 @@ ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri.png')), plot=ctry
 
 ctry.lri <- 
   plot_map(ctry_data, this_var='hap_lri',
-           annotations_sf, limits=c(0, 9), title='Rate/1000 of LRI Attributable to HAP in 2017', 
+           annotations, limits=c(0, 9), title='Rate/1000 of LRI Attributable to HAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 9, 2), legend_labels=seq(0, 9, 2),
            legend_title='HAP LRI Rate', legend_flip=T,
@@ -425,7 +515,7 @@ ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_lri.png')), plot=ctry
 
 ctry.lri <- 
   plot_map(ctry_data, this_var='aap_lri',
-           annotations_sf, limits=c(0, 9), title='Rate/1000 of LRI Attributable to AAP in 2017', 
+           annotations, limits=c(0, 9), title='Rate/1000 of LRI Attributable to AAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 9, 2), legend_labels=seq(0, 9, 2),
            legend_title='AAP LRI Rate', legend_flip=T,
@@ -441,7 +531,7 @@ ctry_lri_values <- c(seq(0, .25, length.out = 2), seq(.25, 1.25, length.out = 8)
 
 ctry.lri <- 
   plot_map(ctry_data, this_var='aap_lri',
-           annotations_sf, limits=c(0, 3), title='Rate/1000 of LRI Attributable to AAP in 2017', 
+           annotations, limits=c(0, 3), title='Rate/1000 of LRI Attributable to AAP in 2017', 
            legend_colors=colors, legend_color_values=ctry_lri_values,
            legend_breaks=seq(0, 3, .5), legend_labels=seq(0, 3, .5),
            legend_title='AAP LRI Rate', legend_flip=T,
@@ -462,7 +552,7 @@ ctry_d_values <- c(seq(-.1, -.05, length.out = 2), seq(-.05, 0, length.out = 8),
 
 ctry.d.map <- 
   plot_map(ctry_d, this_var='tap_paf_d',
-           annotations_sf, limits=c(-.1, .05), title='TAP PAF, Change from 2000-2017', 
+           annotations, limits=c(-.1, .05), title='TAP PAF, Change from 2000-2017', 
            legend_colors=d_colors, legend_color_values=ctry_d_values,
            legend_breaks=seq(-.1, .05, .025), legend_labels=seq(-.1, .05,.025),
            legend_title='Change in PAF of TAP', legend_flip=T,
@@ -480,7 +570,7 @@ ctry_d_values <- c(seq(-.5, -.1, length.out = 8), seq(-.1, 0, length.out = 2)) %
 
 ctry.d.map <- 
   plot_map(ctry_d, this_var='hap_pct_d',
-           annotations_sf, limits=c(-.5, 0), title='HAP Share, Change from 2000-2017', 
+           annotations, limits=c(-.5, 0), title='HAP Share, Change from 2000-2017', 
            legend_colors=d_colors, legend_color_values=ctry_d_values,
            legend_breaks=seq(-.5, 0, .1), legend_labels=seq(-.5, 0,.1),
            legend_title='Change in HAP/TAP', legend_flip=T,
@@ -504,7 +594,7 @@ ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_pct_d.png')), plot=ct
 # ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_paf.png')), plot=ctry.map, 
 #        width=6, height=6, units='in', dpi=100)
 # 
-# plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations_sf, limits=c(0, 1), title='2017', 
+# plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations, limits=c(0, 1), title='2017', 
 #          legend_colors=colors, legend_color_values=color_values,
 #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
 #          legend_title='hap/tap', custom_scale=T,

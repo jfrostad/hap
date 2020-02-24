@@ -23,17 +23,18 @@ extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja', 'kel15')
 redownload <- F #update the codebook from google drive
 cores <- 15
 year_cutoff <- 2000 #only modelling >2000
-#test_country <- 'ZAF' #define in order to subset extractions to a single country for testing purposes
+#test_country <- 'SOM' #define in order to subset extractions to a single country for testing purposes
 
-#detect if running in rstudio IDE
-debug <- F
-interactive <- ifelse(debug, T, !(is.na(Sys.getenv("RSTUDIO", unset = NA))))
+#detect if running interactively
+interactive <- F  %>% #manual override
+  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
+  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
 
 ## if running interactively, set arguments
 if (interactive) {
 
   ## set arguments
-  this_stage <- '2b'
+  this_stage <- '1'
   core_repo <- "/homes/jfrostad/_code/lbd/hap"
   indicator_group <- 'cooking'
 
@@ -331,7 +332,8 @@ if (!exists('test_country')) {
     distinct %>% 
     merge(., stages, by='iso3', all.x=T) %>% 
     write.csv(., 
-              file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched_", topic, "_stage_",  this_stage, "_new_geographies_to_match.csv"), 
+              file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched", topic,
+                        paste0("stage_",  this_stage, "_new_geographies_to_match.csv")), 
               row.names=F, na="")
   print(nrow(all))
 

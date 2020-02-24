@@ -108,7 +108,11 @@ covInterrogation <- function(scaled=centre_scale_covs, pixel_count=5) {
     
   }
   
-  pdf(paste0(outputdir, '/covariates/', reg, '_', 'timeplots.pdf'), height=8, width=12)
+  #make sure the folder has been made
+  covdir <- file.path(outputdir, 'covariates') %T>% 
+    dir.create
+  
+  pdf(paste0(covdir, '/', reg, '_', 'timeplots.pdf'), height=8, width=12)
   timeplotCovs(dt, scaled=F)
   if(scaled) timeplotCovs(dt_scaled, scaled=T)
   dev.off()
