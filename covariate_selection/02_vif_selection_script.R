@@ -49,15 +49,19 @@ threshold <-  c(seq(as.numeric(threshold_min), as.numeric(threshold_max), by = a
 # list regions
 if (regions == 'all') {
   if (indicator=='cooking_fuel_solid') {
-    regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name', 'dia_sssa', 
-                 'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
-                 'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa',
-                 'dia_wssa-NGA', 'NGA',
-                 'dia_s_america-BRA', 'BRA',
-                 'MNG',
+
+    regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
+                 'dia_cssa',
+                 'dia_wssa',
+                 'dia_name-ESH',
+                 'dia_mcaca', 'dia_s_america-GUF',
+                 'dia_central_asia', 'dia_chn_mng',
+                 'dia_malay',
                  'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
                  'dia_se_asia-VNM-THA', 'VNM', 'THA',
-                 'dia_mid_east-AFG', 'dia_south_asia+AFG')
+                 'dia_mid_east-AFG', 'dia_south_asia+AFG',
+                 'dia_afr_horn-ETH-SOM-SSD', 'dia_essa+ETH+SOM+SSD-SWZ-ZWE-LSO')
+
   } else {
     regions <- c('dia_afr_horn', 'dia_name', 'dia_sssa', 
                  'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 

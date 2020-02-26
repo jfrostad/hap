@@ -3,7 +3,7 @@
 ## Written by Kirsten Wiens
 ## Created 2018/11/06
 ##############################################################################
-
+#source('/homes/jfrostad/_code/lbd/hap/covariate_selection/01_launch_vif_selection.R') 
 
 ## Setup -------------------------------------------------------------------------
 
@@ -32,7 +32,7 @@ if (use_geos_nodes) {
 }
 
 # set config and covariate files
-config_par   <- 'config_hap_best'
+config_par   <- 'config_hap_standard'
 config_file <- file.path(indicator_group, 'model/configs/')
 cov_par      <- 'covs_hap_standard'
 cov_file <- config_file

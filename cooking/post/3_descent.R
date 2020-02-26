@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 11/01/2019
 # Purpose: Calculate TAP PAFs
-#source('/homes/jfrostad/_code/lbd/hap/cooking/rover/1_spirit.R') 
+#source('/homes/jfrostad/_code/lbd/hap/cooking/post/3_descent.R') 
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -45,7 +45,9 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'dia_central_asia'
+  region <- 'THA'
+  hap_run_date <- '2020_02_24_12_20_17'
+  lri_run_date = '2019_10_23_16_13_17'
 
 } else {
   
@@ -75,7 +77,7 @@ format <- T #set T if needing to reformat the cellpreds to long data.table
 #mbg options
 indicator_groups         <- list(hap='cooking', 
                                  lri='lri')
-indicators               <- list(hap=r, 
+indicators               <- list(hap='cooking_fuel_solid', 
                                  lri='has_lri')
 run_dates                <- list(hap=hap_run_date, 
                                  lri=lri_run_date)

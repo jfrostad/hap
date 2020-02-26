@@ -1,8 +1,8 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
 # Author: JF
 # Date: 09/05/2018
-# Purpose: Run custom functions to create HAP plots 
-# source("/homes/jfrostad/_code/lbd/hap/post_estimation/plot.R", echo=T)
+# Purpose: Exploration of HAP results using visualization
+# source("/homes/jfrostad/_code/lbd/hap/cooking/rover/5_spirit.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -59,7 +59,7 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_02_12_13_44_44'
+run_date <- '2020_02_24_12_20_17'
 #run_date <- '2020_02_07_23_37_07'
 lri_run_date <- '2019_10_23_16_13_17'
 
@@ -338,7 +338,7 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_dfu.png'), plot=global, 
-       width=12, height=8, units='in', dpi=600)
+       width=12, height=8, units='in', dpi=300)
 
 global <-
   plot_map(data$admin2, this_var='tap_paf',
@@ -348,7 +348,7 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_tap_paf.png'), plot=global, 
-       width=12, height=8, units='in', dpi=600)
+       width=12, height=8, units='in', dpi=300)
 
 global <-
   plot_map(data$admin2, this_var='hap_pct',
@@ -358,7 +358,7 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_hap_pct.png'), plot=global, 
-       width=12, height=8, units='in', dpi=600)
+       width=12, height=8, units='in', dpi=300)
 
 global <-
   plot_map(data_d$admin2, this_var='dfu_d',
@@ -370,7 +370,7 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_dfu_d.png'), plot=global, 
-       width=12, height=8, units='in', dpi=600)
+       width=12, height=8, units='in', dpi=300)
 
 global <-
   plot_map(data_d$admin2, this_var='tap_paf_d',
@@ -382,7 +382,7 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_paf_d.png'), plot=global, 
-       width=12, height=8, units='in', dpi=600)
+       width=12, height=8, units='in', dpi=300)
 
 global <-
   plot_map(data_d$admin2, this_var='hap_pct_d',
@@ -394,7 +394,7 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_hap_pct_d.png'), plot=global, 
-       width=12, height=8, units='in', dpi=600)
+       width=12, height=8, units='in', dpi=300)
 
 #***********************************************************************************************************************
 

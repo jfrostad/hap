@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_standard'
+config_par   <- 'hap_sp_only'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
@@ -77,7 +77,10 @@ regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
              'dia_se_asia-VNM-THA', 'VNM', 'THA',
              'dia_mid_east-AFG', 'dia_south_asia+AFG')
 
-#regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM")
+# regions <- c('dia_afr_horn-ETH-SOM-SSD', 'dia_essa+ETH+SOM+SSD-SWZ-ZWE-LSO',
+#              'dia_central_asia-TKM', 'TKM')
+# 
+#regions <- 'CRI'
 
 # large regions
 #regions <- c('dia_s_america-GUF')

@@ -1068,7 +1068,7 @@ sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ',
                   '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
 r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(repo, indicator_group, 'rover/2_entry.R')
+script <- file.path(repo, indicator_group, 'post/2_entry.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout)
                     
 

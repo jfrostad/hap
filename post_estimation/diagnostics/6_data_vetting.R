@@ -351,7 +351,7 @@ locs.meta = get_location_metadata(location_set_id = 9, gbd_round_id = 5)
 locs <- get_location_hierarchy(41)
 
 #pull hap exposure from gbd2017 - command provided by kate causey
-if (new.gbd.results==T) {
+if (new.gbd.results) {
   gbd.shared.function.archive <- file.path(j_root,  "temp/central_comp/libraries/2017_archive/r")
   file.path(gbd.shared.function.archive, 'get_draws.R') %>% source
   hap.exp <- get_draws(gbd_id_type = "rei_id",

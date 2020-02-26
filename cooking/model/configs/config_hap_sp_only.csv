@@ -2,7 +2,7 @@ use_share,TRUE
 indicator_family,binomial
 individual_countries,FALSE
 keep_inla_files,FALSE
-year_list,c(2000:2017)
+year_list,c(2000:2018)
 yearload,annual
 interval_mo,12
 withtag,FALSE
@@ -45,7 +45,7 @@ rho_prior,"list(prior='normal',param=c(2, 1/(1.2^2)))"
 mesh_s_max_edge,"c(0.25,5)"
 mesh_s_offset,"c(1,5)"
 intercept_prior,0
-mesh_t_knots,"c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)"
+mesh_t_knots,"c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19)"
 intstrat,eb
 samples,250
 rake_transform,logit

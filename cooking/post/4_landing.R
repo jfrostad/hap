@@ -1,7 +1,7 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
 # Author: JF
 # Date: 09/05/2018
-# Purpose: Run custom functions to create HAP plots 
+# Purpose: Global post-estimation to create HAP results
 # source("/homes/jfrostad/_code/lbd/hap/post_estimation/plot.R", echo=T)
 #***********************************************************************************************************************
 

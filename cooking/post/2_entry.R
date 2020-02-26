@@ -4,7 +4,7 @@
 ## Modified for ORT and diarrhea by Kirsten Wiens on 2019/06/03
 ##
 ###############################################################################
-# source('/homes/jfrostad/_code/lbd/hap/cooking/rover/2_entry.R') 
+# source('/homes/jfrostad/_code/lbd/hap/cooking/post/2_entry.R') 
 
 ## Setup ---------------------------------------------------------------------------------------------------
 # runtime configuration
@@ -462,8 +462,8 @@ jname           <- paste('EdL', reg, indicator, sep = '_')
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
                   '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(repo, indicator_group, 'rover/3_descent.R')
+r_shell <- paste0(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+script <- file.path(core_repo, indicator_group, 'post/3_descent.R')
 args <- paste(reg, run_date, lri_run_date)
 
 
