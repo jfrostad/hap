@@ -38,7 +38,7 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load packages
-pacman::p_load(data.table, dplyr, feather, ggrepel, ggridges, readr, readxl, stringr, viridis) 
+pacman::p_load(data.table, dplyr, feather, fst, ggrepel, ggridges, readr, readxl, stringr, viridis) 
 #TODO verify which of these are actually necessary, took from a random image in Ani's wash dir
 #/share/geospatial/mbg/wash/s_imp/model_image_history
 pkg.list <- c('RMySQL', 'data.table', 'dismo', 'doParallel', 'dplyr', 'foreign', 'gbm', 'glmnet', 

@@ -82,6 +82,7 @@ message('Loading in required R packages and MBG functions')
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
+require(assertthat)
 
 ## Read config file and save all parameters in memory
 config <- load_config(repo            = core_repo,
@@ -144,16 +145,16 @@ if (crop_covs == TRUE) {
     simple_raster      <- raster_list[['simple_raster']]
     pop_raster         <- raster_list[['pop_raster']]
     
-    ## Load input data
-    df <- load_input_data(indicator   = indicator,
-                          simple      = simple_polygon,
+    df <- load_input_data(indicator   = gsub(paste0('_age',age),'',indicator),
                           agebin      = age,
+                          removeyemen = FALSE,
                           pathaddin   = pathaddin,
                           years       = yearload,
                           withtag     = as.logical(withtag),
                           datatag     = datatag,
                           use_share   = as.logical(use_share),
-                          yl          = year_list)
+                          yl          = year_list,
+                          region      = reg)
     
     ## Remove any data outside of region for ORS
     if (indicator != 'had_diarrhea') {

@@ -78,7 +78,7 @@ for (i in indics) {
   sys.sub <- paste0('qsub -e /share/geospatial/mbg/cooking/logs/errors -o /share/geospatial/mbg/cooking/logs/output ',
                     '-l m_mem_free=', mymem, ' -P ', proj, ifelse(use_geos_nodes, ' -q geospatial.q ', ' '),
                     '-l fthread=1 -l h_rt=00:12:00:00 -v sing_image=default -N ', jname, ' ')
-  r_shell <- paste0('/share/code/geospatial/kewiens/ort/mbg_central/share_scripts/shell_sing.sh')
+  r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
   script <- paste0(repo, '/covariate_selection/02_vif_selection_script.R')
   args <- paste(user, repo, indicator_group, indicator, config_par, config_file, cov_par, cov_file, 
                 run_date, regions, threshold_min, threshold_max, threshold_step, individual_countries,

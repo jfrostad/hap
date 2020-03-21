@@ -48,7 +48,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_02_25_17_48_12',
+                '2020_03_12_13_25_57',
                 'total')
 
 #if new vetting activity has occured, need to refresh the local sheet
@@ -80,7 +80,7 @@ mbg_setup(package_list = package_list, repos = core_repo)
 ## Load custom post-estimation functions
 lapply(file.path(core_repo,
               'post_estimation/_lib/',
-              list.files(file.path(core_repo, 'post_estimation/_lib/'))),
+              list.files(file.path(core_repo, 'post_estimation/_lib/'), pattern='.R')),
        source)
 
 #use your own diacritics fx, due to inscrutable error
@@ -321,7 +321,7 @@ if (use_stacking_covs) {
   
   # plot stackers over time aggregated to admins
   message('Making time series plots for stackers by admin unit')
-  lapply(Regions, function(x) 
+  lapply(Regions %>% rev, function(x) 
     stacker_time_series_plots(reg=x,
                               dt=mbg,
                               indicator, 

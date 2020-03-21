@@ -20,7 +20,7 @@ rm(list=ls())
 #Define values
 topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja', 'kel15')
-redownload <- F #update the codebook from google drive
+redownload <- T #update the codebook from google drive
 cores <- 15
 year_cutoff <- 2000 #only modelling >2000
 #test_country <- 'SOM' #define in order to subset extractions to a single country for testing purposes

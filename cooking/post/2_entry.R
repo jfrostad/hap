@@ -42,7 +42,7 @@ if (interactive) {
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_02_24_07_58_32'
+  run_date <- '2020_03_12_13_25_57'
   measure <- 'prevalence'
   reg <- 'dia_se_asia-VNM-THA'
   cov_par <- paste(indicator_group, reg, sep='_')
@@ -415,24 +415,6 @@ if (grepl('eti', measure)) {
   
 }
 
-## Aggregate data and stackers ------------------------------------------------------
-message('Aggregating data and stackers for lineplots')
-# Aggregate data to admin 0 and 1
-dat <- aggregate_input_data(reg,
-                            indicator, 
-                            indicator_group, 
-                            run_date,
-                            modeling_shapefile_version,
-                            build=T)
-
-# Aggregate stackers to admin 0 and 1
-stack <- aggregate_child_stackers(reg,
-                                  indicator, 
-                                  indicator_group, 
-                                  run_date, 
-                                  modeling_shapefile_version,
-                                  pop_measure='total',
-                                  build=T)
 ## Finish up -----------------------------------------------------------------
 
 ## Write a file to mark done
@@ -470,6 +452,188 @@ args <- paste(reg, run_date, lri_run_date)
 # submit qsub
 paste(sys.sub, r_shell, script, args) %>% 
   system
+
+## All done
+message('Post-est submitted, now producing diagnostics for ', reg)
+
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ LINEPLOT ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+##  Produce diagnostic lineplot for region
+
+## Aggregate data and stackers ------------------------------------------------------
+# Aggregate data to admin 0 and 1
+dat <- aggregate_input_data(reg,
+                            indicator, 
+                            indicator_group, 
+                            run_date,
+                            modeling_shapefile_version,
+                            build=T)
+
+# Aggregate stackers to admin 0 and 1
+stack <- aggregate_child_stackers(reg,
+                                  indicator, 
+                                  indicator_group, 
+                                  run_date, 
+                                  modeling_shapefile_version,
+                                  pop_measure='total',
+                                  build=T)
+
+stop('done for now')
+
+# ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
+# holdouts <- 0
+
+
+#TODO need to rewrite these functions to return just one region instead of only saving the final file
+#write your own versions of them in post_estimation/_lib/summarize.R
+## Combine and summarize aggregated results --------------------------
+
+# # combine unraked results
+# message('Combining unraked aggregated results')
+# combine_aggregation(rd       = run_date,
+#                     indic    = indicator,
+#                     ig       = indicator_group,
+#                     ages     = 0,
+#                     regions  = Regions,
+#                     holdouts = holdouts,
+#                     raked    = raked,
+#                     delete_region_files = F)
+# 
+# # summarize admins
+# summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
+# 
+# # # combine raked results
+# message('Combining raked aggregated results')
+# if (raked) {
+#   combine_aggregation(rd       = run_date,
+#                       indic    = indicator,
+#                       ig       = indicator_group,
+#                       ages     = 0,
+#                       regions  = Regions,
+#                       holdouts = holdouts,
+#                       raked    = raked,
+#                       delete_region_files = F)
+#   
+#   # summarize admins
+#   summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
+# }
+
+
+# ## Combine data and stackers with summary results ------------------------------------------
+# 
+# # Load and combine estimates
+# mbg <- list(
+#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv') %>% 
+#     fread %>%
+#     .[, lvl := 'adm0'],
+#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv') %>% 
+#     fread %>%
+#     .[, lvl := 'adm1']
+# )  %>% 
+#   rbindlist(use.names=T, fill=T)
+# 
+# # raked results
+# if (raked) {
+#   mbg_raked <- list(
+#     paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_0_raked', measure, '_summary.csv')) %>% 
+#       fread %>%
+#       .[, lvl := 'adm0'],
+#     paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_1_raked', measure, '_summary.csv')) %>%
+#       fread %>%
+#       .[, lvl := 'adm1']
+#   )  %>% 
+#     rbindlist(use.names=T, fill=T)
+# }
+# 
+# # Combine all
+# # raked results
+# if (raked) {
+#   #modify colnames
+#   c('mean', 'upper', 'lower', 'cirange') %>% 
+#     setnames(mbg_raked, ., paste0(., '_raked'))
+#   
+#   mbg <- merge(mbg, mbg_raked, 
+#                by = names(mbg) %>% .[grep('ADM|region|year|pop|lvl', .)],
+#                all.x = T)
+# }
+# 
+# # stackers
+# mbg <- merge(mbg, stack,
+#              by =  names(mbg) %>% .[grep('CODE|year|lvl', .)],
+#              all.x = T)
+# 
+# # data
+# mbg <- merge(mbg, dat,
+#              by = names(mbg) %>% .[grep('CODE|year|lvl', .)],
+#              all.x = T)
+# 
+# # save
+# write.csv(mbg, paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers.csv' ))
+# 
+# ##classify datapoints based on HAP vetting
+# #update vetting sheet if necessary
+# #original authorization must be done locally (doesnt seem to work in IDE and must be interactively done)
+# if (new_vetting) {
+#   setwd(doc.dir) 
+#   #googledrive::drive_auth(cache='drive.httr-oauth')
+#   #googledrive::drive_auth(use_oob=T)
+#   googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)
+# }
+# #read in vetting sheet
+# vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='1. Vetting', skip=1) %>% 
+#   as.data.table %>% 
+#   .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] %>%  #subset to relevant columns
+#   unique(., by=names(.)) #TODO find out why there are duplicates in the sheet
+# 
+# #Fix name for bobby =)
+# vetting[vetting=='Not started', vetting := 'Adequate']
+# 
+# #merge onto data
+# mbg <- merge(mbg, vetting, by='nid', all.x=T)
+# 
+# #define colorscale
+# # build color scheme for the vetting sheet values
+# # TODO make this code more robust for people who do not have the same schema
+# vetting_colors <- c("Adequate"='grey4', 
+#                     "Problematic"='darkorange1',
+#                     "Completed"='forestgreen',
+#                     "Flagged"='purple1',
+#                     "Excluded"='gray71',
+#                     "In progress"='indianred2',
+#                     "Ready for Review"='indianred2')
+# 
+# ## Plot stackers and covariates ------------------------------------------------------
+# message('Making time series plots for stackers by admin unit')
+# dir.create(paste0(outputdir, '/diagnostic_plots/'))
+# 
+# if (use_stacking_covs) {
+#   
+#   # plot covariate weights
+#   # message('Making covariate weight plots')
+#   # get_cov_weights(indicator,
+#   #                 indicator_group,
+#   #                 run_date,
+#   #                 Regions,
+#   #                 outputdir)
+#   
+#   # plot stackers over time aggregated to admins
+#   message('Making time series plots for stackers by admin unit')
+#   lapply(Regions, function(x) 
+#     stacker_time_series_plots(reg=x,
+#                               dt=mbg,
+#                               indicator, 
+#                               indicator_group, 
+#                               run_date, 
+#                               raked=raked,
+#                               vetting_colorscale=vetting_colors,
+#                               label='config',
+#                               debug=F)
+#   )
+#   
+# }
+
+
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ FIN ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

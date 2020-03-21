@@ -2,7 +2,7 @@
 ## Generic parallel script for running MBG models                  ##
 ## Roy Burstein, Nick Graetz, Aaron Osgood-Zimmerman, Jon Mosser   ##
 #####################################################################
-# source('/homes/jfrostad/_code/lbd/hap/cooking/model/3_model.R') 
+# source('/homes/jfrostad/_code/lbd/hap/cooking/model/3_orbit.R') 
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~ SETUP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -45,7 +45,7 @@ if (interactive) {
   ## set arguments
   reg                      <- 'dia_central_asia'
   age                      <- 0
-  run_date                 <- "2020_02_23_22_17_16"
+  run_date                 <- "2020_03_11_16_07_49"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'

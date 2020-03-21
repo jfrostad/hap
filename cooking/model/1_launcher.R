@@ -44,7 +44,7 @@ if (use_old_run_date == FALSE) {
 }
 
 # set config and covariate files
-config_par   <- 'hap_sp_only'
+config_par   <- 'hap_sp_fine'
 covar_par      <- 'region_specific'
 #covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
@@ -70,8 +70,10 @@ regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
              'dia_cssa',
              'dia_wssa',
              'dia_name-ESH',
-             'dia_mcaca', 'dia_s_america-GUF',
-             'dia_central_asia', 'dia_chn_mng',
+             'dia_mcaca', 
+             'dia_s_america-BRA-GUF', 'BRA',
+             'dia_central_asia', 
+             'CHN', 'MNG',
              'dia_malay',
              'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
              'dia_se_asia-VNM-THA', 'VNM', 'THA',
@@ -83,7 +85,7 @@ regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
 #regions <- 'CRI'
 
 # large regions
-#regions <- c('dia_s_america-GUF')
+#regions <- c('dia_s_america-BRA-GUF-VEN')
 
 # testing
 #regions <- c('VNM', 'dia_se_asia-VNM-THA')
@@ -100,7 +102,7 @@ indics <- 'cooking_fuel_solid'
 ## Run launch scripts -------------------------------------------------------------------------
 
 for (i in indics) {
-  
+   
   # make sure that only selecting a previous run_date intentionally
   if (use_old_run_date == TRUE) {
     prev <- readline('Are you sure you want to use a previous run date? Y or N: ')

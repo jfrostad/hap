@@ -45,8 +45,8 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'THA'
-  hap_run_date <- '2020_02_24_12_20_17'
+  region <- 'ERI+DJI+YEM'
+  hap_run_date <- '2020_03_12_13_25_57'
   lri_run_date = '2019_10_23_16_13_17'
 
 } else {
@@ -663,7 +663,8 @@ calcTAP <- function(country, dir,
       #define relevant col vectors
       #out_cols <- c('hap_pct', 'tap_paf', 'tap_lri_r', 'tap_lri_c')
       out_cols <- c('hap_pct', 'tap_paf', 'tap_pm', 'dfu', 'cfu', 'cor')
-      null_cols <- c(indicators, 'ihmepm25', 'hap', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_rr', 
+      #null_cols <- c(indicators, 'ihmepm25', 'hap', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_rr', 
+      null_cols <- c(indicators, 'hap', 'aap_pm', 'hap_pm', 'tap_rr', 
                      names(lri.rr)) %>% unlist
       
       #collapse over the draws for TAP PAF / LRI attrib and return the mean values

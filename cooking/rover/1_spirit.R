@@ -2,7 +2,7 @@
 # Author: JF
 # Date: 09/05/2018
 # Purpose: Exploration of HAP results using visualization
-# source("/homes/jfrostad/_code/lbd/hap/cooking/rover/5_spirit.R", echo=T)
+# source("/homes/jfrostad/_code/lbd/hap/cooking/rover/1_spirit.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
@@ -115,14 +115,18 @@ has_lri_c <- file.path('/ihme/geospatial/mbg/lri/has_lri/output',
 
 #combine and save all ad2 level results
 dt <-
-list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>% 
+  list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>% 
   lapply(., fread) %>% 
   rbindlist(use.names=T, fill=T) %>% 
   merge(has_lri, by=c('ADM0_CODE', 'ADM2_CODE', 'year')) %>% 
   merge(has_lri_c, by=c('ADM0_CODE', 'ADM2_CODE', 'year')) %>% 
   .[, tap_lri := lri * 1000 * tap_paf] %>% #do some postestimation
   .[, hap_lri := lri * 1000 * tap_paf*hap_pct] %>% 
-  .[, aap_lri := lri * 1000 * tap_paf*(1-hap_pct)] %T>% 
+  .[, aap_lri := lri * 1000 * tap_paf*(1-hap_pct)] %>% 
+  .[, tap_lri_c := lri_c * tap_paf] %>% #do some postestimation
+  .[, hap_lri_c := lri_c * tap_paf*hap_pct] %>% 
+  .[, aap_lri_c := lri_c * tap_paf*(1-hap_pct)] %T>% 
+  #also output the file for later
   write.csv(., file.path(data.dir, 'admin_2_summary.csv'), row.names = F)
 
 #merge sr region names/IDs
@@ -161,15 +165,17 @@ dt_ineq[gini>mean(gini, na.rm=T), table(iso3, year)]
 
 #TODO move this to be at pixel level
 #calculate rates of change
-these_cols <- c('hap_pct', 'dfu', 'tap_paf')
+these_cols <- c('hap_pct', 'dfu', 'tap_paf', 'tap_pc')
 d_cols <- paste0(these_cols, '_d')
 dr_cols <- paste0(these_cols, '_dr')
+aroc_cols <- paste0(these_cols, '_aroc')
 dt_d <- setkey(dt, ADM0_CODE, ADM2_CODE) %>% 
-  .[year %in% c(2000, 2017)] %>% 
+  .[year %in% c(2000, end_year)] %>% 
   .[, (d_cols) := .SD-data.table::shift(.SD,n=1), .SDcols=these_cols, by=key(dt)] %>% 
-  .[, (dr_cols) := (.SD-data.table::shift(.SD,n=1))/data.table::shift(.SD,n=1), .SDcols=these_cols, by=key(dt)] 
-
-write.csv(dt_d, file.path(data.dir, 'admin_2_delta_summary.csv'), row.names = F)
+  .[, (dr_cols) := (.SD-data.table::shift(.SD,n=1))/data.table::shift(.SD,n=1), .SDcols=these_cols, by=key(dt)] %T>% 
+  .[, (aroc_cols) := (.SD-data.table::shift(.SD,n=1))/(end_year-2000), .SDcols=these_cols, by=key(dt)] %T>% 
+  #also output the file for later
+  write.csv(., file.path(data.dir, 'admin_2_delta_summary.csv'), row.names = F)
 
 #plot change in HAP share
 ggplot(dt_d[year==2017], aes(x=(hap_pct-.5), y=hap_pct_d, color=super_region_name, alpha=log(tap_pc))) + 
@@ -310,9 +316,15 @@ zoom.global <- data.table(x1=-120, x2=150, y1=-40, y2=55)
 # ---CREATE MAPS--------------------------------------------------------------------------------------------------------
 #render and save maps
 colors <- magma(10, direction=-1)
+dr_colors <- cividis(12)
 
 #general scale
-color_values <- c(seq(0, .3, length.out = 3), seq(.3, .8, length.out = 5), seq(.8, 1, length.out = 4)) %>%
+color_values <- c(seq(0, .3, length.out = 3), seq(.3, .9, length.out = 6), seq(.9, 1, length.out = 3)) %>%
+  unique %>%
+  rescale
+
+#pm scale
+pm_values <- c(seq(0, 10, length.out = 2), seq(10, 100, length.out = 8), seq(100, 700, length.out = 2)) %>%
   unique %>%
   rescale
 
@@ -323,21 +335,34 @@ paf_values <- c(seq(0, .2, length.out = 2), seq(.2, .5, length.out = 8), seq(.5,
 
 #change scale
 d_colors <- RColorBrewer::brewer.pal(11, 'BrBG') %>% rev %>% .[-1]
-d_values <- c(seq(-.2, -.1, length.out = 2), seq(-.1, .1, length.out = 8), seq(.1, .2, length.out = 2)) %>%
+d_colors <- brewer_pal(palette='BrBG')(11) %>% rev 
+d_values <- c(seq(-.3, -.1, length.out = 2), seq(-.1, .1, length.out = 8), seq(.1, .3, length.out = 2)) %>%
   unique %>%
   rescale
-dr_values <- c(seq(-1, -.5, length.out = 2), seq(-.5, .5, length.out = 8), seq(.5, 1, length.out = 2)) %>%
+dr_values <- c(seq(-.6, -.35, length.out = 2), seq(-.25, .25, length.out = 7), seq(.35, .6, length.out = 2)) %>%
   unique %>%
   rescale
 
 global <-
   plot_map(data$admin2, this_var='dfu',
            annotations, limits=c(0, 1), title='DFU% in 2017', 
+           legend_color_values=color_values,
            legend_title='DFU %',
            #zoom=zoom.global,
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_dfu.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+global <-
+  plot_map(data$admin2, this_var='tap_pc',
+           annotations, limits=c(0, 700), title='Annual per-capita TAP dose in 2017', 
+           legend_color_values=pm_values,
+           legend_title='PM2.5 ug/m3',
+           #zoom=zoom.global,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_tap_pc.png'), plot=global, 
        width=12, height=8, units='in', dpi=300)
 
 global <-
@@ -361,6 +386,16 @@ ggsave(filename=file.path(out.dir, 'global_hap_pct.png'), plot=global,
        width=12, height=8, units='in', dpi=300)
 
 global <-
+  plot_map(data$admin2, this_var='tap_lri',
+           annotations, limits=c(0, 4), title='Mortality Rate of LRI Attributable to TAP in 2017', 
+           legend_title='Deaths per 1k children attributable to TAP',
+           #zoom=zoom.global,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_tap_lri.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+global <-
   plot_map(data_d$admin2, this_var='dfu_d',
            annotations, limits=c(-.2, .2), title='DFU% Change from 2000-2017', 
            legend_colors=d_colors, legend_color_values=d_values,
@@ -370,6 +405,18 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_dfu_d.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+global <-
+  plot_map(data_d$admin2, this_var='dfu_dr',
+           annotations, limits=c(-.2, .2), title='DFU% Change from 2000-2017', 
+           legend_colors=d_colors, legend_color_values=d_values,
+           legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='dfu%', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_dfu_dr.png'), plot=global, 
        width=12, height=8, units='in', dpi=300)
 
 global <-
@@ -385,6 +432,18 @@ ggsave(filename=file.path(out.dir, 'global_paf_d.png'), plot=global,
        width=12, height=8, units='in', dpi=300)
 
 global <-
+  plot_map(data_d$admin2, this_var='tap_paf_dr',
+           annotations, limits=c(-.2, .2), title='PAF Change from 2000-2017', 
+           legend_colors=d_colors, legend_color_values=d_values,
+           legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='PAF', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_paf_dr.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+global <-
   plot_map(data_d$admin2, this_var='hap_pct_d',
            annotations, limits=c(-1, 1), title='HAP Share Change from 2000-2017', 
            # legend_colors=d_colors, legend_color_values=d_values,
@@ -394,6 +453,41 @@ global <-
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_hap_pct_d.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+global <-
+  plot_map(data_d$admin2, this_var='hap_pct_dr',
+           annotations, limits=c(-1, 1), title='HAP Share Change from 2000-2017', 
+           # legend_colors=d_colors, legend_color_values=d_values,
+           # legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='HAP/TAP', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_hap_pct_dr.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+global <-
+  plot_map(data_d$admin2, this_var='tap_pc_dr',
+           annotations, limits=c(-.6, .3), title='Annual Per-Capita TAP Dose, change from 2000-2017', 
+           legend_colors=d_colors, legend_color_values=dr_values,
+           # legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
+           legend_title='% change in PM2.5 ug/m3', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_tap_pc_dr.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+global <-
+  plot_map(data_d$admin2, this_var='tap_paf_dr',
+           annotations, limits=c(-.6, .3), title='PAF of LRI attributable to TAP, change from 2000-2017', 
+           legend_colors=d_colors, legend_color_values=dr_values,
+           legend_title='% change in PAF', 
+           subset=list(var='year', value=2017),
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_tap_paf_dr.png'), plot=global, 
        width=12, height=8, units='in', dpi=300)
 
 #***********************************************************************************************************************
@@ -444,6 +538,23 @@ ctry.pct <-
 
 ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_pct.png')), plot=ctry.pct, 
        width=6, height=6, units='in', dpi=600)
+
+#pm25 scale
+ctry_pct_values <- c(seq(0, .6, length.out = 2), seq(.6, .9, length.out = 8), seq(.9, 1, length.out = 2)) %>%
+  unique %>%
+  rescale
+
+ctry.tap <- 
+  plot_map(ctry_data, this_var='tap_pc',
+           annotations, limits=c(0, 500), title='Annual per-capita TAP dose in 2017', 
+           # legend_colors=colors, legend_color_values=ctry_pct_values,
+           # legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
+           legend_title='PM2.5 ug/m3', legend_flip=T,
+           zoom=ctry.zoom,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_pc.png')), plot=ctry.tap, 
+       width=6, height=6, units='in', dpi=300)
 
 #paf scale
 ctry_paf_values <- c(seq(.2, .45, length.out = 2), seq(.45, .55, length.out = 8), seq(.5, .6, length.out = 2)) %>%

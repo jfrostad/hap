@@ -88,6 +88,7 @@ mbg_setup(repo=lbd.shared.function.dir, package_list=package_list) #load mbg fun
 
 # ---COLLAPSE-----------------------------------------------------------------------------------------------------------
 #read in codebook
+if (redownload) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
 codebook <- file.path(raw.dir, 'hap.xlsx') %>% read_xlsx(., sheet='codebook') %>% as.data.table
 stages <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread #read info about stages
 
