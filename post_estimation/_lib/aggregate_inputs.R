@@ -211,7 +211,7 @@ aggregate_child_stackers <- function(reg,
     
     # ----------------------------------------------------------------------------------------
     # Add in population
-    
+
     # Pull worldpop estimates from covariate database
     pop <- load_and_crop_covariates_annual(covs = 'worldpop',
                                            measures = pop_measure,
@@ -242,8 +242,8 @@ aggregate_child_stackers <- function(reg,
       pixel_id = pixel_id
     )
     
-    # Add link table version of pixel id to stacker data table
-    covdt$pixel_id <- link_table$pixel_ids
+    #added in to be explicit about rep issue:
+    covdt[, pixel_id := rep(link_table$pixel_ids, times = nrow(covdt) / length(link_table$pixel_id))]
     
     # Merge identifiers with stacker data frame
     stackers <- merge(covdt, link, by = 'pixel_id', allow.cartesian = T)

@@ -59,7 +59,7 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_02_24_12_20_17'
+run_date <- '2020_03_25_20_31_43'
 #run_date <- '2020_02_07_23_37_07'
 lri_run_date <- '2019_10_23_16_13_17'
 

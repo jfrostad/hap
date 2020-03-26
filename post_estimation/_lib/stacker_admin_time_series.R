@@ -121,7 +121,7 @@ stacker_time_series_plots <- function(reg,
   mbg[!is.na(coef), variable := paste('stk:', variable, round(coef, 2))]
   
   #ID out of country points using lookup info
-  mbg <- merge(mbg, lookup[, .(iso3, ADM0_NAME=location_name)], by='ADM0_NAME')
+  mbg <- merge(mbg, lookup[, .(iso3, ADM0_CODE=gadm_geoid)], by='ADM0_CODE')
   mbg[, border_data := iso3 != svy_iso3]
   mbg[, iso3_label := '']
   mbg[border_data==T, iso3_label := paste0(svy_iso3, ': ')]

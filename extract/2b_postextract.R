@@ -20,33 +20,10 @@ rm(list=ls())
 #Define values
 topic <- "hap"
 extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja', 'kel15')
-redownload <- T #update the codebook from google drive
+redownload <- F #update the codebook from google drive
 cores <- 15
 year_cutoff <- 2000 #only modelling >2000
 #test_country <- 'SOM' #define in order to subset extractions to a single country for testing purposes
-
-#detect if running interactively
-interactive <- F  %>% #manual override
-  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
-  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
-
-## if running interactively, set arguments
-if (interactive) {
-
-  ## set arguments
-  this_stage <- '1'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap"
-  indicator_group <- 'cooking'
-
-} else {
-  
-  ## otherwise, grab arguments from qsub
-  ## note this requires a shell script with "<$1 --no-save $@", because its starting at 4
-  this_stage <- as.character(commandArgs()[4])
-  core_repo <- as.character(commandArgs()[5])
-  indicator_group <- as.character(commandArgs()[6])
-
-} 
 
 #Setup
 j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
@@ -61,10 +38,32 @@ package_lib    <- file.path(h, '_code/_lib/pkg')
 
 #Load packages
 pacman::p_load(haven, stringr, data.table, dplyr, magrittr, feather, fst, parallel, doParallel, googledrive, readxl)
-package_list <- paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv') %>% fread %>% t %>% c
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
+
+#detect if running interactively
+interactive <- F  %>% #manual override
+  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
+  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
+
+## if running interactively, set arguments
+if (interactive) {
+  
+  ## set arguments
+  this_stage <- '1'
+  core_repo <- "/homes/jfrostad/_code/lbd/hap"
+  indicator_group <- 'cooking'
+  
+} else {
+  
+  ## otherwise, grab arguments from qsub
+  ## note this requires a shell script with "<$1 --no-save $@", because its starting at 4
+  this_stage <- as.character(commandArgs()[4])
+  core_repo <- as.character(commandArgs()[5])
+  indicator_group <- as.character(commandArgs()[6])
+  
+} 
 
 #TODO can remove when drop issues are fixed, use mod dt to test for drops in PE reruns
 share.model.dir  <- file.path('/share/geospatial/mbg/input_data/')
@@ -80,6 +79,7 @@ these_countries <- unique(stages$iso3)
 #####################################################################
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
+package_list <- paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv') %>% fread %>% t %>% c
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -88,7 +88,7 @@ source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
 ######################## BIND UBCOV EXTRACTS ########################
 #####################################################################
 #Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if (redownload) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+if (redownload)drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
 codebook <- read_xlsx('hap.xlsx', sheet='codebook') %>% as.data.table
 
 #subset codebook based on outliers, or files that are too large to handle here

@@ -70,19 +70,25 @@ regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
              'dia_cssa',
              'dia_wssa',
              'dia_name-ESH',
-             'dia_mcaca', 
-             'dia_s_america-BRA-GUF', 'BRA',
-             'dia_central_asia', 
+             #'dia_mcaca', 
+             'caca-CUB',
+             #'dia_s_america-BRA-GUF', 'BRA',
+             'ansa-VEN', 'trsa-GUF',
+             #'dia_central_asia', 
+             'stan-TKM',
              'CHN', 'MNG',
              'dia_malay',
              'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
              'dia_se_asia-VNM-THA', 'VNM', 'THA',
-             'dia_mid_east-AFG', 'dia_south_asia+AFG')
+             'mide+TKM', 'soas')
+             #'dia_mid_east-AFG', 'dia_south_asia+AFG'
+
+#regions <- c('stan-TKM', 'ansa-VEN', 'THA')
 
 # regions <- c('dia_afr_horn-ETH-SOM-SSD', 'dia_essa+ETH+SOM+SSD-SWZ-ZWE-LSO',
 #              'dia_central_asia-TKM', 'TKM')
 # 
-#regions <- 'CRI'
+regions <- 'CHN'
 
 # large regions
 #regions <- c('dia_s_america-BRA-GUF-VEN')

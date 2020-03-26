@@ -40,10 +40,11 @@ modeling_shapefile_version <- "2019_09_10"
 #manual_date <- "2019_12_23" #set this value to use a manually specified extract date
 latest_date <- T #set to TRUE in order to disregard manual date and automatically pull the latest value
 save_intermediate <- F
-run_collapse <- T #set to TRUE if you have new data and want to recollapse
+run_collapse <- F #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 new_vetting <- F #set to TRUE to refresh the vetting diagnostic
+redownload <- F
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -368,7 +369,14 @@ for (iso in unique(dt$ihme_loc_id) %>% sort) {
   dropped.nids <- unique(cooking[ihme_loc_id==iso, nid]) %>% 
     .[!(. %in% unique(dt[ihme_loc_id==iso, nid]))]
   
-  if (length(dropped.nids)>0) message('\n', iso, '...NIDs dropped by resample:\n'); cat(dropped.nids, sep=' | ')
+  if (length(dropped.nids)>0) { 
+    
+    message('\n', iso, '...NIDs dropped by resample:\n') 
+    cat(dropped.nids, sep=' | ')
+    codebook[nid %in% dropped.nids, .(nid, year_start, survey_name)] %>% print
+    
+  }
+    
 }
 
 #redefine row ID after resampling
@@ -414,9 +422,24 @@ missing_nids <- codebooked_nids %>% .[!(. %in% unique(dt$nid))]
 tracking <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% read_xlsx(sheet='2. Tracking', skip=1) %>% as.data.table
 
 message('These NIDs need to be added to the tracking sheet:\n')
+
+new_missing_nids <-
 missing_nids %>% 
-  .[!(. %in% unique(tracking$nid))] %>% 
+  .[!(. %in% unique(tracking$nid))] %T>% 
   cat(., sep='\n')
+
+#populate tracking sheet with new missing nids
+adm <- 
+  file.path(doc.dir, 'gbd_solid_fuel_comparison.csv') %>% 
+  fread
+drop <- 
+  file.path(doc.dir, paste0('cooking', '/dropped_clusters.csv')) %>% 
+  fread
+
+tmp <- codebook[nid %in% new_missing_nids, .(survey_name, nid, ihme_loc_id, year_start, survey_module)]
+tmp <- merge(adm, drop, by='nid', all.x=T)
+tmp <- merge(tmp, drop, by='nid', all.x=T)
+tmp[, names(tracking), with=F]
 #***********************************************************************************************************************************
  
 #---MERGE CSV's of PROBLEMATIC SURVEYS----------------------------------------------------------------------------------------------

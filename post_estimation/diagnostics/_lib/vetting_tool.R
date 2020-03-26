@@ -331,15 +331,61 @@ imgUploadHelper <- function(plots, my_tkn=tkn, cb=info[['cb']], nid=problem.nid)
   message('www.imgur.com/a/',alb$id)
   
 }
+
+#helper function to examine the raw data DTA
+readRawData <- function(this.nid,
+                        var.fam='cooking',
+                        dirs=list (
+                          'raw'=raw.dir, #by default these dirs can be pulled from global namespace
+                          'collapse'=collapse.dir,
+                          'pe'=pe.dir,
+                          'model'=model.dir,
+                          'doc'=doc.dir,
+                          'geog'=geog.dir,
+                          'gbd'=gbd.dir
+                        ),
+                        debug=F) {
+  
+  if (debug) browser()
+  
+  #get path from codebook
+  cb <-
+    file.path(dirs[['doc']], 'hap.xlsx') %>% 
+    read_xlsx(., sheet='codebook') %>% 
+    as.data.table %>% 
+    .[nid==this.nid]
+  
+  path <- cb$file_path %>% 
+    gsub('J:', j_root, .) %>% 
+    gsub('L:', l_root, .) %T>%
+    message('reading raw file from\n', .)
+    
+  dt <- haven::read_dta(path) %>% 
+    as.data.table
+  
+  message('it has these cols\n', cat(names(dt), '|'))
+  message('attemping to subset to relavant cols')
+  
+  dt <-
+    dt %>% 
+    setnames(., names(dt), names(dt) %>% tolower) %>% 
+    .[, c(cb$hh_size, cb$cooking_fuel), with=F] %>% 
+    setnames(., c('hh_size', 'cooking_fuel')) %>% 
+    return
+    
+}
 #***********************************************************************************************************************
 
 # ---VET----------------------------------------------------------------------------------------------------------------
 
 #which nid are we vetting?
-problem.nid <- 165498 #set the NID you want to vet
+problem.nid <- 1477 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)
+
+#examine raw data
+raw <- readRawData(problem.nid)
 
 #display available files
 str(info)
