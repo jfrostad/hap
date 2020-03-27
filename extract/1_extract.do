@@ -47,7 +47,7 @@ local topics hap
 local array 1075
 local outpath "`l'/LIMITED_USE/LU_GEOSPATIAL/ubcov_extractions/hap"
 //local outpath_J "`j'/temp/qnguyen1/ubcov_extractions"
-//local options bypass //leave it blank if you don't want to keep, bypass, or run_all. If you are running on cluster, you have to use bypass as an option otherwise it will error.
+local options bypass //leave it blank if you don't want to keep, bypass, or run_all. If you are running on cluster, you have to use bypass as an option otherwise it will error.
 
 
 
