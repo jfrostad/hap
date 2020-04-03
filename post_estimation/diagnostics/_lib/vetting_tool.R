@@ -379,7 +379,7 @@ readRawData <- function(this.nid,
 # ---VET----------------------------------------------------------------------------------------------------------------
 
 #which nid are we vetting?
-problem.nid <- 1477 #set the NID you want to vet
+problem.nid <- 326837 #set the NID you want to vet
 
 #build the vetting object
 info <- vetAssistant(problem.nid)

@@ -26,33 +26,33 @@ load_gbd_data     <- function(gbd_type,
                               gbd_round_id = 5,
                               named_location_field = "GAUL_CODE",
                               ...) {
-
+  
   # get GAUL to location_id mapping
   gaul_to_loc_id <- get_location_code_mapping(shapefile_version = shapefile_version)
   gaul_to_loc_id <- gaul_to_loc_id[, list(location_id = loc_id, GAUL_CODE)]
-
+  
   loc_ids <- gaul_to_loc_id[GAUL_CODE %in% gaul_list, location_id]
-
+  
   # load covariate data
   if (gbd_type == "covariate") {
-
+    
     # get covariate metadata from covariate_name_short
     metadata <- get_covariate_metadata()
     covariate_id <- metadata[covariate_name_short == tolower(gbd_name), covariate_id]
     covariate_by_age <- metadata[covariate_name_short == tolower(gbd_name), by_age]
     covariate_by_sex <- metadata[covariate_name_short == tolower(gbd_name), by_sex]
-
+    
     # get covariate data
     source(path_join(CC_ENV_DIR, 'get_covariate_estimates.R'))
     if (covariate_by_age) {
-        gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, age_group_id = age_group_id, gbd_round_id = gbd_round_id, ...)
+      gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, age_group_id = age_group_id, gbd_round_id = gbd_round_id, ...)
     } else {
-        gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, gbd_round_id = gbd_round_id, ...)
+      gbd_estimates <- get_covariate_estimates(covariate_id = covariate_id, location_id = loc_ids, year_id = year_ids, gbd_round_id = gbd_round_id, ...)
     }
-
+    
     # collapse to all age, both sexes (if specified, and if there are multiple age and/or sex groups)
     if (collapse_age_sex & gbd_estimates[, uniqueN(age_group_name) > 1 | uniqueN(sex_id) > 1]) {
-
+      
       # get population data
       source(path_join(CC_ENV_DIR, 'get_population.R'))
       gbd_pops <- get_population(age_group_id = gbd_estimates[, unique(age_group_id)],
@@ -61,31 +61,31 @@ load_gbd_data     <- function(gbd_type,
                                  sex_id = gbd_estimates[, unique(sex_id)],
                                  gbd_round_id = gbd_round_id,
                                  ...)
-
+      
       # population-weight the covariate data
       gbd_estimates <- merge(gbd_estimates, gbd_pops, by=c('location_id', 'sex_id', 'age_group_id', 'year_id'))
       gbd_estimates <- gbd_estimates[, list(mean_value = weighted.mean(mean_value, population, na.rm=T)), by='location_id,year_id']
     }
-
+    
     # format and return
     gbd_estimates <- merge(gbd_estimates, gaul_to_loc_id, by="location_id")
     setnames(gbd_estimates, c(named_location_field, "year_id", "mean_value"), c("name", "year", "mean"))
-
+    
     if(return_by_age_sex=='no') gbd_estimates <- gbd_estimates[, list(name, year, mean)]
     if(return_by_age_sex=='yes') gbd_estimates <- gbd_estimates[, list(name, year, mean, sex_id, age_group_id)]
-
+    
     return(gbd_estimates)
   }
-
+  
   # load cause data
   if (gbd_type == "output") {
-
+    
     # get cause metadata
     source(path_join(CC_ENV_DIR, 'get_cause_metadata.R'))
     metadata <- get_cause_metadata(cause_set_id = 2, gbd_round_id = gbd_round_id)
     cause_id <- suppressWarnings(as.numeric(gbd_name))
     if (is.na(cause_id)) cause_id <- metadata[acause == gbd_name, cause_id]
-
+    
     # get cause data
     source(path_join(CC_ENV_DIR, 'get_outputs.R'))
     gbd_estimates <- get_outputs(topic = "cause",
@@ -98,15 +98,15 @@ load_gbd_data     <- function(gbd_type,
                                  location_id = loc_ids,
                                  year_id = year_ids,
                                  ...)
-
+    
     all_data <- merge(gaul_to_loc_id, gbd_estimates, by="location_id")
     setnames(all_data, c(named_location_field, "year_id", "val"), c("name", "year", "mean"))
     all_data <- all_data[, list(name, year, mean)]
-
+    
     return(all_data)
-
+    
   }
-
+  
 }
 
 
@@ -146,18 +146,18 @@ get_gbd_locs <- function(reg,
       mutate(rak_level = as.character(rak_level)) %>% 
       dplyr::rename(location_id = loc_id) %>% 
       mutate(location_id = as.numeric(as.character(location_id)))
-
+    
     ADM_CODE <- connector$ADM0_CODE
     for(rl in unique(connector$rak_level)){
       ADM_CODE[which(rl == connector$rak_level)] <- connector[[paste0('ADM', rl, '_CODE')]][which(rl == connector$rak_level)]
     }
-
+    
     connector <- cbind(connector, ADM_CODE)
     
   } else {
     connector <-
-    get_location_code_mapping(shapefile_version = shapefile_version)[ADM_CODE %in% get_adm0_codes(reg, shapefile_version = shapefile_version),
-                                                                     list(location_id = loc_id, ADM_CODE)]
+      get_location_code_mapping(shapefile_version = shapefile_version)[ADM_CODE %in% get_adm0_codes(reg, shapefile_version = shapefile_version),
+                                                                       list(location_id = loc_id, ADM_CODE)]
   }
   return(data.table(connector))
 }
@@ -189,7 +189,7 @@ get_gbd_estimates <- function(gbd_type,
                               shapefile_version = 'current',
                               rake_subnational = TRUE, 
                               gbd_round_id = 5) {
-
+  
   ## get GAUL to location_id mapping
   gaul_to_loc_id <- get_gbd_locs(
     reg = region,
@@ -221,7 +221,7 @@ get_gbd_estimates <- function(gbd_type,
   metadata <- get_cause_metadata(cause_set_id = 2, gbd_round_id = gbd_round_id)
   cause_id <- suppressWarnings(as.numeric(gbd_name))
   if (is.na(cause_id)) cause_id <- metadata[acause == gbd_name, cause_id]
-
+  
   ## get cause data
   source(path_join(CC_ENV_DIR, 'get_outputs.R'))
   gbd_estimates <- get_outputs(topic = "cause",
@@ -233,13 +233,13 @@ get_gbd_estimates <- function(gbd_type,
                                age_group_id = age_group_id,
                                location_id = loc_ids,
                                year_id = year_ids)
-
+  
   all_data <- merge(gaul_to_loc_id, gbd_estimates, by="location_id")
   setnames(all_data, c("location_id", "year_id", "val"), c("name", "year", "mean"))
   all_data <- all_data[, list(name, year, mean)]
-
+  
   return(all_data)
-
+  
 }
 
 
@@ -253,12 +253,12 @@ get_gbd_estimates <- function(gbd_type,
 # Later will need to be explicit about years (for now everyone is doing 2000-2015, 4 yr intervals)
 #################################################################################
 get_population_data     <- function(simple_raster){
-
+  
   # load population raster
   # RB 27SEPT: Note this is a temporary location, and is only Africa so updates will be necessary
   root <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j/")
   pop<- brick(sprintf('%stemp/geospatial/U5M_africa/data/raw/covariates/new_20160421/pop_stack.tif',root))
-
+  
   # make sure population is cropped and extented to same as simple_raster
   # this is important, otherwise IDX wont work.
   if(!is.null(simple_raster)){
@@ -284,9 +284,9 @@ get_population_data     <- function(simple_raster){
 #################################################################################
 load_admin_raster  <- function(admin_level, simple_raster, disag_fact=NULL,
                                shapefile_version = 'current'){
-
+  
   if(!admin_level %in% c(0,1,2)) stop("admin_level must be either 0, 1, or 2")
-
+  
   # load admin raster
   #adm <- raster(sprintf('%stemp/geospatial/U5M_africa/data/clean/shapefiles/ad%i_raster.grd',root,admin_level))
   if(!is.null(disag_fact)){
@@ -294,16 +294,16 @@ load_admin_raster  <- function(admin_level, simple_raster, disag_fact=NULL,
   } else {
     sr = simple_raster
   }
-
+  
   # UPDATED: master gaul admin shapefiles
   shapes <- shapefile(get_admin_shapefile(admin_level, version = shapefile_version))
-
+  
   # The variable we rasterize on must be numeric.
   shapes@data[[paste0('ADM', admin_level,'_CODE')]] <- as.numeric(as.character(shapes@data[[paste0('ADM', admin_level,'_CODE')]]))
-
+  
   # crop
   cropped_shapes <- crop(shapes, extent(sr), snap="out")
-
+  
   ## Fix rasterize
   initial_raster <- rasterize_check_coverage(cropped_shapes, sr, field = paste0('ADM', admin_level,'_CODE'))
   if(length(cropped_shapes[!cropped_shapes[[paste0('ADM', admin_level,'_CODE')]]%in%unique(initial_raster),])!=0) {
@@ -314,9 +314,9 @@ load_admin_raster  <- function(admin_level, simple_raster, disag_fact=NULL,
   }
   #rasterized_shape <- rasterize(cropped_shapes, sr, field=paste0('ADM', admin_level,'_CODE'))
   masked_shapes <- mask(x=rasterized_shape, mask=sr)
-
+  
   return(masked_shapes)
-
+  
 }
 
 
@@ -424,7 +424,7 @@ make_population_weights  <- function(admin_level,
                                      pop_raster,
                                      gaul_list,
                                      custom_admin_raster = NULL) {
-
+  
   #use custom admin raster for raking
   if(!is.null(custom_admin_raster)) {
     adm <- custom_admin_raster
@@ -432,62 +432,62 @@ make_population_weights  <- function(admin_level,
     # load admin raster, crop down to simple_raster
     adm <- load_admin_raster(admin_level, simple_raster) #had to add this here, not working in call otherwise ers
   }
-
+  
   adm <- crop(adm,simple_raster)
   adm <- mask(adm,simple_raster)
   # if(admin_level==0) adm <- simple_raster
-
+  
   if(admin_level==0) adm[adm==1013965]=227
-
+  
   # load population data
   pop <- pop_raster
-
+  
   # do using cell index (vectorized)
   cell_idx <- seegSDM:::notMissingIdx(simple_raster)
   adm_cell <- raster::extract(adm, cell_idx)
-
+  
   pop_layer_names <- names(pop_raster)
-
+  
   make_weights_vector <- function(x) {
-
+    
     ad2_code <- raster::extract(adm$layer, cell_idx)
     ad2_code[is.na(ad2_code)] <- 0
     pop_cell <- raster::extract(pop[[x]], cell_idx)
     pop_cell[is.na(pop_cell)] <- 0
-
+    
     message(paste0(length(unique(ad2_code)), " unique admin codes in this level."))
-
+    
     pop_totals_adm <- aggregate(pop_cell~ad2_code, FUN=sum)
     pop_totals_adm$pop_cell[pop_totals_adm$pop_cell==0] <- 0.0001
-
+    
     ## replicate totals for all cells in area
     pop_totals_adm_cell <- as.vector(pop_totals_adm)[match(adm_cell,
                                                            pop_totals_adm$ad2_code),]
     pop_totals_adm_cell$ad2_code <- NULL
-
+    
     ## get  population weights for each cell
     pop_wt_adm <- pop_cell / pop_totals_adm_cell
     pop_wt_adm[is.na(pop_wt_adm)] <- 0
     pop_wt_adm_vector <- pop_wt_adm$pop_cell
-
+    
     wt_sum_ad2 <- tapply(pop_wt_adm_vector, ad2_code, sum)
     stopifnot(all.equal(wt_sum_ad2, round(wt_sum_ad2)))
-
+    
     names(pop_wt_adm_vector) <- x
     return(pop_wt_adm_vector)
-
+    
   }
-
+  
   pop_weights_by_layer <- lapply(pop_layer_names, make_weights_vector)
   pop_wt_matrix <- do.call(cbind, pop_weights_by_layer)
   rownames(pop_wt_matrix) <- cell_idx
   colnames(pop_wt_matrix) <- pop_layer_names
-
+  
   # return
   return(list('pop_wt'     =as.matrix(pop_wt_matrix),
               'admin_level'=admin_level,
               'adm_code'   =adm_cell))
-
+  
 }
 
 
@@ -514,30 +514,30 @@ make_condSim  <- function(pop_wts_object,
                           shapefile_version = 'current'){
   # ease
   p=pop_wts_object
-
+  
   message(sprintf('Aggregating results by draw to the admin %i level. If you want a different aggregation level, re-run make_population_weights with a different value for the admin_level argument. \n\n',p$admin_level))
-
+  
   # make pop_wt long
   pop_wt=as.vector(p$pop_wt)
-
+  
   # throw exception if data are non-conformable
   if(length(pop_wt)!=dim(cell_pred)[1])
     stop('Population Weights not same number of cells as cell predictions.')
-
-
+  
+  
   # get admin gauls (or names) at each cell. Repeat for number of years
   yrs = length(pop_wt)/length(p$adm_code)
   message(sprintf('There are %i years of data here. Modeler please be sure your population years and data years are aligned. Current input is %s \n\n',yrs,paste(years,collapse=' ')))
-
+  
   p$adm_code[p$adm_code == 'NA'] <- NA
   periods <- rep(years, each = length(p$adm_code))
   adm_code_all <- paste(p$adm_code, periods, sep = '_')
-
+  
   # get NA mask
   good_cells <- which(!is.na(rep(p$adm_code,yrs)))
   good_cells <- good_cells[which(!is.na(cell_pred[good_cells,1]))]
   good_cells <- good_cells[which(!is.na(pop_wt[good_cells]))]
-
+  
   # rescale pop weights if some got dropped
   require(data.table)
   dt = data.table(pw=pop_wt[good_cells],ad=adm_code_all[good_cells])
@@ -546,7 +546,7 @@ make_condSim  <- function(pop_wts_object,
   dt[,pw:=pw/tot]
   pw = dt$pw
   ad = dt$ad
-
+  
   # actual condSim run
   if(fun=='mean'){
     cond_sim_adm <- condSim(vals    = cell_pred[good_cells,],
@@ -558,7 +558,7 @@ make_condSim  <- function(pop_wts_object,
                             group   = ad, #adm_code_all[good_cells],
                             fun     = fun)
   }
-
+  
   # summarize if requested
   if(summarize==TRUE){
     message(sprintf('Returning Summary (mean) made from %i draws. \n\n',dim(cell_pred)[2]))
@@ -566,11 +566,11 @@ make_condSim  <- function(pop_wts_object,
   } else{
     message(sprintf('Returning %i draws. \n\n',dim(cell_pred)[2]))
   }
-
+  
   # Make sure we only return results for admin units in the list of adm0 gaul codes requested. There's the possibility that a few cells near the borders get counted for the adjacent countries.
   # Get list of admin* codes within selected admin0 codes
   adm_gaul_list <- get_adm_codes_subnat(gaul_list, admin_level,
-                                               shapefile_version = shapefile_version)
+                                        shapefile_version = shapefile_version)
   # Convert named vector to dataframe
   if(summarize) {
     tmp <- cbind(read.table(text = names(cond_sim_adm)), val = cond_sim_adm)
@@ -581,12 +581,12 @@ make_condSim  <- function(pop_wts_object,
     # Convert back to dataframe
     clean_cond_sim_adm <- tmp$val
     names(clean_cond_sim_adm) <- tmp$V1
-
+    
     return(clean_cond_sim_adm)
-
+    
   } else { return(cond_sim_adm) }
-
-
+  
+  
 }
 
 
@@ -618,30 +618,30 @@ split_geo_names <- function(condSim_object){
 calc_raking_factors <- function(agg_geo_est = cond_sim_adm0,
                                 gaul_list   = gaul_list,
                                 rake_to     = gbd) {
-
+  
   message('WARNING: function will not work as expected if agg_geo_est and rake_to are not aggregated at the same admin level.')
-
+  
   if(sum(colnames(rake_to) %in% c('name','year','mean')) != 3)
     stop('rake_to should be a data table with column names `name`, `year`, and `mean`')
-
+  
   if(dim(t(as.matrix(agg_geo_est)))[1]!=1 | is.null(names(agg_geo_est)))
     stop('agg_geo_est must be a named vector returned from make_condSim() with summarize option equal to TRUE')
-
-
-
+  
+  
+  
   # transpose and rename agg_geo_est
   agg_geo_est <- data.table(split_geo_names(as.matrix(agg_geo_est)),agg_geo_est)
   agg_geo_est$year <- as.numeric(agg_geo_est$year)
   agg_geo_est$name <- as.numeric(agg_geo_est$name)
-
+  
   # merge
   merged <- merge(agg_geo_est,rake_to, by=c('name','year'),all.x=T)
   names(merged)[names(merged)=='agg_geo_est'] <- 'geo_mean'
   names(merged)[names(merged)=='mean'] <- 'rake_to_mean'
-
+  
   # calculate raking factors
   merged[,raking_factor:=rake_to_mean/geo_mean,]
-
+  
   return(merged)
 }
 
@@ -657,26 +657,26 @@ rake_predictions <- function(raking_factors,
                              pop_wts_object,
                              cell_pred,
                              logit_rake=FALSE){
-
+  
   ## Replicate adm codes by years
   adm_codes_all = pop_wts_object$adm_code
   adm_codes_all[adm_codes_all == 'NA'] <- NA
   periods <- rep(unique(raking_factors$year), each = length(adm_codes_all))
   adm_codes_all <- paste(adm_codes_all, periods, sep = '_')
-
+  
   # merge adm codes and raking factor
   z=data.frame(ID=adm_codes_all,order=1:length(adm_codes_all))
   z$ID<-as.character(z$ID)
   raking_factors$ID = paste(raking_factors$name,raking_factors$year,sep='_')
   factors_all=merge(z,raking_factors[,c('ID','raking_factor'),with=FALSE],by="ID",all.x=T)
   factors_all=factors_all[order(factors_all$order), ]
-
+  
   # make a results frame
   raked<-matrix(NA,nrow=nrow(cell_pred),ncol=ncol(cell_pred))
-
+  
   if(dim(factors_all)[1]!=dim(raked)[1])
     stop('Factors_all and Raked dimensions do not match')
-
+  
   # multiply through the raking factor
   message(sprintf('raking %i draws',dim(raked)[2]))
   pb <- txtProgressBar(min=0,max=dim(raked)[2],initial=0)
@@ -693,9 +693,9 @@ rake_predictions <- function(raking_factors,
     }
   }
   close(pb)
-
+  
   return(raked)
-
+  
 }
 
 
@@ -708,82 +708,82 @@ cirange = function(x){
 }
 
 qcd <- function(x, quantile_low = 5, quantile_high = 95) {
-
+  
   # "quantile  coefficient of dispersion"
   low <- quantile_low/100
   high <- quantile_high/100
   quantiles <- quantile(x, c(low, high), na.rm = T)
   q_low <- as.numeric(quantiles[1])
   q_high <- as.numeric(quantiles[2])
-
+  
   output <- (q_high - q_low) / (q_high + q_low)
-
+  
   return(output)
 }
 
 odds_qcd <- function(x, quantile_low = 5, quantile_high = 95) {
-
+  
   # "quantile coefficient of dispersion, odds"
   low <- quantile_low/100
   high <- quantile_high/100
   quantiles <- quantile(x, c(low, high), na.rm = T)
   q_low <- as.numeric(quantiles[1])
   q_high <- as.numeric(quantiles[2])
-
+  
   q_low <- q_low / (1-q_low)
   q_high <- q_high / (1-q_high)
-
+  
   output <- (q_high - q_low) / (q_high + q_low)
-
+  
   return(output)
 }
 
 iqr <- function(x, quantile_low = 25, quantile_high = 75) {
-
+  
   # "interquantile" range - can specify
   low <- quantile_low / 100
   high <- quantile_high / 100
   quantiles <- quantile(x, c(low, high), na.rm = T)
   q_low <- as.numeric(quantiles[1])
   q_high <- as.numeric(quantiles[2])
-
+  
   output <- (q_high - q_low)
-
+  
   return(output)
-
+  
 }
 
 get_percentile <- function(x, percentile) {
-
+  
   # Simply get and return a percentile
   percentile <- as.numeric(percentile)
   output <- quantile(x, percentile / 100, na.rm = T)
   return(output)
-
+  
 }
 
 p_below <- function(x, value, equal_to = F) {
-
+  
   # probability <  (or <= if equal_to = T) target value
   value <- as.numeric(value)
   if (equal_to == T) output <- sum(x <= value)
   if (equal_to == F) output <- sum(x < value)
-
+  
   output <- output / length(x)
   return(output)
-
+  
 }
 
 p_above <- function(x, value, equal_to = F) {
-
+  
   # probability > (or >= if equal_to = T) target value
   value <- as.numeric(value)
   if (equal_to == T) output <- sum(x >= value)
   if (equal_to == F) output <- sum(x > value)
-
+  
   output <- output / length(x)
   return(output)
-
+  
 }
 
 lower <- function(x) {
@@ -799,35 +799,35 @@ upper <- function(x) {
 }
 
 cfb <- function(v) {
-
+  
   # Calculate the Coffey-Feingold-Bromberg metric for
   # a numeric vector `v` - useful as a normed measure
   # of variability for a set of proportions.
-
+  
   # This implementation assumes equal weights
-
+  
   # Reference:
   # Coffey, M. P., Feingold, M., & Bromberg, J. (1988).
   # A normed measures of variability among proportions.
   # Computational Statistics & Data Analysis, 7(2), 127-141.
   # https://doi.org/10.1016/0167-9473(88)90088-6
-
+  
   # calculate mean (u) and sample size (n)
   u <- mean(v, na.rm = T)
   if (is.na(u)) return(NA)
   n = length(v)
-
+  
   # define numerator (h)
   h = var(v)
-
+  
   # calculate denominator (max h)
   # (assuming equal weights)
   r <- n*u - floor(n*u)
   h_max <- u*(1-u) - r*(1-r)/n
-
+  
   # return H statistic (sqrt(h/h_max))
   return(sqrt(h / h_max))
-
+  
 }
 
 #################################################################################
@@ -844,20 +844,20 @@ make_cell_pred_summary    <- function(draw_level_cell_pred,
                                       return_as_raster     = TRUE,
                                       summary_stat         = 'mean',
                                       ...){
-
+  
   # make summary
   summ <- apply(draw_level_cell_pred, 1, summary_stat, ...)
-
+  
   # put it in a raster
   if(return_as_raster){
     yrs = dim(draw_level_cell_pred)[1]/length(cellIdx(mask))
     message(sprintf('Making a RasterBrick with %i layers',yrs))
     summ <- insertRaster(mask,  matrix(summ,  ncol = yrs))
   }
-
-
+  
+  
   return(summ)
-
+  
 }
 
 
@@ -879,44 +879,51 @@ make_cell_pred_summary    <- function(draw_level_cell_pred,
 #'                         c("mean", "cirange", "upper", "lower"))
 
 make_admin_pred_summary    <- function(admin_pred,
+                                       admin_level,
                                        sp_hierarchy_list,
                                        summary_stats = 'mean',
                                        ...){
 
   ### Get set up
   str_match <- stringr::str_match
+  
+  # Define admin name/code vars based on working admin level
+  admin_code_col <- paste0('ADM', admin_level ,'_CODE')
+  admin_name_col <- paste0('ADM', admin_level ,'_NAME')
 
   # Split up your input data
-  ad_code <- subset(admin_pred, select = grep("ADM[0-9]_CODE", names(admin_pred)))
+  admin_code <- subset(admin_pred, select = admin_code_col)
   year <- subset(admin_pred, select = "year")
-  pop <- subset(admin_pred, select = "pop")
+  pop <- subset(admin_pred, select = "pop_raked")
   draws <- subset(admin_pred, select = grep("V[0-9]*", names(admin_pred)))
-
-  # Get the admin level
-  ad_code_name <- names(ad_code)
-  ad_level <- as.numeric(str_match(ad_code_name,"ADM([0-9])_CODE")[,2])
-
+  
+  # # Get the admin level
+  # ad_code_name <- names(ad_code)
+  # ad_level <- as.numeric(str_match(ad_code_name,"ADM([0-9])_CODE")[,2])
+  
   # Get all admin levels
-  all_admin_levels <- as.numeric(str_match(names(sp_hierarchy_list), "ADM([0-9])_CODE")[,2])
-  all_admin_levels <- unique(all_admin_levels)[!is.na(unique(all_admin_levels))]
-
+  all_admin_levels <- names(sp_hierarchy_list) %>% 
+    .[. %like% 'CODE'] %>% 
+    sapply(., substr, start=4, stop=4) %>% 
+    as.numeric
+  
   ### Make summary
   summ_list <- lapply(summary_stats, function(ss) {
     apply(draws, 1, ss, ...)})
-
+  
   if (length(summ_list) > 1) {
-    output_df <- as.data.table(cbind(year, ad_code, do.call(cbind, summ_list)))
+    output_df <- as.data.table(cbind(year, admin_code, do.call(cbind, summ_list)))
     names(output_df)[grep("V[0-9]*", names(output_df))] <- summary_stats
   } else if (length(summ_list) == 1) {
-    output_df <- as.data.table(cbind(year, ad_code, summ_list[[1]]))
+    output_df <- as.data.table(cbind(year, admin_code, summ_list[[1]]))
     names(output_df)[grep("V[0-9]*", names(output_df))] <- summary_stats
   }
-
+  
   ### Add on identifiers
-
+  
   # Drop smaller admin levels
-  drop_levels <- all_admin_levels[all_admin_levels > ad_level]
-
+  drop_levels <- all_admin_levels[all_admin_levels > admin_level]
+  
   if (length(drop_levels) > 0) {
     for (d in drop_levels) {
       drop_cols <- names(sp_hierarchy_list)[grepl(paste0("ADM",d), names(sp_hierarchy_list))]
@@ -924,26 +931,26 @@ make_admin_pred_summary    <- function(admin_pred,
     }
   }
   sp_hierarchy_list <- unique(sp_hierarchy_list)
-
+  
   output_df <- merge(sp_hierarchy_list, output_df, all.y = T, all.x = F)
 
   # Clean up & sort
-  order_vars <- c(paste0("ADM", 0:ad_level, "_NAME"), "year")
+  order_vars <- c(paste0("ADM", 0:admin_level, "_NAME"), "year")
   setorderv(output_df, order_vars)
-
+  
   # Get col order
-  ad_col_order <- sort(names(output_df)[grep("AD*_*", names(output_df))])
-  cols_to_order <- c(ad_col_order, "region", "year", summary_stats)
+  admin_col_order <- sort(names(output_df)[grep("AD*_*", names(output_df))])
+  cols_to_order <- c(admin_col_order, "region", "year", summary_stats)
   cols_to_order <- cols_to_order[cols_to_order %in% names(output_df)]
   if (length(cols_to_order) < length(names(output_df))) {
     other_cols <- names(output_df)[!(names(output_df) %in% cols_to_order)]
     cols_to_order <- c(cols_to_order, other_cols)
   }
-
+  
   setcolorder(output_df, cols_to_order)
-
+  
   return(output_df)
-
+  
 }
 
 ## summarize_admins ################################################
@@ -999,11 +1006,14 @@ summarize_admins <- function(ind = indicator,
       for (ad in ad_levels) {
         message(paste0("Summarizing ", ind, ": admin ", ad, " (", rake, ")"))
         ad_summary_table <- make_admin_pred_summary(admin_pred = get(paste0("admin_", ad)),
+                                                    admin_level = ad,
                                                     sp_hierarchy_list,
                                                     summary_stats = summstats,
                                                     ...)
-        fwrite(ad_summary_table,
-               file = paste0(output_dir, ind, ifelse(metric == "counts", "_c", ""), "_admin_", ad, "_", rake, file_addin, "_summary.csv"))
+        write.csv(ad_summary_table,
+                  file = paste0(output_dir, ind, ifelse(metric == "counts", "_c", ""), "_admin_", ad, "_", rake, 
+                                file_addin, "_summary.csv"),
+                  row.names=F)
       }
     }
   }
@@ -1018,17 +1028,17 @@ save_post_est   <- function(x,
                             filetype,
                             filename,
                             indic = indicator){
-
+  
   output_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indic, '/output/', run_date)
-
-
+  
+  
   dir.create(output_dir, showWarnings = FALSE)
-
+  
   filetype = tolower(filetype)
   if(!filetype %in% c('rdata','raster','csv'))
     stop('filetype argument has to be either rdata or raster or csv')
-
-
+  
+  
   if(filetype=='raster')
     writeRaster(
       x,
@@ -1036,21 +1046,21 @@ save_post_est   <- function(x,
       format='GTiff',
       overwrite = TRUE
     )
-
+  
   if(filetype=='rdata')
     save(
       x,
       file = paste0(output_dir, '/', indic,'_',filename,'.RData'),
       compress = TRUE
     )
-
+  
   if(filetype=='csv')
     write.csv(
       x,
       file = paste0(output_dir, '/', indic,'_',filename,'.csv')
     )
-
-
+  
+  
 }
 
 
@@ -1069,8 +1079,8 @@ load_cell_preds <- function(indicator_group,
                             u5m=FALSE,
                             other='',
                             ageasindic=TRUE){
-
-
+  
+  
   if(u5m){
     if(ageasindic==FALSE){
       load(paste0('/share/geospatial/mbg/',indicator_group,'/',indicator,'/output/',rd,'/',
@@ -1094,10 +1104,10 @@ load_cell_preds_stack <- function(indicator_group,
                                   rd = run_date,
                                   region,
                                   agebin){
-
+  
   load(paste0('/share/geospatial/mbg/',indicator_group,'/',indicator,'/output/',rd,'/',
               indicator,'_cell_draws_eb_bin',agebin,'_',region,'_0_stacked_results.RData')) # the 0 are no holdouts
-
+  
   return(cell_pred)
 }
 
@@ -1114,11 +1124,11 @@ fit_stats <- function(is_data,
                       indicator_group,
                       run_date,
                       pathaddin) {
-
+  
   ### Fit statistics
   model_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date)
   image_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history')
-
+  
   ## Append in- and out-of-sample coords
   is_data <- is_data[, c('latitude','longitude','period','N',indicator), with=FALSE]
   is_data <- is_data[, oos := 0]
@@ -1127,13 +1137,13 @@ fit_stats <- function(is_data,
   all_data <- rbind(is_data, oos_data)
   if(indicator_family=='binomial') all_data <- all_data[, obs := get(indicator) / N]
   if(indicator_family!='binomial') all_data <- all_data[, obs := get(indicator)]
-
+  
   ## Extract predictions at input data and bind to input datatable
   message("Loading cell_preds and inputs...")
   load(paste0(image_dir,'/', run_date, pathaddin, '.RData'))
   mean_preds <- brick(paste0(model_dir, '/', indicator, '_prediction_eb', pathaddin))
   load(paste0(model_dir, '/', indicator, '_cell_draws_eb', pathaddin, '.RData'))
-
+  
   cell_pred.dt <- as.data.table(cell_pred)
   cols <- names(cell_pred.dt)
   message("Making upper and lower credible interval rasters...")
@@ -1141,137 +1151,137 @@ fit_stats <- function(is_data,
   cell_pred.dt <- cell_pred.dt[ , lower := apply(.SD, 1, quantile, c(.025), na.rm=TRUE), .SDcols=cols]
   upper <- cell_pred.dt[, upper]
   lower <- cell_pred.dt[, lower]
-
+  
   upper_raster <- insertRaster(simple_raster,
                                matrix(upper,
                                       ncol = length(unique(all_data$period))))
   lower_raster <- insertRaster(simple_raster,
                                matrix(lower,
                                       ncol = length(unique(all_data$period))))
-
+  
   message("Extracting upper and lower values at all coordinates...")
   # extract cluster covariates
   all_data$longitude<-as.numeric(all_data$longitude)
   all_data$latitude <-as.numeric(all_data$latitude )
-
+  
   # add dummy column for time-varying covariates
   all_data$pred <- NA
   all_data$upper <- NA
   all_data$lower <- NA
-
+  
   # loop through time varying predictions to insert them
   for (period in sort(unique(all_data$period))) {
-
+    
     # find matching rows
     message(paste0('Extracting predictions for period ',period))
     idx_tv<- which(all_data$period == period)
-
+    
     # get period prediction raster
     craster  <- mean_preds[[period]]
     crs(craster)="+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-
+    
     uraster  <- upper_raster[[period]]
     crs(uraster)="+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-
+    
     lraster  <- lower_raster[[period]]
     crs(lraster)="+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-
+    
     # extract values
     extr <- extract(craster, all_data[idx_tv, c('longitude', 'latitude'),with=F])
     upper_extr <- extract(uraster, all_data[idx_tv, c('longitude', 'latitude'),with=F])
     lower_extr <- extract(lraster, all_data[idx_tv, c('longitude', 'latitude'),with=F])
-
+    
     # add into df
     all_data[['pred']][idx_tv]=extr
     all_data[['upper']][idx_tv]=upper_extr
     all_data[['lower']][idx_tv]=lower_extr
-
+    
   }
-
+  
   ## Make fit statistics
   ## Add to df to combine later however we want
   message("Calculating all fit statistics at each coordinate...")
-
+  
   # Drop missing predictions
   message(paste0('Predictions missing for ', length(all_data[is.na(pred), pred]), '/', length(all_data[ , pred]), ' observations'))
   message('If you have missings, this either due to missing covariate values (bad) or points that were in the buffer zone (fine).')
   message('Dropping missing rows...')
   df_no_nas <- all_data[!is.na(pred), ]
-
+  
   # Coverage
   df_no_nas <- df_no_nas[obs >= lower & obs <= upper, covered := 1]
   df_no_nas <- df_no_nas[obs < lower | obs > upper, covered := 0]
-
+  
   # Error
   df_no_nas <- df_no_nas[, error := obs - pred]
-
+  
   # Make statistics over entire IS dataset
   mean_error <- mean(df_no_nas[oos==0, error])
   mean_absolute_error <- mean(df_no_nas[oos==0, abs(error)])
   rmse <- sqrt(mean(df_no_nas[oos==0, error]^2))
   coverage <- mean(df_no_nas[oos==0, covered])
-
+  
   # Make statistics over entire OOS dataset
   oos_mean_error <- mean(df_no_nas[oos==1, error])
   oos_mean_absolute_error <- mean(df_no_nas[oos==1, abs(error)])
   oos_rmse <- sqrt(mean(df_no_nas[oos==1, error]^2))
   oos_coverage <- mean(df_no_nas[oos==1, covered])
-
+  
   # Average over all observations
   message("IN-SAMPLE:")
   message(paste0('                       Average error:    ', round(mean_error, 3)))
   message(paste0('                       Average MAE:      ', round(mean_absolute_error, 3)))
   message(paste0('                       Average RMSE:     ', round(rmse, 3)))
   message(paste0('                       Average coverage: ', round(coverage, 3)))
-
+  
   message("OUT-OF-SAMPLE:")
   message(paste0('                       Average error:    ', round(oos_mean_error, 3)))
   message(paste0('                       Average MAE:      ', round(oos_mean_absolute_error, 3)))
   message(paste0('                       Average RMSE:     ', round(oos_rmse, 3)))
   message(paste0('                       Average coverage: ', round(oos_coverage, 3)))
-
+  
   fit_folder <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/fit_stats')
   message(paste0('Saving fit statistics in ', fit_folder))
   dir.create(fit_folder, showWarnings = FALSE)
   message(pathaddin)
   write.csv(df_no_nas, file = paste0(fit_folder, '/fit_stats_', pathaddin, '.csv'))
-
+  
 }
 
 fit_stats_ho_id <- function(draws,
                             draw_prefix,
                             observed) {
-
+  
   message('Your draws must contain columns oos and ho_id.')
   message('Summarizing draws called phat_*...')
   cols <- grep(draw_prefix, names(draws), value=TRUE)
   draws <- draws[, mean := .(mean = rowMeans(.SD)), by = ho_id, .SDcols=cols]
   draws <- draws[ , upper := apply(.SD, 1, quantile, c(.975), na.rm=TRUE), .SDcols=cols]
   draws <- draws[ , lower := apply(.SD, 1, quantile, c(.025), na.rm=TRUE), .SDcols=cols]
-
+  
   message('Calculating fit statistics at each ho_id...')
   # Coverage
   draws <- draws[get(observed) >= lower & get(observed) <= upper, covered := 1]
   draws <- draws[get(observed) < lower | get(observed) > upper, covered := 0]
-
+  
   # Error
   draws <- draws[, error := get(observed) - mean]
-
+  
   # Make statistics over entire OOS dataset
   oos_mean_error <- mean(draws[oos==1, error])
   oos_mean_absolute_error <- mean(draws[oos==1, abs(error)])
   oos_rmse <- sqrt(mean(draws[oos==1, error]^2))
   oos_coverage <- mean(draws[oos==1, covered])
-
+  
   message("OUT-OF-SAMPLE:")
   message(paste0('                       Average error:    ', round(oos_mean_error, 3)))
   message(paste0('                       Average MAE:      ', round(oos_mean_absolute_error, 3)))
   message(paste0('                       Average RMSE:     ', round(oos_rmse, 3)))
   message(paste0('                       Average coverage: ', round(oos_coverage, 3)))
-
+  
   message('Returning draws with fit stat columns added.')
   return(draws)
-
+  
 }
 
 
@@ -1344,14 +1354,14 @@ FindK <- function(p_i, p_N, N_i, a, Mult=FALSE) {
 ################ SAVE BEST MODEL FUNCTION ##########################
 
 save_best_model <- function(indicator_group, indicator, run_date, measure) {
-
+  
   ######################################################################
   ######################################################################
-
+  
   ## Set repo location and indicator group
   core_repo <- '/share/code/geospatial/lbd_core/'
-
-
+  
+  
   ## Load libraries and miscellaneous MBG project functions.
   mbg_functions <- c('mbg_functions.R', 'prep_functions.R',
                      'covariate_functions.R', 'misc_functions.R',
@@ -1364,18 +1374,18 @@ save_best_model <- function(indicator_group, indicator, run_date, measure) {
   source_functions(paste(core_repo, 'mbg_central', mbg_functions, sep = '/'))
   load_R_packages(c('foreign', 'rgeos', 'data.table','raster','rgdal','INLA',
                     'seegSDM','seegMBG','plyr','dplyr'))
-
+  
   ######################################################################
   ######################################################################
-
+  
   ## load recentmodel runs
   raked <- brick(paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date, "/", indicator, "_mean_raked_raster.tif"))
   unraked <- brick(paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date, "/", indicator, "_mean_raster.tif"))
-
+  
   ## extend my africa rasters
   raked <- extend(raked, extent(-180, 180, -90, 90), keepres=TRUE)
   unraked <- extend(unraked, extent(-180, 180, -90, 90), keepres=TRUE)
-
+  
   ## load in a covariate to match my new global rasters to the same pixels
   ## Hard-code central directories
   root <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j/")
@@ -1383,11 +1393,11 @@ save_best_model <- function(indicator_group, indicator, run_date, measure) {
   central_tv_covs <- c('evi','lights_new','LST_day','total_pop','rates','malaria','fertility','urban_rural', 'land_cover', 'LST_avg', 'gpcp_precip', 'aridity_cruts')
   central_ntv_covs <- c('access','irrigation','LF','LF_vector','reservoirs','aridity','elevation','annual_precip','PET','dist_rivers_lakes','dist_rivers_only','lat','lon','latlon')
   evi <- brick(paste0(central_cov_dir, 'EVI_stack.tif'))
-
+  
   ## make sure we match other covariates
   raked <- setExtent(raked, evi, keepres = TRUE, snap = TRUE)
   unraked <- setExtent(unraked, evi, keepres = TRUE, snap = TRUE)
-
+  
   ## Make all dirs
   main_dir <- '/snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/'
   dir.create(paste0(main_dir, indicator, '_raked/'))
@@ -1396,7 +1406,7 @@ save_best_model <- function(indicator_group, indicator, run_date, measure) {
   dir.create(paste0(main_dir, indicator, '_unraked/'))
   dir.create(paste0(main_dir, indicator, '_unraked/', measure))
   dir.create(paste0(main_dir, indicator, '_unraked/', measure, '/1y/'))
-
+  
   ## Write raster layer for each year, raked and unraked
   for(i in 1:length(names(unraked))) {
     subset_raked <- raked[[i]]
@@ -1412,10 +1422,10 @@ save_best_model <- function(indicator_group, indicator, run_date, measure) {
                 format = "GTiff",
                 overwrite = TRUE)
   }
-
+  
   message('All layers successfully saved in /snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/')
   message(paste0('Indicator ', indicator, ' saved as ', indicator, '_raked and ', indicator, '_unraked to call in MBG config files in the fixed_effects parameter.'))
-
+  
 }
 
 ## ############################################################
@@ -1433,14 +1443,14 @@ get.cov.wts <- function(rd, ## run_date
   ## ##########################################
   ## load the workspaces and objects we need ##
   ## ##########################################
-
+  
   pathaddin <- paste0('_bin', age, '_', reg, '_', holdout)
-
+  
   this_config <- fread(paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/config.csv'))
   stacker_list <- this_config[V1 == 'stacked_fixed_effects', V2]
   stackers_used <- strsplit(stacker_list," ")
   stackers_used <- stackers_used[[1]][stackers_used[[1]] != "+"]
-
+  
   ## load the data used to fit the stackers and reconstruct the design matrix
   load(paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/model_image_history/', rd, pathaddin, '.RData'))
   fit.data <- as.data.frame(df)
@@ -1449,26 +1459,26 @@ get.cov.wts <- function(rd, ## run_date
   if("period" %in% colnames(fit.data)) fit.data$period <- NULL
   X <- fit.data
   rc <- colnames(X)
-
+  
   ## load the stacker fits
   load(paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd,
               sprintf('/child_model_list_%s_%i.RData', reg, holdout)))
   smo <- child_models
   rm(child_models)
-
+  
   ## load the INLA/TMB fit
   load(paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd,
               sprintf('/%s_model_eb_bin%i_%s_%i.RData', ind, age, reg, holdout)))
   fit <- res_fit
   rm(res_fit)
-
+  
   ## make a matrix to hold the p-values/importances
   imp.mat <- as.data.frame(matrix(ncol = length(rc), nrow = length(smo), dimnames = list(names(smo), rc)))
-
+  
   ## #####################################################################################
   ## now, for each of the models, add the pvalues to the corresponding rows and columns ##
   ## #####################################################################################
-
+  
   ## ~~~~~
   ## gam ~
   ## ~~~~~
@@ -1478,10 +1488,10 @@ get.cov.wts <- function(rd, ## run_date
     names(smoothed) <- substr(names(smoothed), 3, nchar(names(smoothed))-1)
     unsmoothed <- summary(gam)$p.table[, 4] ## parametric table
     all.p <- c(smoothed, unsmoothed)
-
+    
     ## now match names and stick into our pval.matrix
     imp.mat["gam",] <- all.p[rc]
-
+    
     ##  convert from p-val to `importance`
     imp.mat["gam", ] <- -log(imp.mat["gam", ])
     imp.mat["gam", ][is.na(imp.mat["gam", ])] <- 0
@@ -1490,9 +1500,9 @@ get.cov.wts <- function(rd, ## run_date
       imp.mat["gam",][is.infinite(unlist(imp.mat["gam",]))] <- 1
     }
     imp.mat["gam", ] <- imp.mat["gam", ] / sum(imp.mat["gam", ])
-
+    
   }
-
+  
   ## ~~~~~
   ## gbm ~
   ## ~~~~~
@@ -1500,16 +1510,16 @@ get.cov.wts <- function(rd, ## run_date
   if(!is.null(gbm) & class(gbm)[1] != 'try-error'){
     rel.inf <- gbm$contributions
     imp.mat["gbm",] <- rel.inf[rc, "rel.inf"]
-
+    
     ## convert to scaled importance
     imp.mat["gbm", ] <- imp.mat["gbm", ] / sum(imp.mat["gbm", ])
-
+    
   }
-
+  
   ## all the penalized regression DO NOT give SD or p-vals...
   ## I 'standardize' the coefs as per a suggestion in this thread:
   ## https://stats.stackexchange.com/questions/14853/variable-importance-from-glmnet
-
+  
   ## ~~~~~~~
   ## lasso ~
   ## ~~~~~~~
@@ -1517,22 +1527,22 @@ get.cov.wts <- function(rd, ## run_date
   if(!is.null(lasso) & class(lasso)[1] != 'try-error'){
     l <- lasso$cv_1se_lambda ## this is the CV lambda from the child fit
     l.idx <- which(lasso$lambda == l)
-
+    
     sds <- apply(X, 2, sd, na.rm = T)
     unscaled.coefs <- lasso$beta[, l.idx]
     unscaled.coefs <- unscaled.coefs[rc]
-
+    
     ## scaled
     scaled.coefs   <- abs(unscaled.coefs) * sds
-
+    
     ## put them in the matrix
     imp.mat["lasso", ] <- scaled.coefs[rc]
-
+    
     ## convert to scaled importance
     imp.mat["lasso", ] <- imp.mat["lasso", ] / sum(imp.mat["lasso", ])
-
+    
   }
-
+  
   ## ~~~~~~~
   ## ridge ~
   ## ~~~~~~~
@@ -1540,22 +1550,22 @@ get.cov.wts <- function(rd, ## run_date
   if(!is.null(ridge) & class(ridge)[1] != 'try-error'){
     l <- ridge$cv_1se_lambda ## this is the CV lambda from the child fit
     l.idx <- which(ridge$lambda == l)
-
+    
     sds <- apply(X, 2, sd, na.rm = T)
     unscaled.coefs <- ridge$beta[, l.idx]
     unscaled.coefs <- unscaled.coefs[rc]
-
+    
     ## scaled
     scaled.coefs   <- abs(unscaled.coefs) * sds
-
+    
     ## put them in the matrix
     imp.mat["ridge", ] <- scaled.coefs[rc]
-
+    
     ## convert to scaled importance
     imp.mat["ridge", ] <- imp.mat["ridge", ] / sum(imp.mat["ridge", ])
-
+    
   }
-
+  
   ## ~~~~~~
   ## enet ~
   ## ~~~~~~
@@ -1563,22 +1573,22 @@ get.cov.wts <- function(rd, ## run_date
   if(!is.null(enet) & class(enet)[1] != 'try-error'){
     l <- enet$cv_1se_lambda ## this is the CV lambda from the child fit
     l.idx <- which(enet$lambda == l)
-
+    
     sds <- apply(X, 2, sd, na.rm = T)
     unscaled.coefs <- enet$beta[, l.idx]
     unscaled.coefs <- unscaled.coefs[rc]
-
+    
     ## scaled
     scaled.coefs   <- abs(unscaled.coefs) * sds
-
+    
     ## put them in the matrix
     imp.mat["enet", ] <- scaled.coefs[rc]
-
+    
     ## convert to scaled importance
     imp.mat["enet", ] <- imp.mat["enet", ] / sum(imp.mat["enet", ])
-
+    
   }
-
+  
   ## ~~~~~~~~~
   ## xgboost ~
   ## ~~~~~~~~~
@@ -1587,30 +1597,30 @@ get.cov.wts <- function(rd, ## run_date
     load_R_packages("caret")
     # Extract row names to then assign to column names
     xg_names <- rownames(varImp(xgboost, scale = FALSE)$importance)
-
+    
     
     # Extract coefficients, already correctly scaled
     scaled.coefs <- varImp(xgboost, scale = FALSE)$importance[[1]]
     
-
+    
     # Assign column names
     names(scaled.coefs) <- xg_names
-
+    
     # put them in the matrix
     imp.mat["xgboost", ] <- scaled.coefs[rc]
   }
-
+  
   ## ##########################################
   ## Now we propagate through the INLA coefs ##
   ## ##########################################
-
+  
   ## to account for different scaling in INLA we also create SDs of the covariates that go into INLA
   inla.X <- df[, paste0(names(smo), "_cv_pred"), with=F]
   if (this_config[V1 == "indicator_family", V2] == "binomial" & this_config[V1 == "stackers_in_transform_space", V2] == T) {
     inla.X <- logit(inla.X)
   }
   inla.sds   <- apply(inla.X, 2, sd, na.rm = T)
-
+  
   ## get the coefficients
   if ("sdrep" %in% names(fit)) { # TMB, w/ stackers as fixed effects
     inla.coefs <- fit$sdrep$par.fixed[names(fit$sdrep$par.fixed) == "alpha_j"]
@@ -1623,25 +1633,25 @@ get.cov.wts <- function(rd, ## run_date
     inla.coefs <- fit$summary.fixed[stackers_used, "mean"]
     names(inla.coefs) <- stackers_used
   }
-
+  
   ## get the scaled coefficients
   inla.coefs <- inla.coefs[names(smo)]
   scaled.inla.coefs <- inla.coefs * inla.sds
-
+  
   ## make and scale the INLA weighted relative importance and add as a row
   inla.rel.imp <- apply(imp.mat, 2, function(x) sum(x*scaled.inla.coefs))
   inla.rel.imp <- abs(inla.rel.imp)
   inla.rel.imp <- inla.rel.imp/sum(inla.rel.imp)
   imp.mat <- rbind(imp.mat, "INLA COMBINED" = inla.rel.imp)
-
+  
   ## add the scaled coefs as a column
   imp.mat <- cbind(imp.mat, "SCALED.INLA.COEFS" = c(scaled.inla.coefs, NA))
-
+  
   ## save to general output directory
   save(imp.mat,
        file = paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd,
                      sprintf('/cov_wts_%s_holdout_%i.RData', reg, holdout)))
-
+  
   return(imp.mat)
 }
 
@@ -1659,12 +1669,12 @@ plot.cov.wts <- function(rd, ## run_date
                          plot.inla.col = TRUE,
                          age = 0,
                          holdout = 0) {
-
+  
   ## load a cov.wts object
   load(paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd,
               sprintf('/cov_wts_%s_holdout_%i.RData', reg, holdout)))
   cov.wts <- imp.mat
-
+  
   ## remove the final column which has inla weight
   if(!plot.inla.col){
     cov.wts <- cov.wts[, -ncol(cov.wts)]
@@ -1672,17 +1682,17 @@ plot.cov.wts <- function(rd, ## run_date
     ## rescale to be -1:1
     cov.wts[, ncol(cov.wts)] <- cov.wts[, ncol(cov.wts)] / sum(cov.wts[, ncol(cov.wts)], na.rm = TRUE)
   }
-
+  
   ## melt
   cw.m <- as.data.table(reshape2::melt(as.matrix(cov.wts)))
   colnames(cw.m)[1:3] <- c('Model', "Covar", "Imp")
   ## cw.m <- na.omit(cw.m)
-
+  
   ## reorder factors
   cw.m$Model <- factor(cw.m$Model, levels = c("INLA COMBINED", sort(setdiff(unique(cw.m$Model), "INLA COMBINED"))))
-
+  
   ## setup the plot
-
+  
   ## pdf("~/test2.pdf", width = 10, height = 3)
   base_size <- 9
   p <- ggplot(cw.m, aes(Covar, Model)) +
@@ -1699,7 +1709,7 @@ plot.cov.wts <- function(rd, ## run_date
   ## print(p)
   ## dev.off()
   return(p)
-
+  
 }
 
 ## ######################################################################
@@ -1731,51 +1741,51 @@ plot.cov.wts <- function(rd, ## run_date
 ## pred.rast
 ## ######################################################################
 get.aroc <- function(pred.rast, year.map = NULL, pow = 1, uselogit = FALSE){
-
+  
   ## make the year.map if not supplied
   if(is.null(year.map)){
     year.map <- 1:nlayers(pred.rast)
   }
-
+  
   ## setup lengths of years and pixels
   n.yr <- length(year.map)
   n.px <- length(as.vector(pred.rast[[1]]))
-
+  
   ## vectorize the pred.rast and make a matrix of RC between years
   pix.mat <- matrix(ncol = n.yr, nrow = n.px)
-
+  
   ## convert to logit space?
   if(uselogit == TRUE){
     pix.mat <- log(pix.mat / (1 - pix.mat))
   }
-
+  
   ## calculate RC, substitute RC between yr_{i+1} and yr_i into pix.mat_i
   message("calculating rates of change")
   for(i in 1:(n.yr - 1)){
     pix.mat[, i] <- log(values(pred.rast[[i + 1]])) - log(values(pred.rast[[i]])) / (year.map[i + 1] - year.map[i])
   }
-
+  
   ## remove last column of matrix
   pix.mat <- pix.mat[, -n.yr]
   ## now we have a matrix of AROC between years for all pixels in pred.rast
-
+  
   ## get unstandardized year weights
   year.wt <- ( year.map - min(year.map) ) ^ pow
   ## leave out the earliest year which now has weight zero
   year.wt <- year.wt[-1]
   ## standardize to sum to 1
   year.wt <- year.wt / sum(year.wt)
-
+  
   ## perform the linear combo of year wts and rate of changes by year
   ## to get weighted AROC pixel estimates
   message("making weighted rates of change")
   pix.aroc <- pix.mat %*% year.wt
-
+  
   ## and put back into a raster
   message("preparing AROC raster")
   aroc.rast <- pred.rast[[1]]
   values(aroc.rast) <- pix.aroc
-
+  
   return(aroc.rast)
 }
 
@@ -1784,10 +1794,10 @@ get.aroc <- function(pred.rast, year.map = NULL, pow = 1, uselogit = FALSE){
 ## old way of making AROC
 ## ###########################
 make.2000.2015.aroc <- function(pred.rast){
-
+  
   aroc.rast <- pred.rast[[1]]
   values(aroc.rast) <- (log(values(pred.rast[[16]])) - log(values(pred.rast[[1]]))) / 15
-
+  
   return(aroc.rast)
 }
 
@@ -1813,19 +1823,19 @@ make.2000.2015.aroc <- function(pred.rast){
 ## a forecasted raster object
 ## ###################################################################
 make.forecast <- function(start.rast, aroc.rast, n.yrs = 15, uselogit = FALSE){
-
+  
   ## we use p*e^{r*t}
-
+  
   fc.rast <- start.rast
-
+  
   if(uselogit) fc.rast <- log(fc.rast / (1 - fc.rast))
-
+  
   values(fc.rast) <- values(start.rast) * exp(values(aroc.rast) * n.yrs)
-
+  
   if(uselogit) fc.rast <- exp(fc.rast) / (1 + fc.rast)
-
+  
   return(fc.rast)
-
+  
 }
 
 compile_results_table <- function(indicator_group,
@@ -1837,7 +1847,7 @@ compile_results_table <- function(indicator_group,
                                   goal_threshold = 0.001,
                                   metric = 'sdgprob',
                                   shapefile_version = 'current') {
-
+  
   results_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/table_', baseline_year)
   dir.create(paste0(results_dir, '/summary_tables'))
   all_files <- list.files(results_dir, pattern = measure, full.names = TRUE)
@@ -1858,10 +1868,10 @@ compile_results_table <- function(indicator_group,
     admin_names <- admin_names[, c(paste0('ADM', admin_level, '_CODE'), paste0('ADM', admin_level, '_NAME')), with=FALSE]
     all_admins <- merge(all_admins, admin_names, by=paste0('ADM', admin_level, '_CODE'), all.x=TRUE)
   }
-
+  
   write.csv(all_admins,
             paste0(results_dir, '/summary_tables/', indicator, '_', measure, '_', metric, '_summary_table.csv'))
-
+  
   ## Save copy of all_admins (by level) for Lucas
   for(adm in c(0,1,2)) {
     if(adm == 0) {
@@ -1878,29 +1888,29 @@ compile_results_table <- function(indicator_group,
     }
     write.csv(this_admin_data, paste0(results_dir, '/pixels/adm', adm, '_', indicator, '_', measure, '_', metric, year_to_map, '_summary_table.csv'))
   }
-
+  
   make_africa_raster <- function(gaul) {
-
+    
     # Convert raster to SpatialPointsDataFrame
     message(paste0('rasterizing ', gaul, '...'))
     pixel_probs <- fread(paste0(results_dir, '/pixels/', measure, '_', gaul, '_probs.csv'))
     simple_raster <- raster(paste0(results_dir, '/simple/', gaul, '.tif'))
     probs_raster <- insertRaster(simple_raster, matrix(pixel_probs[, p_goal], ncol = 1))
     return(probs_raster)
-
+    
   }
-
+  
   africa_raster <- lapply(unique(all_admins[, ADM0_CODE]), make_africa_raster)
   final_africa_raster = do.call(raster::merge, africa_raster)
   writeRaster(final_africa_raster,
               file = paste0(results_dir, '/pixels/', indicator, '_', measure, '_', metric, year_to_map),
               format='GTiff',
               overwrite = TRUE)
-
+  
 }
 
 make_africa_raster <- function(gaul) {
-
+  
   # Convert raster to SpatialPointsDataFrame
   message(paste0('rasterizing ', gaul, '...'))
   pixel_probs <- fread(paste0(results_dir, '/pixels/', measure, '_', gaul, '.csv'))
@@ -1908,7 +1918,7 @@ make_africa_raster <- function(gaul) {
   simple_raster <- raster(paste0(results_dir, '/simple/', gaul, '.tif'))
   probs_raster <- insertRaster(simple_raster, matrix(pixel_probs[, mean], ncol = 1))
   return(probs_raster)
-
+  
 }
 
 #################################################################################
@@ -1918,27 +1928,27 @@ make_africa_raster <- function(gaul) {
 get_aggs <- function(agg_geo_est = cond_sim_adm0,
                      gaul_list   = gaul_list,
                      rake_to     = gbd) {
-
+  
   message('WARNING: function will not work as expected if agg_geo_est and rake_to are not aggregated at the same admin level.')
-
+  
   if(sum(colnames(rake_to) %in% c('name','year','mean')) != 3)
     stop('rake_to should be a data table with column names `name`, `year`, and `mean`')
-
+  
   if(dim(t(as.matrix(agg_geo_est)))[1]!=1 | is.null(names(agg_geo_est)))
     stop('agg_geo_est must be a named vector returned from make_condSim() with summarize option equal to TRUE')
-
+  
   # transpose and rename agg_geo_est
   agg_geo_est <- data.table(split_geo_names(as.matrix(agg_geo_est)),agg_geo_est)
   agg_geo_est$year <- as.numeric(agg_geo_est$year)
   agg_geo_est$name <- as.numeric(agg_geo_est$name)
-
+  
   # merge
   merged <- merge(agg_geo_est,rake_to, by=c('name','year'),all.x=T)
   names(merged)[names(merged)=='agg_geo_est'] <- 'geo_mean'
   names(merged)[names(merged)=='mean'] <- 'rake_to_mean'
-
+  
   return(merged)
-
+  
 }
 
 #' extract_from_brick
@@ -1961,41 +1971,41 @@ extract_from_brick<-function(data,
                              rb,
                              varname="extracted_values",
                              raster_years=2000:2015){
-
+  
   # Making sure you've passed the right arguments to the function:
   if(sum(c("longitude","latitude",yearcol) %in% names(data))!=3){
     stop("You need to have the columns longitude, latitude, and a specified column that describes year (as the yearcol parameter) in the data object passed to this function.")
   }
   if(varname=="extracted_values"){warning("The variable added to the data.table will be named 'extracted_values' unless you supply a different name to the varname parameter.")}
-
+  
   if(min(data[[yearcol]])<min(raster_years)){stop("You have years of raw input data that extend beyond the min or max of the raster years supplied to the function. Consider setting years outside those bounds to the min/max of the raster years.")}
-
+  
   # Ordering the data object by year
   data<-data[order(data[[yearcol]])]
-
+  
   # Renaming the rasterbrick layers to be descriptive of year
   names(rb)<-paste0("year_",as.character(raster_years))
-
+  
   # Define a vector to store the results
   extracted_values<-c()
-
+  
   for (yr in raster_years){
     message(paste0("Extracting values for ",yr))
     # Select only the data points from that year
     singleyr<-data[data[[yearcol]]==yr,]
-
+    
     # Convert to spatial object
     coordinates(singleyr) <- ~longitude + latitude
-
+    
     # setting the proj4string (the projection information) of this layer to be the
     # same as the results raster
     proj4string(singleyr)<-proj4string(rb)
-
+    
     # Extract raster values to points
     values<-raster::extract(rb[[paste0("year_",as.character(yr))]], singleyr)
     extracted_values<-c(extracted_values,values)
   }
-
+  
   data[[varname]]<-extracted_values
   return(data)
 }
@@ -2015,55 +2025,55 @@ extract_from_brick<-function(data,
 get_weighted_correlation_raw_estimated<-function(indicator_group,
                                                  indicator,
                                                  rundate){
-
+  
   source('/share/code/geospatial/lbd_core/mbg_central/prep_functions.R')
   source('/share/code/geospatial/lbd_core/mbg_central/setup.R')
   load_R_packages(c('data.table','raster','sp','weights'))
-
+  
   root <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j/")
   input_folder<-paste0(root,"/WORK/11_geospatial/10_mbg/input_data/")
-
+  
   message("Reading in the raw data")
   # Read in CSV, reduce table size by eliminating irrelevant columns
   raw_data<-fread(paste0(input_folder,indicator,".csv"))
   raw_data[,raw:=raw_data[[indicator]]/N]
   raw_data<-raw_data[,list(year=original_year,latitude,longitude,raw,N,weight)]
-
+  
   message("Loading in the mean raster (Unraked)")
   # Load in Raster of Values
   results_tif<-raster::stack(paste0("/share/geospatial/mbg/",indicator_group,"/",indicator,"/output/",rundate,"/",indicator,"_mean_raster.tif"))
   names(results_tif)<-as.character(seq(2000,2015))
-
+  
   raw_estimate_comparison<-list()
-
+  
   message("Extracting values to points")
   for(yr in seq(2000,2015)){
     print(yr)
     raw_singleyr<-raw_data[year==yr,]
-
+    
     # Convert to spatial object
     coordinates(raw_singleyr) <- ~longitude + latitude
-
+    
     # setting the proj4string (the projection information) of this layer to be the
     # same as the results raster
     proj4string(raw_singleyr)<-proj4string(results_tif)
-
+    
     # Extract raster values to points
     values<-raster::extract(results_tif[[paste0("X",as.character(yr))]], raw_singleyr)
-
+    
     # Going back into table-space, and adding the data.table to a list to rbind later
     raw_singleyr<-as.data.table(raw_singleyr)
     raw_singleyr[,estimate:=values]
     raw_estimate_comparison[[as.character(yr)]]<-raw_singleyr
   }
-
+  
   message("Calculating correlation coefficient using the weights::wtd.cors function")
   # Combining together the raw estimates into 1 data.table
   raw_estimate_comparison<-rbindlist(raw_estimate_comparison)
   cor_results<-weights::wtd.cors(x=raw_estimate_comparison$raw,
                                  y=raw_estimate_comparison$estimate,
                                  weight=raw_estimate_comparison$N * raw_estimate_comparison$weight)
-
+  
   return(cor_results)
 }
 
@@ -2071,7 +2081,7 @@ prep_postest <- function(indicator,
                          indicator_group,
                          run_date,
                          save_objs) {
-
+  
   # Save a list of objects in a standard location for parallel scripts to pull from
   main_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
   temp_dir <- paste0(main_dir, "temp_post_est/")
@@ -2171,14 +2181,14 @@ clean_after_postest <- function(indicator,
                                 run_date,
                                 strata,
                                 delete_region_rasters = F) {
-
+  
   # Delete intermediate files that we no longer need
   main_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
   temp_dir <- paste0(main_dir,'temp_post_est/')
-
+  
   # Deleting - be careful!
   unlink(temp_dir, recursive = T)
-
+  
   # If desired, insert code here to delete other temporary objects (eg. region-specific rasters)
   grep_string <- paste0(indicator, "_(", paste(strata, collapse = "|"), ").*_raster.tif")
   region_rasters <- grep(grep_string,list.files(main_dir), value=T) %>%
@@ -2320,4 +2330,3 @@ get_fhs_population <- function(population_version = "20190403_test_new_cluster_1
   return(pop_data)
   
 }
-

@@ -1,7 +1,7 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
 # Author: JF
 # Date: 09/05/2018
-# Purpose: Produce HAP results and sub-analyses
+# Purpose: Produce HAP diagnostics, results and sub-analyses
 # source("/homes/jfrostad/_code/lbd/hap/cooking/post/4_landing.R", echo=T)
 #***********************************************************************************************************************
 

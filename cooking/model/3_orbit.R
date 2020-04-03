@@ -43,9 +43,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'dia_central_asia'
+  reg                      <- 'AGO'
   age                      <- 0
-  run_date                 <- "2020_03_11_16_07_49"
+  run_date                 <- "2020_03_26_15_42_57"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -1051,8 +1051,16 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ AGGREGATE ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#save necessary objects
+# rake_transform <- 'logit' #TODO move to config
+# prep_postest(indicator = indicator,
+#              indicator_group = indicator_group,
+#              run_date = run_date,
+#              save_objs = c("core_repo", "gbd", "year_list", "summstats", "rake_transform", "config"))
+
+
 # set specific arguments
-measure         <- 'prevalence'
+measure         <- 'prev'
 jname           <- paste('eDL', reg, indicator, sep = '_')
 
 # set memory by region
@@ -1067,7 +1075,7 @@ if(r %like% 's_america' | r == 'BRA') mymem <- 300
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
                   '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-r_shell <- paste0(repo, 'mbg_central/share_scripts/shell_sing.sh')
+r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
 script <- file.path(repo, indicator_group, 'post/2_entry.R')
 args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout)
                     

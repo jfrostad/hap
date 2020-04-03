@@ -7,8 +7,6 @@
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
 # clear memory
-
-# clear memory
 rm(list=ls())
 
 # runtime configuration
@@ -45,7 +43,7 @@ if (interactive) {
   # TODO currently cannot work with regions that having differing speceification across models
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
-  region <- 'ERI+DJI+YEM'
+  region <- 'AGO'
   hap_run_date <- '2020_03_12_13_25_57'
   lri_run_date = '2019_10_23_16_13_17'
 
@@ -255,8 +253,8 @@ link_cell_pred <- function(ind_gp,
   
   #####################################################################
   # collect and load the population data from the WorldPop rasters
-  covdt <- load_populations_cov(reg, pop_measure=pop_measure, measure = measure, simple_polygon, 
-                                simple_raster, year_list, interval_mo=12, pixel_id = pixel_id)
+  covdt <- load_populations_cov(reg, pop_measure=pop_measure, measure = measure, pop_release=pop_release
+                                simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id)
   
   #TODO add covariates functionality
   if(debug) browser()

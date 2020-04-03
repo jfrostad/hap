@@ -168,11 +168,10 @@ stacker_time_series_plots <- function(reg,
       
       # set ylims
       maxval <- (plot_dt[,.(upper, value, input_mean)] %>% max) + .05 #add 5% buffer
-      
+
       #create plot
       plot <- ggplot(data = plot_dt[variable == 'mean']) + 
         geom_point(aes(x = year, y = input_mean, size = input_ss)) +
-
         geom_text_repel(aes(x = year, y = input_mean, label = N_label),
                         size=5, segment.colour = 'grey17', segment.size = .2, direction = 'x', nudge_y=.05, force=5) +
         geom_line(data = plot_dt, aes(x = year, y = value, color = variable), size = 1.2) +
@@ -187,8 +186,17 @@ stacker_time_series_plots <- function(reg,
              y='Proportion') + 
         theme_minimal()
       
+      #if raked, add uncertainty ribbon
+      if (raked) { 
+        
+        plot <- plot + 
+          geom_ribbon(data = , aes(x = year, ymin = lower_raked, ymax = upper_raked), 
+                      na.rm = TRUE, alpha = 0.2, fill = 'dodgerblue1')
+      
+      }  
+      
       #add vetting colors to points if scheme is provided
-      if(!is.null(vetting_colorscale)) {
+      if (!is.null(vetting_colorscale)) {
         
         plot <- plot + 
           geom_point(aes(x = year, y = input_mean, size = input_ss, fill=vetting), shape=21, stroke=0) +

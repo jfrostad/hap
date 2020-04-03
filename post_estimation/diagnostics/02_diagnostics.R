@@ -48,14 +48,14 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_03_25_20_31_43',
-                'total')
+                '2020_04_02_20_27_13',
+                'prev')
 
 #if new vetting activity has occured, need to refresh the local sheet
-new_vetting <- T
+new_vetting <- F
 
 #is this a raked model?
-raked <- F
+raked <- T
 
 #pull args from the job submission if !interactive
 args <- ifelse(interactive %>% rep(., length(debug.args)), debug.args, commandArgs()) 
@@ -130,7 +130,7 @@ doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
 if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
 
 ## Get regions that have successfully completed through aggregation step
-Regions <- list.files(outputdir, pattern = paste0(ifelse(raked, measure, 'unraked'),'*_admin_draws'))
+Regions <- list.files(outputdir, pattern = '*_admin_draws')
 Regions <- gsub('.*eb_bin0_', '', Regions)
 for (r in 1:length(Regions)) Regions[[r]] <- substr(Regions[[r]], start = 1, stop = nchar(Regions)[[r]]-8)
 Regions <- unique(Regions)
@@ -142,61 +142,39 @@ holdouts <- 0
 
 ## Combine and summarize aggregated results --------------------------
 
-# combine unraked results
-message('Combining unraked aggregated results')
-combine_aggregation(rd       = run_date,
-                    indic    = indicator,
-                    ig       = indicator_group,
-                    ages     = 0,
-                    regions  = Regions,
-                    holdouts = holdouts,
-                    raked    = raked,
-                    delete_region_files = F)
-
-# summarize admins
-summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
-
-# # combine raked results
-message('Combining raked aggregated results')
-if (raked) {
+# combine raked results
+message('Combining raked/unraked aggregated results')
+if (indicator == 'cooking_fuel_solid') {
   combine_aggregation(rd       = run_date,
                       indic    = indicator,
                       ig       = indicator_group,
                       ages     = 0,
                       regions  = Regions,
                       holdouts = holdouts,
-                      raked    = raked,
+                      raked    = T:F,
+                      measure = measure,
                       delete_region_files = F)
-
+  
   # summarize admins
-  summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
+  summarize_admins(ad_levels = c(0,1,2), raked = T:F, measure = measure, metrics = 'rates')
+} else {
+  
+  # combine unraked results
+  message('Combining unraked aggregated results')
+  combine_aggregation(rd       = run_date,
+                      indic    = indicator,
+                      ig       = indicator_group,
+                      ages     = 0,
+                      regions  = Regions,
+                      holdouts = holdouts,
+                      raked    = F,
+                      measure = measure,
+                      delete_region_files = F)
+  
+  # summarize admins
+  summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
+  
 }
-
-
-## Set Brazil to admin 1 for diarrhea --------------------------
-
-# if (indicator == 'had_diarrhea') {
-#   
-#   # load files
-#   ad1 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_1_raked_', measure, '_summary.csv'))
-#   ad2 <- fread(paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
-#   ad <- merge(ad2, ad1, by = names(ad1)[grep('ADM|region|year', names(ad1))])
-#   
-#   # set brazil to admin 1
-#   braz <- ad[ADM0_NAME == 'Brazil']
-#   braz[, mean := mean.y]
-#   braz[, upper := upper.y]
-#   braz[, lower := lower.y]
-#   braz[, cirange := cirange.y]
-#   braz[, pop := pop.x]
-#   braz[, grep('.x|.y', names(braz)) := NULL]
-#   
-#   # bind back to admin 2 file and save
-#   ad2 <- ad2[ADM0_NAME != 'Brazil']
-#   ad2 <- rbindlist(list(ad2, braz), use.names = T)
-#   write.csv(ad2, paste0(outputdir, 'pred_derivatives/admin_summaries/', indicator, '_admin_2_raked_', measure, '_summary.csv'))
-# }
-
 
 ## Aggregate data and stackers ------------------------------------------------------
 # Aggregate data to admin 0 and 1
@@ -217,7 +195,7 @@ stack <- lapply(Regions, function(x)
                            indicator_group, 
                            run_date, 
                            modeling_shapefile_version,
-                           pop_measure='total',
+                           pop_measure=pop_measure,
                            build=F)
   ) %>% 
   rbindlist
@@ -238,10 +216,10 @@ mbg <- list(
 # raked results
 if (raked) {
   mbg_raked <- list(
-    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_0_raked', measure, '_summary.csv')) %>% 
+    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_0_raked_', measure, '_summary.csv')) %>% 
       fread %>%
       .[, lvl := 'adm0'],
-    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_1_raked', measure, '_summary.csv')) %>%
+    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_1_raked_', measure, '_summary.csv')) %>%
       fread %>%
       .[, lvl := 'adm1']
   )  %>% 

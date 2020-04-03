@@ -67,8 +67,8 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_sssa',
 # custom country-specifics
 #regions <- c('dia_sssa-zaf', 'ZAF', 'dia_se_asia-vnm-tha', 'VNM', 'THA')
 regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
-             'dia_cssa',
-             'dia_wssa',
+             'dia_cssa-AGO-GNQ', 'AGO',
+             'dia_wssa-CPV-NGA', 'NGA',
              'dia_name-ESH',
              #'dia_mcaca', 
              'caca-CUB',
@@ -77,18 +77,18 @@ regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
              #'dia_central_asia', 
              'stan-TKM',
              'CHN', 'MNG',
-             'dia_malay',
+             'dia_malay-MYS',
              'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
              'dia_se_asia-VNM-THA', 'VNM', 'THA',
              'mide+TKM', 'soas')
              #'dia_mid_east-AFG', 'dia_south_asia+AFG'
 
-#regions <- c('stan-TKM', 'ansa-VEN', 'THA')
+#regions <- c('AGO', 'VNM', 'THA', 'ZAF')
 
 # regions <- c('dia_afr_horn-ETH-SOM-SSD', 'dia_essa+ETH+SOM+SSD-SWZ-ZWE-LSO',
 #              'dia_central_asia-TKM', 'TKM')
 # 
-regions <- 'CHN'
+#regions <- 'CHN'
 
 # large regions
 #regions <- c('dia_s_america-BRA-GUF-VEN')

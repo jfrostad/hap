@@ -907,53 +907,119 @@ empty_world_raster <- function(whole_world = FALSE) {
 }
 
 
-## Load list of raster inputs (pop and simple)
-build_simple_raster_pop <- function(subset_shape, u5m=FALSE, field=NULL, raking=F, link_table=modeling_shapefile_version) {
-
+#' @title Build a simple raster and associated pop raster
+#' @description Builds a rasterized version of subset_shape to define
+#'   the raster version of the modeling domain. Also returns a
+#'   population raster for the modeling domain
+#' @param subset_shape A \code{SpatialPolygonsDataFrame} to be
+#'   rasterized. Usually output from
+#'   \code{\link[load_simple_polygon()]}.
+#' @param field Name of data entry in subset_shape to use as values in
+#'   simple_raster, Default: NULL
+#' @param raking Logical. Use raking shapefiles? Default: F
+#' @param link_table String or data.table. If data.table it is used as-is, if string it is the shapefile version to specify correct link table
+#' @param id_raster Raster. If building simple raster on link table, provide id_raster used for building the link table
+#' @param pop_measure String. name of population measure to return in pop_raster. Default: 'total'
+#' @param pop_release String. worldpop version date. If NULL, take most recent Default: NULL
+#' @param pop_start_year Integer. first year of worldpop to load. Default: 2000
+#' @param pop_end_year Integer. last year of worldpop to load. Default: 2018
+#' @param shapefile_version String. which shapefile version is used.
+#' @return A named list cotaining a 'simple_raster' and a 'pop_raster'
+#' @details Rasterizes subset_shape, giving pixels values of
+#'   \code{field}. Also loads and crops and returns a worldpop raster
+#'   for the same domain with annual layers.
+#' @examples
+#' \dontrun{
+#' if (interactive()) {
+#'   ## Load simple polygon template to model over
+#' adm_list           <- get_adm0_codes('wssa', shapefile_version = 'current')
+#' simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 1, tolerance = 0.4,
+#'   shapefile_version = 'current')
+#' subset_shape        <- simple_polygon_list[[1]]
+#' simple_polygon      <- simple_polygon_list[[2]]
+#'
+#' ## Load list of raster inputs (pop and simple)
+#' raster_list        <- build_simple_raster_pop(subset_shape)
+#' simple_raster      <- raster_list[['simple_raster']]
+#' pop_raster         <- raster_list[['pop_raster']]
+#' }
+#' }
+#' @seealso
+#'  \code{\link[raster]{mask}}
+#' @rdname build_simple_raster_pop
+#'
+#' @export
+#'
+#' @importFrom raster mask unique merge
+#'
+build_simple_raster_pop <- function(subset_shape,
+                                    field = NULL,
+                                    raking = FALSE,
+                                    link_table = modeling_shapefile_version,
+                                    id_raster = NULL,
+                                    pop_measure = 'total',
+                                    pop_release = NULL,
+                                    pop_start_year = 2000,
+                                    pop_end_year = 2018) {
+  
   if (is.null(field)) {
     if ('GAUL_CODE' %in% names(subset_shape@data)) field <- 'GAUL_CODE'
     if ('ADM0_CODE' %in% names(subset_shape@data)) field <- 'ADM0_CODE'
   }
-
-  if(raking){
+  
+  if(raking) {
     field <- 'loc_id'
     # no 'loc_id' field in the link table, so we can't use it
     link_table <- NULL
   }
-
-  if(u5m==FALSE){
-    master_pop <- brick('/snfs1/WORK/11_geospatial/01_covariates/09_MBG_covariates/WorldPop_total_global_stack.tif') #WorldPop_allStages_stack.tif')
-  } else {
-    master_pop <- brick(raster('/snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/archive/replaced_20170623/a0004t/5y/worldpop_a0004t_5y_2000_00_00.tif'),
-    raster('/snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/archive/replaced_20170623/a0004t/5y/worldpop_a0004t_5y_2005_00_00.tif'),
-    raster('/snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/archive/replaced_20170623/a0004t/5y/worldpop_a0004t_5y_2010_00_00.tif'),
-    raster('/snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/archive/replaced_20170623/a0004t/5y/worldpop_a0004t_5y_2015_00_00.tif'))
+  
+  ## if unspecified, get the most recent worldpop release
+  if (is.null(pop_release)) {
+    helper <- CovariatePathHelper$new()
+    pop_rast_path  <- helper$covariate_paths(covariates = 'worldpop',
+                                             measures = pop_measure,
+                                             releases = pop_release)
+    pop_release <- helper$newest_covariate_release(pop_rast_path)
   }
-
-  cropped_pop <- crop(master_pop, extent(subset_shape), snap="out")
+  
+  # To ensure correct "snap" method is used, first convert to a template raster that is masked to population
+  pop_rast <- brick(paste0("/snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/total/", pop_release, "/1y/worldpop_total_1y_2010_00_00.tif"))
+  template_raster <- raster::crop(pop_rast, raster::extent(subset_shape), snap = "out")
+  
+  # load in the population raster given the measure and the release
+  cropped_pop <- load_worldpop_covariate(template_raster,
+                                         covariate = 'worldpop',
+                                         pop_measure = pop_measure,
+                                         pop_release = pop_release,
+                                         start_year = pop_start_year,
+                                         end_year = pop_end_year,
+                                         interval = 12)[['worldpop']]
+  
   ## Fix rasterize
-  initial_raster <- rasterize_check_coverage(subset_shape, cropped_pop, field = field, link_table = link_table)
-  if(length(subset(subset_shape, !(get(field) %in% unique(initial_raster))))!=0) {
-    rasterized_shape <- 
+  initial_raster <- rasterize_check_coverage(subset_shape, cropped_pop, field = field, link_table = link_table, id_raster = id_raster)
+  if (length(subset(subset_shape, !(get(field) %in% unique(initial_raster)))) != 0) {
+    rasterized_shape <-
       raster::merge(
         rasterize_check_coverage(subset(subset_shape, !(get(field) %in% unique(initial_raster))),
                                  cropped_pop,
                                  field = field,
-                                 link_table = link_table),
+                                 link_table = link_table,
+                                 id_raster = id_raster),
         initial_raster)
   }
-  if(length(subset(subset_shape, !(get(field) %in% unique(initial_raster))))==0) {
+  if (length(subset(subset_shape, !(get(field) %in% unique(initial_raster)))) == 0) {
     rasterized_shape <- initial_raster
   }
-  masked_pop <- raster::mask(x=cropped_pop, mask=rasterized_shape)
-
+  masked_pop <- raster::mask(x = cropped_pop, mask = rasterized_shape)
+  
   raster_list <- list()
   raster_list[['simple_raster']] <- rasterized_shape
   raster_list[['pop_raster']] <- masked_pop
-
+  
   return(raster_list)
-
+  
 }
+
 
 ## #############################################################################
 ## GET ADMIN CODES AND RELATED FUNCTIONS
