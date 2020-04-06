@@ -890,7 +890,10 @@ prep_cell_pred_for_frax_raking <- function(overs = overs,
                                            gbd_pops = gbd_pops,
                                            countries_not_to_rake = NULL,
                                            countries_not_to_subnat_rake = NULL,
-                                           custom_output_folder = NULL) {
+                                           custom_output_folder = NULL,
+                                           debug=F) {
+  
+  if (debug) browser()
   
   ## Prep Inputs#########################################
   # load the cell id to admin units link
@@ -988,16 +991,11 @@ prep_cell_pred_for_frax_raking <- function(overs = overs,
   cell_pred <- merge(cell_pred, fractional_rf, by = c("location_id", "year"))
   
   ## create the spatial hierarchy
-  sp_hierarchy_list <- 
-    link[ADM0_CODE %in% unique(admin_0[, ADM0_CODE]), 
-         .(ADM0_CODE, ADM1_CODE, ADM2_CODE, ADM0_NAME, ADM1_NAME, ADM2_NAME, region)] %>% 
-    unique %>% 
-    .[, region := reg]
+
   
   list(cell_pred=cell_pred,
        link=link,
-       rf=fractional_rf,
-       sp_hierarchy_list=sp_hierarchy_list) %>% 
+       rf=fractional_rf) %>% 
     return
 
 }
@@ -1127,6 +1125,12 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   admin_2 <- cell_pred[, lapply(.SD, sum, na.rm=T), .SDcols=c(overs, 'pop_raked'), by = .(year, ADM2_CODE, ADM0_CODE)]
   admin_1 <- cell_pred[, lapply(.SD, sum, na.rm=T), .SDcols=c(overs, 'pop_raked'), by = .(year, ADM1_CODE, ADM0_CODE)]
   admin_0 <- cell_pred[, lapply(.SD, sum, na.rm=T), .SDcols=c(overs, 'pop_raked'), by = .(year, ADM0_CODE)]
+  
+  sp_hierarchy_list <- 
+    link[ADM0_CODE %in% unique(admin_0[, ADM0_CODE]), 
+         .(ADM0_CODE, ADM1_CODE, ADM2_CODE, ADM0_NAME, ADM1_NAME, ADM2_NAME, region)] %>% 
+    unique %>% 
+    .[, region := reg]
   
   ## save unraked counts aggregations
   if (save_output) {

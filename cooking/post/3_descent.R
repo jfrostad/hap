@@ -253,7 +253,7 @@ link_cell_pred <- function(ind_gp,
   
   #####################################################################
   # collect and load the population data from the WorldPop rasters
-  covdt <- load_populations_cov(reg, pop_measure=pop_measure, measure = measure, pop_release=pop_release
+  covdt <- load_populations_cov(reg, pop_measure=pop_measure, measure = measure, pop_release=pop_release,
                                 simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id)
   
   #TODO add covariates functionality

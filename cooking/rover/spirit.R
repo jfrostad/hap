@@ -1,8 +1,8 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
 # Author: JF
-# Date: 09/05/2018
-# Purpose: Exploration of HAP results using visualization
-# source("/homes/jfrostad/_code/lbd/hap/cooking/rover/1_spirit.R", echo=T)
+# Date: 04/08/2020
+# Purpose: Produce HAP maps and figures
+# source("/homes/jfrostad/_code/lbd/hap/cooking/rover/spirit.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------

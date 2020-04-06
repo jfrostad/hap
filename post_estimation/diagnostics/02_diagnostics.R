@@ -48,7 +48,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_04_02_20_27_13',
+                '2020_04_03_22_49_57',
                 'prev')
 
 #if new vetting activity has occured, need to refresh the local sheet
@@ -136,6 +136,9 @@ for (r in 1:length(Regions)) Regions[[r]] <- substr(Regions[[r]], start = 1, sto
 Regions <- unique(Regions)
 Regions <- Regions[Regions != '']
 message(paste0(Regions, '\n'))
+
+#TODO remove when debugged
+Regions <- Regions %>% .[!(. %like% 'se_asia')]
 
 ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
 holdouts <- 0

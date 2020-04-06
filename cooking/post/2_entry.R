@@ -43,9 +43,9 @@ if (interactive) {
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_04_01_12_32_50'
+  run_date <- '2020_04_03_22_49_57'
   measure <- 'prev'
-  reg <- 'AGO'
+  reg <- 'dia_se_asia-VNM-THA'
   cov_par <- paste(indicator_group, reg, sep='_')
   
 } else {
