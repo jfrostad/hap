@@ -83,7 +83,7 @@ foreach number in `array'{
     tostring year_start, gen(year)
     tostring year_end, gen(end_year)
     tostring nid, gen(nid_n)
-    local filename = survey_name + "_" + nid_n + "_" + survey_module + "_" + ihme_loc_id + "_" + year + "_" + end_year
+    local filename = ihme_loc_id + "_" + survey_name + "_" + year + "_" + end_year + "_" + nid_n
     local filename = subinstr("`filename'", "/", "_",.)
     drop year end_year nid_n
 	//if (strpos("$file_path", "LIMITED_USE")|strpos("$file_path", "IDENT")){
