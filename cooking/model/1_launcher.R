@@ -13,7 +13,8 @@ rm(list = ls())
 
 # set general arguments
 user            <- Sys.info()['user']
-repo            <- file.path('/homes', user, '_code/lbd/hap/')
+core_repo            <- file.path('/homes', user, '_code/lbd/lbd_core/')
+my_repo            <- file.path('/homes', user, '_code/lbd/hap/')
 indicator_group <- 'cooking'
 parallel_script <- file.path('model/3_orbit')
 
@@ -65,11 +66,13 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_sssa',
 #regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa', 'dia_afr_horn')
 
 # custom country-specifics
-#regions <- c('dia_sssa-zaf', 'ZAF', 'dia_se_asia-vnm-tha', 'VNM', 'THA')
-regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
-             'dia_cssa-AGO-GNQ', 'AGO',
-             'dia_wssa-CPV-NGA', 'NGA',
-             'dia_name-ESH',
+
+regions <- c('essa-ERI-DJI-YEM', "ERI+DJI+YEM",
+             #'dia_afr_horn-ERI-DJI-YEM',
+             'sssa-ZAF', 'ZAF',
+             'cssa-AGO-GNQ', 'AGO',
+             'wssa-CPV-NGA', 'NGA',
+             'noaf-ESH',
              #'dia_mcaca', 
              'caca-CUB',
              #'dia_s_america-BRA-GUF', 'BRA',
@@ -77,30 +80,13 @@ regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
              #'dia_central_asia', 
              'stan-TKM',
              'CHN', 'MNG',
-             'dia_malay-MYS',
-             'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
-             'dia_se_asia-VNM-THA', 'VNM', 'THA',
+             'ocea-MYS',
+             'seas-VNM-THA', 'VNM', 'THA',
              'mide+TKM', 'soas')
-             #'dia_mid_east-AFG', 'dia_south_asia+AFG'
+
+regions <- c('essa-ERI-DJI-YEM')
 
 #regions <- c('AGO', 'VNM', 'THA', 'ZAF')
-
-# regions <- c('dia_afr_horn-ETH-SOM-SSD', 'dia_essa+ETH+SOM+SSD-SWZ-ZWE-LSO',
-#              'dia_central_asia-TKM', 'TKM')
-# 
-#regions <- 'CHN'
-
-# large regions
-#regions <- c('dia_s_america-BRA-GUF-VEN')
-
-# testing
-#regions <- c('VNM', 'dia_se_asia-VNM-THA')
-#regions <- c('dia_mid_east-AFG', 'dia_south_asia+AFG')
-#regions <- c('dia_chn_mng', 'dia_s_america')
-#regions <- c('SOM')
-# regions <- c('dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+LSO', 'ZAF', 'ZWE',
-#              'dia_chn_mng',
-#              'dia_mcaca')
 
 # list indicators
 indics <- 'cooking_fuel_solid'
@@ -135,8 +121,8 @@ for (i in indics) {
                       '-l fthread=1 -l h_rt=00:02:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
     r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
     script <- file.path('/homes', user, '_code/lbd/hap', indicator_group, 'model/2_rocket.R')
-    args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, parallel_script,
-                  plot_covariates, covariate_plotting_only, proj_arg, use_geos_nodes, run_date, holdout)
+    args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, parallel_script,
+                  plot_covariates, covariate_plotting_only, proj_arg, use_geos_nodes, run_date, my_repo)
 
     # run launch script
     paste(sys.sub, r_shell, script, args) %>% 

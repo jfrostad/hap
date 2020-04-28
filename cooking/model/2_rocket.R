@@ -20,7 +20,6 @@ config_par      <- commandArgs()[8]
 cov_par         <- commandArgs()[9]
 Regions         <- commandArgs()[10]
 parallel_script <- commandArgs()[11]
-repo       <- core_repo
 message(indicator)
 
 ## Singularity version
@@ -37,16 +36,6 @@ package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/commo
 source(paste0(core_repo, '/mbg_central/setup.R'))
   mbg_setup(package_list = package_list, repos = core_repo)
 
-## Throw a check for things that are going to be needed later
-message('Looking for things in the config that will be needed for this script to run properly')
-
-## Read config file and save all parameters in memory
-config <- load_config(repo            = core_repo,
-                      indicator_group = indicator_group,
-                      indicator       = indicator,
-                      config_name     = paste0('/model/configs/config_', config_par),
-                      covs_name       = paste0('/model/configs/covs_', cov_par))
-
 ## Set some covariate options
 plot_covariates <- commandArgs()[12]
 covariate_plotting_only <- commandArgs()[13]
@@ -58,6 +47,19 @@ use_geos_nodes <- commandArgs()[15]
 
 ## Set run date
 run_date <- commandArgs()[16]
+
+## Define personal repo
+my_repo <- commandArgs()[17]
+
+## Throw a check for things that are going to be needed later
+message('Looking for things in the config that will be needed for this script to run properly')
+
+## Read config file and save all parameters in memory
+config <- load_config(repo            = my_repo,
+                      indicator_group = indicator_group,
+                      indicator       = indicator,
+                      config_name     = paste0('/model/configs/config_', config_par),
+                      covs_name       = paste0('/model/configs/covs_', cov_par))
 
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')

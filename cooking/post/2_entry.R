@@ -37,7 +37,7 @@ if (interactive) {
   
   ## Set repo location, indicator group, and some arguments
   user <- 'jfrostad'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap"
+  core_repo <- "/homes/jfrostad/_code/lbd/lbd_core"
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
   config_par   <- 'hap_standard'
@@ -45,8 +45,9 @@ if (interactive) {
   age <- 0
   run_date <- '2020_04_03_22_49_57'
   measure <- 'prev'
-  reg <- 'dia_se_asia-VNM-THA'
+  reg <- 'AGO'
   cov_par <- paste(indicator_group, reg, sep='_')
+  my_repo <- "/homes/jfrostad/_code/lbd/hap"
   
 } else {
   
@@ -66,7 +67,7 @@ if (interactive) {
 }
 
 #analysis options
-new_gbd_estimates <- T #set TRUE if GBD best model has been updated
+new_gbd_estimates <- F #set TRUE if GBD best model has been updated
 interval_mo = 12 #TODO config??
 
 #dirs
@@ -107,8 +108,7 @@ fix_diacritics <<- function(x) {
 
 ## Load custom post-estimation functions
 #TODO re-evaluate this call
-file.path(core_repo, 'post_estimation/_lib', 'aggregate_inputs.R') %>% source
-
+file.path(my_repo, '_lib', 'post', 'aggregate_inputs.R') %>% source
 
 #***********************************************************************************************************************
 
@@ -337,7 +337,7 @@ if (metric_space == "rates") {
         run_date = run_date,
         indicator = indicator,
         main_dir = outputdir,
-        rake_method = rake_method,
+        rake_method = 'logit',
         age = age,
         holdout = holdout,
         countries_not_to_subnat_rake = countries_not_to_subnat_rake,
@@ -404,11 +404,12 @@ message("Saving results...")
 ## save RF
 save_post_est(rf, "csv", paste0(reg, "_rf"))
 
-## save raked cell preds
-save(raked_cell_pred, file = paste0(
-  sharedir, "/output/", run_date, "/",
-  indicator, "_raked_cell_draws_eb_bin0_", reg, "_0.RData"
-))
+# TODO remove - preds are saved during function
+# ## save raked cell preds
+# save(raked_cell_pred, file = paste0(
+#   sharedir, "/output/", run_date, "/",
+#   indicator, "_raked_cell_draws_eb_bin0_", reg, "_0.RData"
+# ))
 
 # make and save summaries
 
@@ -495,7 +496,7 @@ sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ',
                   '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
 r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(core_repo, indicator_group, 'post/3_descent.R')
+script <- file.path(my_repo, indicator_group, 'post/3_descent.R')
 args <- paste(reg, run_date, lri_run_date)
 
 

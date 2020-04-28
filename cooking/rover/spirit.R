@@ -47,7 +47,7 @@ commondir       <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', s
 package_lib    <- sprintf('%s_code/_lib/pkg',h_root)
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
-pacman::p_load(data.table, scales, ggplot2, RColorBrewer, sf, viridis, farver, reldist) 
+pacman::p_load(data.table, scales, ggplot2, gridExtra, RColorBrewer, sf, viridis, farver, reldist) 
 package_list    <- package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 # Use setup.R functions to load common LBD packages and mbg_central "function" scripts
@@ -59,9 +59,8 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_03_25_20_31_43'
-#run_date <- '2020_02_07_23_37_07'
-lri_run_date <- '2019_10_23_16_13_17'
+run_date <- '2020_03_27_13_00_02'
+lri_run_date <- '2020_01_10_15_18_27'
 
 indicator_group <- 'cooking'
 indicator <- 'hap'
@@ -205,55 +204,232 @@ ggplot(dt[year %in% c(2000,2017)], aes(x=(hap_pct-.5), y=tap_pc, color=super_reg
 ggsave(filename=file.path(out.dir, 'hap_share_change_facet.png'),
        width=15, height=10, units='in', dpi=900)
 
+
+#read in input data and prepare it for mapping
+data <-  
+  load_map_results(indicator, indicator_group, run_date, raked, 
+                   start_year=2000, end_year=2017,
+                   custom_path = hap.paths,
+                   geo_levels=c('admin2'),
+                   cores=cores)
+data_d <-
+  load_map_results(indicator, indicator_group, run_date, raked, 
+                   start_year=2000, end_year=2017,
+                   custom_path = hap.paths.d,
+                   geo_levels=c('admin2'),
+                   cores=cores)
+
+#define extent of map
+zoom.afr <- data.table(x1=-10, x2=50, y1=-20, y2=40)
+zoom.global <- data.table(x1=-120, x2=150, y1=-40, y2=55)
+#***********************************************************************************************************************
+
+# ---FIGURE 2----------------------------------------------------------------------------------------------------------
+#setup plot data
 plot.dt <- dt %>% 
   copy %>% 
   .[year %in% c(2000, 2017)] %>% 
-  .[year==2017, year := 2018]
+  .[year==2017, year := 2018] %>% 
+  na.omit(., cols=c('hap_pct', 'tap_paf'))
 
-plot <- 
-  ggplot(plot.dt[iso3 %in% c('ETH', 'KEN', 'IND', 'MNG', 'THA')], 
-         aes(x=hap_pct, y=tap_paf*lri*1e3, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
-  geom_point() + 
+#setup the list of top countries
+top_countries <- #defined based on LRI rates as suggested by simon
+  dt[year==min(dt$year), .(mean=weighted.mean(lri, w=pop, na.rm=T)), by=.(iso3)] %>%
+  .[order(mean)] %>%
+  tail(10) %>%
+  .[, unique(iso3)]
+
+top_countries_c <- #defined based on LRI counts as suggested by simon
+  dt[year==min(dt$year), .(sum=sum(lri_c, na.rm=T)), by=.(iso3)] %>%
+  .[order(sum)] %>%
+  tail(14) %>%
+  .[, unique(iso3)]
+
+custom_countries <- #defined based on aesthetics - all countries in different range
+  c('ETH', 'KEN', 'IND', 'MNG', 'THA') 
+
+custom_cols <- c('Ethiopia'='midnightblue', 'Kenya'='cornflowerblue', 'India'='darkgoldenrod', 
+                 'Mongolia'='firebrick', 'Thailand'='seagreen')
+
+custom_cols <- c('Ethiopia'='firebrick', 'Kenya'='indianred2', 'India'='darkgoldenrod', 
+                 'Mongolia'='mediumorchid4', 'Thailand'='olivedrab')
+
+master_plot <- 
+  ggplot(plot.dt[iso3 %in% custom_countries], 
+         aes(x=1-hap_pct, y=tap_paf, color=location_name, shape=year %>% as.factor, group=ADM2_CODE)) + 
+  annotate("rect", xmin = -.02, xmax = .5, ymin = .15, ymax = .60, fill='steelblue', alpha = .2) +
+  annotate("rect", xmin = .5, xmax = 1.02, ymin = .15, ymax = .60, fill='tomato', alpha = .2) +
   geom_line(alpha=.1) +
-  geom_vline(xintercept=.5) +
-  scale_color_brewer('Country', palette='Dark2') +
-  scale_shape_manual('Year', values=c(1, 16)) +
-  scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
-  scale_y_continuous("Rate/1000 of LRI Attributable to TAP", limits=c(0,4)) +
-  coord_flip() +
+  geom_point(size=2) + 
+  geom_vline(xintercept=.5, linetype="dashed") +
+  scale_colour_manual('Country', values=custom_cols) +
+  scale_shape_manual('Year', values=c(1, 16), guide=F) +
+  scale_x_continuous('', limits=c(-.02, 1.02), labels = scales::percent, breaks=c(.25, .5, .75), expand = c(0, 0)) +
+  scale_y_continuous("Percent of LRI attributable to TAP (PAF)", 
+                     limits=c(.15,.60), labels = scales::percent, breaks=c(.2, .4, .6), expand = c(0, 0)) +
   theme_bw(base_size = 16) +
   theme(
-    legend.position = c(.90, .30),
-    legend.justification = c("right", "top"),
-    legend.box.just = "right",
-    legend.margin = margin(6, 6, 6, 6)
-  )
-
-ggsave(filename=file.path(out.dir, 'presub_figure_2a.png'),
-       width=16, height=8, units='in', dpi=900)
-
-plot <- 
-  ggplot(plot.dt[iso3 %in% c('ETH', 'KEN', 'IND', 'MNG', 'THA')], 
-         aes(x=hap_pct, y=tap_paf, color=location_name, shape=year %>% as.factor, group=ADM2_CODE)) + 
-  geom_point() + 
-  geom_line(alpha=.1) +
-  geom_vline(xintercept=.5) +
-  scale_color_brewer('Country', palette='Dark2') +
-  scale_shape_manual('Year', values=c(1, 16)) +
-  scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
-  scale_y_continuous("Population Attributable Fraction of LRI to TAP", limits=c(.2,.6)) +
-  coord_flip() +
-  theme_bw(base_size = 16) +
-  theme(
-    legend.position = c(.87, .65),
+    legend.position = c(.01, .25),
     legend.justification = c("left", "top"),
-    legend.box.just = "right",
-    legend.margin = margin(6, 6, 6, 6)
+    legend.box.just = "left",
+    legend.margin = margin(6, 6, 6, 6),
+    plot.margin = margin(12, 0, 0, 6, "pt"),
+    axis.text.y = element_text(angle = 90, hjust=.4),
+    axis.title.x = element_blank()
   )
 
 ggsave(filename=file.path(out.dir, 'presub_figure_2b.png'),
        width=12, height=8, units='in', dpi=900)
 
+#helper function to create smaller inset versions of this plot
+makeInset <- function(loc, type='scatter', scale_labels=F) {
+  
+  message('plotting ', loc)
+
+  dt <- plot.dt[iso3%in%loc]
+  cap <- plot.dt[iso3%in%loc, unique(location_name)]
+  if(cap %like% 'Congo') cap <- 'D.R. Congo'
+  if(cap %like% 'Tanzania') cap <- 'Tanzania'
+  
+  #build either a scatterplot or a contoured cloudplot
+  if (type=='scatter') {
+  
+    plot <- ggplot(dt, aes(x=1-hap_pct, y=tap_paf, color=year %>% as.factor, group=ADM2_CODE)) + 
+      geom_point(size=4, alpha=.3) + 
+      geom_vline(xintercept=.5, linetype="dashed") +
+      scale_colour_manual('', values=c('2000'='steelblue', '2018'='midnightblue'), guide=F)
+
+  } else if (type=='cloud') {
+
+    #Egypt needs to be noised slightly in 2018 because hap is so universally low that it cannot be plotted as a contour
+    dt[, noise := runif(.N, min=0, max=0.025)]
+    dt[iso3=='EGY' & year==2018, hap_pct := hap_pct + noise]
+
+    plot <- ggplot(dt, aes(x=1-hap_pct, y=tap_paf)) + 
+      geom_density_2d(data=dt[year==2000], color='steelblue', binwidth=5) +
+      #
+      geom_density_2d(data=dt[year==2018], color='midnightblue', binwidth=5) 
+    
+  }
+  
+  #standard settings
+  plot <- plot +
+    geom_vline(xintercept=.5, linetype="dashed") +
+    scale_x_continuous("", limits=c(-.05, 1.05), labels = scales::percent, breaks=c(.25, .75), expand = c(0, 0)) +
+    scale_y_continuous("", limits=c(.15,.6), labels = scales::percent, breaks=c(.3, .5), expand = c(0, 0),
+                       position='right') +
+    ggtitle(cap) + #if you want the title on the top
+    theme_bw(base_size=16) +
+    theme(plot.title=element_text(hjust=0.55, size=12, margin=margin(0,0,0,0)),
+          axis.title=element_blank())
+    
+  if (!scale_labels | loc %in% c('AFG', 'AGO', 'COD', 'EGY', 'MMR', 'NER')) {
+    
+    plot <- plot + theme(axis.text=element_blank(), 
+                         axis.ticks=element_blank(),
+                         plot.margin=margin(2, 4, 12, 8, "pt"))
+    
+  } else if (loc %in% c('BGD', 'IDN', 'NGA')) {
+    
+    plot <- plot + theme(axis.text.x=element_blank(), 
+                         axis.ticks.x=element_blank(),
+                         axis.text.y.right=element_text(angle = -90, vjust=0, hjust=.4),
+                         plot.margin=margin(2, 0, 12, 0, "pt"))
+    
+  } else if (loc %in% c('PAK', 'PHL')) {
+    
+    plot <- plot + theme(axis.text.y=element_blank(), 
+                         axis.ticks.y=element_blank(),
+                         plot.margin=margin(0, 4, 0, 8, "pt"))
+    
+  } else if (loc == 'TZA') {
+    
+    plot <- plot + theme(axis.text.y.right=element_text(angle = -90, vjust=0, hjust=.4),
+                         plot.margin=margin(0, 0, 0, 0, "pt"))
+    
+  }
+  
+  return(plot)
+
+}
+
+#now make a single inset plot for each of the remaining top 10 countries
+insets <- top_countries_c[5:14] %>% 
+  .[!(. %in% custom_countries)] %>% 
+  sort %>% 
+  lapply(., makeInset, scale_labels=T)
+
+##scatter version##
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[9]] <- master_plot
+lay <- rbind(c(9,9,9,9,1,2),
+             c(9,9,9,9,3,4),
+             c(9,9,9,9,5,6),
+             c(9,9,9,9,7,8))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+                    ) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2.png'),
+       width=12, height=8, units='in', dpi=900)
+
+##cloud version##
+#now make a single inset plot for each of the remaining top 10 countries
+insets <- top_countries_c[5:14] %>% 
+  .[!(. %in% custom_countries)] %>% 
+  sort %>% 
+  lapply(., makeInset, scale_labels=T, type='cloud')
+
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[9]] <- master_plot
+lay <- rbind(c(9,9,9,9,1,2),
+             c(9,9,9,9,3,4),
+             c(9,9,9,9,5,6),
+             c(9,9,9,9,7,8))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud.png'),
+       width=12, height=8, units='in', dpi=900)
+
+##cloud version with top 14##
+#now make a single inset plot for each of the remaining top 14 countries
+insets <- top_countries_c %>% 
+  .[!(. %in% custom_countries)] %>% 
+  sort %>% 
+  lapply(., makeInset, scale_labels=T, type='cloud')
+
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[13]] <- master_plot
+lay <- rbind(c(13,13,13,13,1,2,3),
+             c(13,13,13,13,4,5,6),
+             c(13,13,13,13,7,8,9),
+             c(13,13,13,13,10,11,12))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud_14.png'),
+       width=12, height=8, units='in', dpi=900)
+
+
+#make for all countries
 makeFigure2 <- function(country) {
   
   message('plotting ', country)
@@ -291,26 +467,6 @@ pdf(paste0(out.dir, '/presub_figure_2_all_countries.pdf'),
   
 dev.off()
 
-#read in input data and prepare it for mapping
-tic('total')
-tic('loading data')
-
-data <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   start_year=2000, end_year=2017,
-                   custom_path = hap.paths,
-                   geo_levels=c('admin2'),
-                   cores=cores)
-data_d <-
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   start_year=2000, end_year=2017,
-                   custom_path = hap.paths.d,
-                   geo_levels=c('admin2'),
-                   cores=cores)
-
-#define extent of map
-zoom.afr <- data.table(x1=-10, x2=50, y1=-20, y2=40)
-zoom.global <- data.table(x1=-120, x2=150, y1=-40, y2=55)
 #***********************************************************************************************************************
 
 # ---CREATE MAPS--------------------------------------------------------------------------------------------------------
@@ -902,4 +1058,62 @@ toc()
 
 toc()
 
+plot <- 
+  ggplot(plot.dt[iso3 %in% custom_countries], 
+         aes(x=hap_pct, y=tap_paf*lri*1e3, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
+  geom_point() + 
+  geom_line(alpha=.1) +
+  geom_vline(xintercept=.5) +
+  scale_color_brewer('Country', palette='Dark2') +
+  scale_shape_manual('Year', values=c(1, 16)) +
+  scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
+  scale_y_continuous("Rate/1000 of LRI Attributable to TAP", limits=c(0,4)) +
+  coord_flip() +
+  theme_bw(base_size = 16) +
+  theme(
+    legend.position = c(.90, .30),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6)
+  )
 
+ggsave(filename=file.path(out.dir, 'presub_figure_2a.png'),
+       width=16, height=8, units='in', dpi=900)
+
+master_plot_flip <- 
+  ggplot(plot.dt[iso3 %in% custom_countries], 
+         aes(x=tap_paf, y=1-hap_pct, color=location_name, shape=year %>% as.factor, group=ADM2_CODE)) + 
+  geom_point() + 
+  geom_line(alpha=.1) +
+  geom_hline(yintercept=.5, linetype="dashed") +
+  #scale_color_brewer('Country', palette='Dark2') +
+  scale_colour_manual('Country', values=custom_cols) +
+  scale_shape_manual('Year', values=c(1, 16)) +
+  scale_y_continuous("HAP / TAP Share", limits=c(0, 1), expand = c(0, 0)) +
+  scale_x_continuous("Population Attributable Fraction of LRI", limits=c(.2,.6), expand = c(0, 0)) +
+  annotate("rect", xmin = .5, xmax = 1, ymin = .2, ymax = .6, fill='lightsalmon2', alpha = .2) +
+  annotate("rect", xmin = 0, xmax = .5, ymin = .2, ymax = .6, fill='lightgoldenrod2', alpha = .2) +
+  coord_flip() +
+  theme_bw(base_size = 16) +
+  theme(
+    #legend.position = c(.84, .69),
+    legend.position = c(.82, .41),
+    legend.justification = c("left", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6)
+  )
+
+ggsave(filename=file.path(out.dir, 'presub_figure_2b.png'),
+       width=12, height=8, units='in', dpi=900)
+
+#with vertical layout
+lay <- rbind(c(1,2,3,4),
+             c(9,9,9,5),
+             c(9,9,9,6),
+             c(9,9,9,7),
+             c(9,9,9,8))
+plot <- grid.arrange(grobs=insets, layout_matrix=lay)
+plot <- grid.arrange(arrangeGrob(grobs=insets, layout_matrix=lay, 
+                                 bottom=textGrob("Percent of TAP contributed by ambient sources")))
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_figure_2_master.png'),
+       width=12, height=8, units='in', dpi=900)

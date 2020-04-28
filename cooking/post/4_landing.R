@@ -40,7 +40,8 @@ if(!identical(getOption("bitmapType"), "cairo") && isTRUE(capabilities()[["cairo
 
 ## Set core_repo location and indicator group
 user            <- Sys.info()['user']
-core_repo       <- '/homes/jfrostad/_code/lbd/hap/'
+core_repo       <- '/homes/jfrostad/_code/lbd/lbd_core/'
+my_repo       <- '/homes/jfrostad/_code/lbd/hap/'
 commondir       <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', sep = '/')
 
 #load packages

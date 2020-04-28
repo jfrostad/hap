@@ -49,10 +49,12 @@
                'dia_mcaca', 'dia_s_america-GUF', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
                'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
 
-  regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
-               'dia_cssa-AGO-GNQ', 'AGO',
-               'dia_wssa-CPV-NGA', 'NGA',
-               'dia_name-ESH',
+  regions <- c('dia_essa-ERI-DJI-YEM', "ERI+DJI+YEM",
+               #'dia_afr_horn-ERI-DJI-YEM',
+               'sssa-ZAF', 'ZAF',
+               'cssa-AGO-GNQ', 'AGO',
+               'wssa-CPV-NGA', 'NGA',
+               'noaf-ESH',
                #'dia_mcaca', 
                'caca-CUB',
                #'dia_s_america-BRA-GUF', 'BRA',
@@ -60,9 +62,8 @@
                #'dia_central_asia', 
                'stan-TKM',
                'CHN', 'MNG',
-               'dia_malay-MYS',
-               'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
-               'dia_se_asia-VNM-THA', 'VNM', 'THA',
+               'ocea-MYS',
+               'seas-VNM-THA-MYS', 'VNM', 'THA',
                'mide+TKM', 'soas')
   
   #regions <- c('AGO', 'THA', 'VNM', 'ZAF')

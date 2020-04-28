@@ -989,10 +989,7 @@ prep_cell_pred_for_frax_raking <- function(overs = overs,
   
   ## merge them onto the cell_pred
   cell_pred <- merge(cell_pred, fractional_rf, by = c("location_id", "year"))
-  
-  ## create the spatial hierarchy
 
-  
   list(cell_pred=cell_pred,
        link=link,
        rf=fractional_rf) %>% 
@@ -1067,6 +1064,7 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
                                     holdout = 0,
                                     save_output = TRUE,
                                     return_objects = FALSE,
+                                    make_diagnostics=TRUE,
                                     countries_not_to_subnat_rake = countries_not_to_subnat_rake,
                                     custom_output_folder = NULL,
                                     debug=F) {
@@ -1075,7 +1073,6 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   
   # setting a reference for the number of draws
   ndraws <- ncol(cell_pred)
-  region <- reg #TODO why?
   overs <- paste0("V", 1:ndraws)
   
   # setup the output folder
@@ -1117,7 +1114,7 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   ##Unraked Counts#########################################
   # creating unraked counts aggregations 
   message("creating a unraked counts aggregations")
-  
+
   #convert cell_pred to counts
   cell_pred <- cell_pred[, (overs) := lapply(.SD, function(x) x * pop_raked), .SDcols=overs]
 
@@ -1128,7 +1125,7 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   
   sp_hierarchy_list <- 
     link[ADM0_CODE %in% unique(admin_0[, ADM0_CODE]), 
-         .(ADM0_CODE, ADM1_CODE, ADM2_CODE, ADM0_NAME, ADM1_NAME, ADM2_NAME, region)] %>% 
+         .(ADM0_CODE, ADM1_CODE, ADM2_CODE, ADM0_NAME, ADM1_NAME, ADM2_NAME)] %>% 
     unique %>% 
     .[, region := reg]
   
@@ -1198,7 +1195,7 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   # Save raked rates cell_pred object
   if (save_output) {
     
-    paste0(output_dir, "/", indicator, "_cell_draws_raked_", measure, "_eb_bin", 
+    paste0(output_dir, "/", indicator, "_raked_", measure, "_cell_draws_eb_bin", 
            age, "_", reg, "_", holdout, ".RData") %>%  
       save(raked_cell_pred, file = .)
 
@@ -1224,7 +1221,7 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   
   if (save_output) {
     
-    paste0(output_dir, "/", indicator, "_c_cell_draws_raked_", measure, "_eb_bin", 
+    paste0(output_dir, "/", indicator, "_raked_", measure, "_c_cell_draws_eb_bin", 
            age, "_", reg, "_", holdout, ".RData") %>%  
       save(raked_cell_pred_c, file = .)
 
@@ -1266,6 +1263,16 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
       save(admin_0, admin_1, admin_2, sp_hierarchy_list, file = .)
 
   }
+  
+  ##Raking diagnostics#########################################
+  # Produce diagnostic scatters
+  if (make_diagnostics) {
+    
+    message('generating diagnostic scatters')
+    #browser()
+    
+  }
+  
   
   ## Return cell pred and raking factors if desired
   if (return_objects) list('rf'=rf,'raked_cell_pred'=raked_cell_pred) %>% return
@@ -1665,55 +1672,65 @@ calculate_fractional_rfs <- function(overs = overs,
                                      approx_0_1 = F,
                                      zero_heuristic = F,
                                      iterate = F,
-                                     rake_method = "linear") {
+                                     rake_method = "linear",
+                                     debug=F) {
+  
+  if (debug) browser()
   
   message("converting from prevalence to counts")
   
   # convert to counts
-  cell_pred <- cell_pred[, (overs) := lapply(overs, function(x) get(x) * pop_raked)]
+  cell_pred <- cell_pred[, (overs) := lapply(.SD, function(x) x * pop_raked), .SDcols=overs]
   
   # do calculations!
-  rake_geo <- cell_pred[, lapply(c(overs, "pop_raked"), function(x) sum(get(x), na.rm = T)), by = c("year", "location_id")]
-  setnames(rake_geo, grep("V[0-9]", names(rake_geo), value = T), c(overs, "pop_raked"))
+  rake_geo <- cell_pred[, lapply(.SD, sum, na.rm=T), .SDcols=c(overs, 'pop_raked'), by = c("year", "location_id")]
+  #setnames(rake_geo, grep("V[0-9]", names(rake_geo), value = T), c(overs, "pop_raked"))
   
   # convert back to rates/prevalence
-  rake_geo <- rake_geo[, (overs) := lapply(overs, function(x) get(x) / pop_raked) ]
+  rake_geo <- rake_geo[, (overs) := lapply(.SD, function(x) x / pop_raked), .SDcols=overs]
   
   # merge to admin estimates
   rake_geo <- merge(rake_geo, gbd, by.x = c("location_id", "year"), by.y = c("name", "year"), all.x = TRUE)
   
   # finding the mean of the draws at the raking geographies
-  rake_geo$gbd_prev <- rake_geo$mean
+  #rake_geo$gbd_prev <- rake_geo$mean 
+  rake_geo[, gbd_prev := mean]
   rake_geo[, mbg_rate:= rowMeans(.SD), .SDcols = overs]
-  rake_geo$rf <- rake_geo$gbd_prev / rake_geo$mbg_rate
+  rake_geo[, rf := gbd_prev / mbg_rate]
+  #rake_geo$rf <- rake_geo$gbd_prev / rake_geo$mbg_rate
   
   # Clear Out
   message("creating fractional raking factors table")
-  fractional_rf <- rake_geo
-  fractional_rf$mbg_prev <- fractional_rf$mbg_rate
+  fractional_rf <- copy(rake_geo)
+  fractional_rf[, mbg_prev := mbg_rate]
+  #fractional_rf$mbg_prev <- fractional_rf$mbg_rate
   fractional_rf <- fractional_rf[, c("location_id", "year", "mbg_prev", "gbd_prev", "rf")]
   
-  
   if(rake_method == "logit"){
-    cell_pred <- cell_pred[, (overs) := lapply(overs, function(x) get(x) / pop_raked)]
+    
+    cell_pred <- cell_pred[, (overs) := lapply(.SD, function(x) x / pop_raked), .SDcols=overs]
+    
     #for each country year, find the logit raking factor
-    #redefine cys
-    cys <- unique(rake_geo[,.(location_id, year)])
-    rf <- lapply(seq(nrow(cys)), function(x) {
+    rake_by_row <- function(i,
+                            rf_dt=rake_geo,
+                            pred_dt=cell_pred,
+                            debug=F) {
       
-      #year and location
-      theloc = cys[x,location_id]
-      theyear = cys[x,year]
+      if (debug) browser()
       
-      if (nrow(rake_geo[location_id == theloc & year == theyear]) == 0) {
+      #subset year and location
+      theloc = rf_dt[i,location_id] %>% unique
+      theyear = rf_dt[i,year] %>% unique
+      
+      if (nrow(rf_dt[location_id == theloc & year == theyear]) == 0) {
         return(0)
-      } else if (rake_geo[location_id == theloc & year == theyear, .(mean)] == 0 & zero_heuristic == T) {
+      } else if (rf_dt[location_id == theloc & year == theyear, mean] == 0 & zero_heuristic) {
         # catch true zeroes (i.e. pre-introduction of an intervention) and return -9999. This will speed things up & will replace later with 0
         return(-9999)        
       } else {
-        ret <- try(LogitFindK(gbdval     = rake_geo[location_id == theloc & year == theyear,mean],
-                              pixelval   = as.matrix(cell_pred[location_id == theloc & year == theyear & !is.na(V1), overs, with = F]), #pass the cell pred rows that corrospond to this country year
-                              weightval  = as.numeric(cell_pred[location_id == theloc & year == theyear & !is.na(V1), pop_raked]),
+        ret <- try(LogitFindK(gbdval     = rf_dt[location_id == theloc & year == theyear,mean],
+                              pixelval   = as.matrix(pred_dt[location_id == theloc & year == theyear & !is.na(V1), overs, with = F]), #pass the cell pred rows that corrospond to this country year
+                              weightval  = as.numeric(pred_dt[location_id == theloc & year == theyear & !is.na(V1), pop_raked]),
                               MaxJump    = MaxJump,
                               MaxIter    = MaxIter,
                               FunTol     = FunTol,
@@ -1726,9 +1743,9 @@ calculate_fractional_rfs <- function(overs = overs,
             message(paste0("Your GBD and MBG estimates are quite far apart for location ", theloc, " | year ", theyear))
             message("Increasing MaxJump and NumIter by 10-fold, but you should investigate this...")
             
-            ret <- try(LogitFindK(gbdval     = rake_geo[location_id == theloc & year == theyear,mean],
-                                  pixelval   = as.matrix(cell_pred[location_id == theloc & year == theyear & !is.na(V1), overs, with = F]), #pass the cell pred rows that corrospond to this country year
-                                  weightval  = as.numeric(cell_pred[location_id == theloc & year == theyear & !is.na(V1), pop_raked]),
+            ret <- try(LogitFindK(gbdval     = rf_dt[location_id == theloc & year == theyear,mean],
+                                  pixelval   = as.matrix(pred_dt[location_id == theloc & year == theyear & !is.na(V1), overs, with = F]), #pass the cell pred rows that corrospond to this country year
+                                  weightval  = as.numeric(pred_dt[location_id == theloc & year == theyear & !is.na(V1), pop_raked]),
                                   MaxJump    = MaxJump*10,
                                   MaxIter    = MaxIter*10,
                                   FunTol     = FunTol,
@@ -1740,9 +1757,9 @@ calculate_fractional_rfs <- function(overs = overs,
             message(paste0("Your GBD and MBG estimates are REALLY far apart for location ", theloc, " | year ", theyear))
             message("Increasing MaxJump and NumIter by 100-fold, but you should investigate this...")
             
-            ret <- try(LogitFindK(gbdval     = rake_geo[location_id == theloc & year == theyear,mean],
-                                  pixelval   = as.matrix(cell_pred[location_id == theloc & year == theyear & !is.na(V1), overs, with = F]), #pass the cell pred rows that corrospond to this country year
-                                  weightval  = as.numeric(cell_pred[location_id == theloc & year == theyear & !is.na(V1), pop_raked]),
+            ret <- try(LogitFindK(gbdval     = rf_dt[location_id == theloc & year == theyear,mean],
+                                  pixelval   = as.matrix(pred_dt[location_id == theloc & year == theyear & !is.na(V1), overs, with = F]), #pass the cell pred rows that corrospond to this country year
+                                  weightval  = as.numeric(pred_dt[location_id == theloc & year == theyear & !is.na(V1), pop_raked]),
                                   MaxJump    = MaxJump*100,
                                   MaxIter    = MaxIter*100,
                                   FunTol     = FunTol,
@@ -1757,7 +1774,16 @@ calculate_fractional_rfs <- function(overs = overs,
         
         return(ret)
       }
-    })
+    }
+    
+    #redefine cys
+    rows <- rake_geo[,.(location_id, year)] %>% 
+      unique %>% 
+      nrow %>% 
+      seq
+    
+    rf <- lapply(rows, rake_by_row)
+    
     rf <- unlist(rf)
     fractional_rf$rf <- rf
   }

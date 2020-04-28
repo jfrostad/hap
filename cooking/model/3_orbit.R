@@ -133,32 +133,18 @@ for(arg in c('reg','age','run_date','test','holdout',
 # print out session info so we have it on record
 sessionInfo()
 
-# Load MBG packages and functions
-message('Loading in required R packages and MBG functions')
+# ---FUNCTIONS----------------------------------------------------------------------------------------------------------
+## Load MBG packages
+package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
-#use your own diacritics fx, due to inscrutable error
-#note: requires mgsub pkg
-#TODO submit PR
-fix_diacritics <<- function(x) {
-  
-  #first define replacement patterns as a named list
-  defs <-
-    list('Š'='S', 'š'='s', 'Ž'='Z', 'ž'='z', 'À'='A', 'Á'='A', 'Â'='A', 'Ã'='A', 'Ä'='A', 'Å'='A', 'Æ'='A', 
-         'Ç'='C', 'È'='E', 'É'='E','Ê'='E', 'Ë'='E', 'Ì'='I', 'Í'='I', 'Î'='I', 'Ï'='I', 'Ñ'='N', 'Ò'='O', 
-         'Ó'='O', 'Ô'='O', 'Õ'='O', 'Ö'='O', 'Ø'='O', 'Ù'='U','Ú'='U', 'Û'='U', 'Ü'='U', 'Ý'='Y', 'Þ'='B', 
-         'à'='a', 'á'='a', 'â'='a', 'ã'='a', 'ä'='a', 'å'='a', 'æ'='a', 'ç'='c','è'='e', 'é'='e', 'ê'='e', 
-         'ë'='e', 'ì'='i', 'í'='i', 'î'='i', 'ï'='i', 'ð'='o', 'ñ'='n', 'ò'='o', 'ó'='o', 'ô'='o', 'õ'='o',
-         'ö'='o', 'ø'='o', 'ù'='u', 'ú'='u', 'û'='u', 'ý'='y', 'ý'='y', 'þ'='b', 'ÿ'='y', 'ß'='Ss')
-  
-  #then force conversion to UTF-8 and replace with non-diacritic character
-  enc2utf8(x) %>% 
-    mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
-    return
-  
-}
+## Load custom  functions as needed
+file.path(my_repo, '_lib', 'model', 'aggregate_inputs.R') %>% source
 
+##Be explicit about namespace conflicts
+
+#***********************************************************************************************************************
 ## Throw a check for things that are going to be needed later
 message('Looking for things in the config that will be needed for this script to run properly')
 check_config()
@@ -480,7 +466,7 @@ if (as.logical(skiptoinla) == FALSE) {
   if(as.logical(use_stacking_covs)){
     message('Fitting Stackers')
     # sourcing this script will run the child stackers:
-    source(paste0(core_repo, '/mbg_central/share_scripts/run_child_stackers.R'))
+    source(paste0(my_repo, '/mbg_central/share_scripts/run_child_stackers.R'))
     
     #add in the second best xgboost model to ensemble
     #TODO this is janky but needs to be done w/o more rewriting the next couple of functions

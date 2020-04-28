@@ -28,7 +28,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(ccaPP, fst, mgsub, sf, stringr, magrittr)
+pacman::p_load(ccaPP, data.table, dplyr, fst, mgsub, sf, stringr, magrittr)
 
 #detect if running interactively
 interactive <- F  %>% #manual override
@@ -44,7 +44,7 @@ if (interactive) {
   # region                      <- 'dia_s_america-GUF'
   # region                      <- 'dia_name-ESH'
   region <- 'AGO'
-  hap_run_date <- '2020_03_12_13_25_57'
+  hap_run_date <- '2020_04_03_22_49_57'
   lri_run_date = '2019_10_23_16_13_17'
 
 } else {
@@ -63,7 +63,6 @@ today <- Sys.Date()
 
 # ---OPTIONS------------------------------------------------------------------------------------------------------------
 ## set arguments
-
 #gbd lri options
 # bwga.ier.version <- 38
 # ier.version <- "33power2_simsd_source_priors"
@@ -79,15 +78,19 @@ indicators               <- list(hap='cooking_fuel_solid',
                                  lri='has_lri')
 run_dates                <- list(hap=hap_run_date, 
                                  lri=lri_run_date)
-measures                 <- list(hap='count',
+measures                 <- list(hap='prev',
                                  lri='count')
 suffixes                 <- list(hap='_eb_bin0_0', 
                                  lri='_eb_bin0_0')
-rks                      <- list(hap=F, 
-                                 lri=F)
+rks                      <- list(hap=T, 
+                                 lri=T)
 shapefile                <- '2019_09_10' #NEEDS TO MATCH
 covs                        <- c('ihmepm25')
 cov_measures                <- c('mean')
+
+#TODO pass from 2_entry.R?
+config_par   <- 'hap_standard'
+cov_par <- paste(indicator_groups[['hap']], region, sep='_')
 
 # #TODO janky fix
 # if (region=='dia_name-ESH') {
@@ -111,7 +114,8 @@ gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 
 # load MBG packages
-core_repo <- file.path(h_root, '_code/lbd/hap/')
+core_repo <- file.path(h_root, '_code/lbd/lbd_core/')
+my_repo <- file.path(h_root, '_code/lbd/hap/')
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
@@ -222,6 +226,8 @@ link_cell_pred <- function(ind_gp,
                            covs=NA, #added fx to bring in covariates and merge
                            debug=F) {
   
+  if(debug) browser()
+  
   message('Beginning formatting for ', reg)
   message('loading simple raster & populations')
   
@@ -251,14 +257,10 @@ link_cell_pred <- function(ind_gp,
   # load the cell id to admin units link
   link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version)
   
-  #####################################################################
   # collect and load the population data from the WorldPop rasters
-  covdt <- load_populations_cov(reg, pop_measure=pop_measure, measure = measure, pop_release=pop_release,
-                                simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id)
-  
-  #TODO add covariates functionality
-  if(debug) browser()
-  
+  covdt <- load_populations_cov(reg, pop_measure, measure = 'count', simple_polygon, simple_raster, 
+                                year_list, interval_mo=12, pixel_id = pixel_id)
+
   #####################################################################
   # Prepping the cell_pred and link table to be linked by making sure they have the appropriate identifiers.  Also performs a
   # zippering at the region boundary where cells that have a portion of their area outside of the modeling region are reintegrated
@@ -294,18 +296,22 @@ link_cell_pred <- function(ind_gp,
     # Load the relevant pred object - loads an object named cell_pred
     rdata_file <- paste0('/share/geospatial/mbg/', ind_gp[[i]], '/', ind[[i]], '/output/', rd[[i]], '/',
                          ind[[i]], 
-                         ifelse(rk, "_raked_cell_draws_eb_bin0_","_cell_draws_eb_bin0_"), 
+                         ifelse(rk, "_raked_", measure, "_cell_draws_eb_bin0_","_cell_draws_eb_bin0_"), 
                          reg, "_0.RData")
+    
+    browser()
     
     #TODO improve logic
     if (rk) {
       if (file.exists(rdata_file)) {
+        message('loading raked results')
         load(rdata_file)
         cell_pred <- raked_cell_pred
         rm(raked_cell_pred)
       }
     } else {
       if (file.exists(rdata_file)) {
+        message('loading UNraked results')
         load(rdata_file)
       }
     }
@@ -372,9 +378,9 @@ link_cell_pred <- function(ind_gp,
   }
   
   #if collapsing by other pop measure than total, include total pop as well
-  if (measure!='total') {
+  if (pop_measure!='total') {
     
-    cell_pred <- load_populations_cov(reg, pop_measure='total', measure = measure, simple_polygon, 
+    cell_pred <- load_populations_cov(reg, pop_measure='total', measure = 'count', simple_polygon, 
                                   simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
       setnames(., 'pop', 'pop_total') %>% 
       merge(., cell_pred, by=c('pixel_id', 'year'))
@@ -441,6 +447,26 @@ tic("Entire script") # Start master timer
 ## Set seed for reproducibility
 message('Setting seed 98118 for reproducibility')
 set.seed(98118)
+
+## Read config file and save all parameters in memory
+config_filepath <- 'cooking/model/configs/'
+config <- set_up_config(repo            = core_repo,
+                        indicator_group = indicator_groups[['hap']],
+                        indicator       = indicators[['hap']],
+                        config_name     = paste0('/model/configs/config_', config_par),
+                        covs_name       = paste0('/model/configs/covs_', cov_par))
+
+# Get the necessary variables out from the config object into global env
+#TODO move all to config, some are currently defaulting
+rake_countries <- eval(parse(text = config[V1 == 'rake_countries', V2]))
+rake_subnational <- eval(parse(text = config[V1 == 'subnational_raking', V2]))
+modeling_shapefile_version <- config[V1 == 'modeling_shapefile_version', V2]
+raking_shapefile_version <- config[V1 == 'raking_shapefile_version', V2]
+countries_not_to_rake <- config[V1 == 'countries_not_to_rake', V2]
+countries_not_to_subnat_rake <- config[V1 == 'countries_not_to_subnat_rake', V2]
+year_list <- eval(parse(text = config[V1 == 'year_list', V2]))
+metric_space <- config[V1 == 'metric_space', V2]
+summstats <- eval(parse(text = config[V1 == 'summstats', V2]))
 
 # Setup -------------------------------------------------------------------------
 
@@ -723,7 +749,7 @@ calcTAP <- function(country, dir,
 
 #loop over countries and produce ad0/2 results for TAP
 tic('Calculating TAP for each country')
-out <- lapply(adm0s, calcTAP, dir=outputdir, debug=F)
+out <- lapply(adm0s, calcTAP, dir=outputdir, debug=T)
 toc(log=TRUE)
 
 #bind results
