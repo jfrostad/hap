@@ -31,7 +31,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(ccaPP, fasterize, fst, mgsub, randtoolbox, magrittr)
+pacman::p_load(assertthat, ccaPP, fasterize, fst, mgsub, randtoolbox, magrittr)
 
 #detect if running interactively
 interactive <- F  %>% #manual override
@@ -140,10 +140,32 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
 ## Load custom  functions as needed
-file.path(my_repo, '_lib', 'model', 'aggregate_inputs.R') %>% source
+#file.path(my_repo, '_lib', 'model', 'aggregate_inputs.R') %>% source
 
 ##Be explicit about namespace conflicts
 
+#use your own diacritics fx, due to inscrutable error
+#note: requires mgsub pkg
+#TODO submit PR
+fix_diacritics <<- function(x) {
+  
+  require(mgsub)
+  
+  #first define replacement patterns as a named list
+  defs <-
+    list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', 
+         '??'='C', '??'='E', '??'='E','??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', 
+         '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U','??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', 
+         '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c','??'='e', '??'='e', '??'='e', 
+         '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
+         '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y', '??'='Ss')
+  
+  #then force conversion to UTF-8 and replace with non-diacritic character
+  enc2utf8(x) %>% 
+    mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
+    return
+  
+}
 #***********************************************************************************************************************
 ## Throw a check for things that are going to be needed later
 message('Looking for things in the config that will be needed for this script to run properly')
@@ -1052,18 +1074,17 @@ jname           <- paste('eDL', reg, indicator, sep = '_')
 # set memory by region
 individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
 mymem <- 200
-if (as.logical(individual_countries) & reg != 'IND') mymem <- 50
-if(r == 'dia_malay' | r == 'dia_name') mymem <- 225
-if(r %like% 'chn_mng' | r %like% 'wssa' | r %like% 'south_asia') mymem <- 250
-if(r %like% 's_america' | r == 'BRA') mymem <- 300
+if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
+} else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+} else mymem <- '350G'
 
 # set up qsub
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
-                  '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                  '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(repo, indicator_group, 'post/2_entry.R')
-args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout)
+r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+script <- file.path(my_repo, indicator_group, 'post/2_entry.R')
+args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
                     
 
 # submit qsub

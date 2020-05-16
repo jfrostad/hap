@@ -14,15 +14,16 @@ rm(list = ls())
 # set general arguments
 user            <- Sys.info()['user']
 core_repo            <- file.path('/homes', user, '_code/lbd/lbd_core/')
+core_repo            <- file.path('/homes', user, '_code/lbd/hap/')
 my_repo            <- file.path('/homes', user, '_code/lbd/hap/')
 indicator_group <- 'cooking'
 parallel_script <- file.path('model/3_orbit')
 
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
-package_list <- c(t(read.csv(paste0(repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
-source(paste0(repo, '/mbg_central/setup.R'))
-mbg_setup(package_list = package_list, repos = repo)
+package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+source(paste0(core_repo, '/mbg_central/setup.R'))
+mbg_setup(package_list = package_list, repos = core_repo)
 
 # set cluster arguments
 use_geos_nodes  <- T
@@ -34,8 +35,8 @@ plot_covariates <- TRUE
 covariate_plotting_only <- FALSE
 
 # indicate whether to use old run date
-use_old_run_date <- FALSE
-old_run_date_input <- ''
+use_old_run_date <- F
+old_run_date_input <- '2020_05_06_22_40_43'
 
 # set run date
 if (use_old_run_date == FALSE) {
@@ -84,7 +85,8 @@ regions <- c('essa-ERI-DJI-YEM', "ERI+DJI+YEM",
              'seas-VNM-THA', 'VNM', 'THA',
              'mide+TKM', 'soas')
 
-regions <- c('essa-ERI-DJI-YEM')
+regions <- c('CHN', 'trsa-GUF', 'soas')
+regions <- c('soas', 'CHN', 'trsa-GUF')
 
 #regions <- c('AGO', 'VNM', 'THA', 'ZAF')
 
@@ -119,7 +121,7 @@ for (i in indics) {
     sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
                       '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                       '-l fthread=1 -l h_rt=00:02:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-    r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
+    r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
     script <- file.path('/homes', user, '_code/lbd/hap', indicator_group, 'model/2_rocket.R')
     args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, parallel_script,
                   plot_covariates, covariate_plotting_only, proj_arg, use_geos_nodes, run_date, my_repo)

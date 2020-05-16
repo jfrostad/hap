@@ -346,7 +346,7 @@ apply_fractional_rf <- function(cell_pred, link, fractional_rf, overs) {
 #'
 dedupe_linked_cell_pred <- function(linked_cell_pred, overs) {
   
-  #sum deaths for each duplicated pixel
+  #sum counts for each duplicated pixel
   dedup_dt <- linked_cell_pred[, lapply(.SD, sum), by=cell_pred_id, .SDcols=overs]
   
   #reorder on cell_pred_id to match original order
@@ -998,6 +998,23 @@ prep_cell_pred_for_frax_raking <- function(overs = overs,
 }
 
 
+#helper function to deduplicate a cell pred that has been linked, using the area fraction
+unlink_cell_pred <- function(dt, cols, test_dims=0) {
+  
+  #make a copy so as not to modify the dt in place
+  copy(dt) %>% 
+    #faster than weighted mean to split this into 2 steps
+    .[, (cols) := lapply(.SD, function(x) x * area_fraction), .SDcols=cols] %>% 
+    .[, lapply(.SD, sum), .SDcols=cols, by=cell_pred_id] %>% 
+    setorder(., cell_pred_id) %>% #reorder
+    .[, (cols), with=F] %>%  #keep just the draws
+    as.matrix %T>% 
+    { if (any(dim(.)!=test_dims)) warning('dims of unlink cell pred do not match!!') } %>% 
+    return
+  
+}
+
+
 #' Fractional aggregation of a rates cell pred
 #' @title Fractional aggregation of a rates cell pred
 #' @description This function:
@@ -1158,8 +1175,7 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   }  
 
   ##Raked Rates Cell_pred#########################################
-  # creating a raked rates cell_pred (this happens first becasue once we go to counts in the cell_pred we can't do back without loading a fresh copy)
-  # TODO why not..
+  # creating a raked rates cell_pred
   message("creating a raked rates cell_pred")
 
   #convert cell_pred back to rates from counts
@@ -1171,26 +1187,9 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   }else{
     cell_pred <- cell_pred[, (overs) := lapply(.SD, function(x) invlogit(logit(x) + rf)), .SDcols=overs]
   }
-  
-  
-  #helper function to deduplicate a cell pred that has been linked, using the area fraction
-  unlink_cell_pred <- function(dt, cols=overs, test_dims=cell_pred_dims) {
-
-    #make a copy so as not to modify the dt in place
-    copy(dt) %>% 
-      #faster than weighted mean to split this into 2 steps
-      .[, (cols) := lapply(.SD, function(x) x * area_fraction), .SDcols=cols] %>% 
-      .[, lapply(.SD, sum), .SDcols=cols, by=cell_pred_id] %>% 
-      setorder(., cell_pred_id) %>% #reorder
-      .[, (cols), with=F] %>%  #keep just the draws
-      as.matrix %T>% 
-      { if (any(dim(.)!=test_dims)) warning('dims of unlink cell pred do not match!!') } %>% 
-      return
-    
-  }
 
   #use area fractions to dedupe the linked cell pred
-  raked_cell_pred <- unlink_cell_pred(cell_pred)
+  raked_cell_pred <- unlink_cell_pred(cell_pred, cols=overs, test_dims=cell_pred_dims)
 
   # Save raked rates cell_pred object
   if (save_output) {
@@ -1217,7 +1216,7 @@ fractionally_rake_rates <- function(fractional_rf = NULL, #if NULL, just reread 
   
   # NA out population where the pixel value is NA (to prevent weirdness with denominators)
   cell_pred[is.na(V1), pop_raked := NA]
-  raked_cell_pred_c <- unlink_cell_pred(cell_pred)
+  raked_cell_pred_c <- unlink_cell_pred(cell_pred, cols=overs, test_dims=cell_pred_dims)
   
   if (save_output) {
     

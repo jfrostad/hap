@@ -47,7 +47,7 @@ commondir       <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', s
 package_lib    <- sprintf('%s_code/_lib/pkg',h_root)
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
-pacman::p_load(data.table, scales, ggplot2, gridExtra, RColorBrewer, sf, viridis, farver, reldist) 
+pacman::p_load(data.table, scales, ggplot2, gridExtra, isoband, RColorBrewer, sf, viridis, farver, reldist) 
 package_list    <- package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 # Use setup.R functions to load common LBD packages and mbg_central "function" scripts
@@ -59,23 +59,24 @@ source(paste0(core_repo, '/mbg_central/setup.R'))
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_03_27_13_00_02'
-lri_run_date <- '2020_01_10_15_18_27'
+run_date <- '2020_05_06_22_40_43'
 
 indicator_group <- 'cooking'
 indicator <- 'hap'
 type <- 'mean'
-raked <- F
+raked <- T
 start_year <- 2000
 end_year <- 2017
 cores <- 10
+modeling_shapefile_version <- "2019_09_10"
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #raw data
 data.dir <- file.path('/ihme/geospatial/mbg/cooking/pafs', run_date)
-hap.paths <- data.table(admin2=file.path(data.dir, 'admin_2_summary.csv'))
+global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', modeling_shapefile_version) #TODO make official
+hap.paths <- data.table(admin2=file.path(data.dir, 'admin_2_summary_children.csv'))
 hap.paths.d <- data.table(admin2=file.path(data.dir, 'admin_2_delta_summary.csv'))
 
 ###Output###
@@ -96,114 +97,44 @@ file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
 #read in the proper annotations (borders, lakes, mask)
-annotations <- load_map_annotations()
+#read in the proper annotations (borders, lakes, mask)
+annotations_path <- file.path(out.dir, 'annotations.RDs')
+check <- file.exists(annotations_path)
+annotations <- ifelse(
+  check,
+  readRDS(annotations_path),
+  load_map_annotations()
+)
+if(!check) saveRDS(annotations, file=annotations_path)
 
-#read LRI counts
-lri_rate <- 'has_lri_admin_2_raked_mortality_summary.csv'
-lri_counts <- 'has_lri_c_admin_2_raked_mortality_summary.csv'
+#read in link_table
+global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>% as.data.table
+adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, ADM2_NAME, ADM2_CODE)] %>% unique
 
-has_lri <- file.path('/ihme/geospatial/mbg/lri/has_lri/output', 
-                     lri_run_date, 'pred_derivatives/admin_summaries', lri_rate) %>% 
-  fread %>% 
-  .[, .(ADM0_CODE, ADM2_CODE, year, lri=mean)]
+#read in shps
+stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad2_gadm.shp')
+stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad2_gadm.shp')
+adm2 <- rbind(stage1, stage2)
 
-has_lri_c <- file.path('/ihme/geospatial/mbg/lri/has_lri/output', 
-                       lri_run_date, 'pred_derivatives/admin_summaries', lri_counts) %>% 
-  fread %>% 
-  .[, .(ADM0_CODE, ADM2_CODE, year, lri_c=mean)]
-
-#combine and save all ad2 level results
-dt <-
-  list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>% 
-  lapply(., fread) %>% 
-  rbindlist(use.names=T, fill=T) %>% 
-  merge(has_lri, by=c('ADM0_CODE', 'ADM2_CODE', 'year')) %>% 
-  merge(has_lri_c, by=c('ADM0_CODE', 'ADM2_CODE', 'year')) %>% 
-  .[, tap_lri := lri * 1000 * tap_paf] %>% #do some postestimation
-  .[, hap_lri := lri * 1000 * tap_paf*hap_pct] %>% 
-  .[, aap_lri := lri * 1000 * tap_paf*(1-hap_pct)] %>% 
-  .[, tap_lri_c := lri_c * tap_paf] %>% #do some postestimation
-  .[, hap_lri_c := lri_c * tap_paf*hap_pct] %>% 
-  .[, aap_lri_c := lri_c * tap_paf*(1-hap_pct)] %T>% 
-  #also output the file for later
-  write.csv(., file.path(data.dir, 'admin_2_summary.csv'), row.names = F)
+#read in results for lri/children
+dt <- file.path(data.dir, 'admin_2_summary_children.csv') %>% fread
 
 #merge sr region names/IDs
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
   .[, .(iso3=ihme_loc_id, location_name, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
-dt <- merge(dt, locs, by='iso3', all.x=T)
 
-#calculate GINI/MAD at country level
-dt_ineq <- dt[year %in% c(2000, 2017), .(iso3, year, ADM0_CODE, ADM2_CODE, dfu, super_region_id, super_region_name, region_id, region_name)]
-dt_ineq[, gini := gini(dfu), by=.(ADM0_CODE, year)]
-dt_ineq[, mad := mad(dfu, center = mean(dfu)), by=.(ADM0_CODE, year)]
-dt_ineq[, mean := mean(dfu, na.rm=T), by=.(ADM0_CODE, year)]
-dt_ineq[, max := max(dfu, na.rm=T), by=.(ADM0_CODE, year)]
-dt_ineq[, min := min(dfu, na.rm=T), by=.(ADM0_CODE, year)]
-dt_ineq[, range := max-min]
-dt_ineq <- unique(dt_ineq[year==2017], by=c('ADM0_CODE', 'year'))
-dt_ineq <- dt_ineq[dt_ineq[,do.call(order, .SD), .SDcols = c('super_region_id', 'mean')]]
-dt_ineq[, country := factor(iso3, levels=unique(iso3))]
+#create file to crosswalk AD0 to iso3
+iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid) 
+iso3_map$geometry <- NULL
+iso3_map <- as.data.table(iso3_map) %>% unique
+locs <- merge(locs, iso3_map, by='iso3')
 
-#plot absolute inequality
-ggplot(dt_ineq[year==2017], aes(x=country, y=mean, ymax=max, ymin=min, color=super_region_name)) +
-  geom_errorbar() +
-  geom_point(stat='identity') + 
-  scale_color_brewer(palette='Dark2') +
-  theme_minimal() +
-  theme(legend.position="bottom") +
-  theme(axis.text.x = element_text(angle = 90)) 
-ggsave(filename=file.path(out.dir, 'dfu_inequality_2017.png'),
-       width=10, height=6, units='in', dpi=600)
+#merge sr region names/IDs
+dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
+dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'))
 
-#GINI results
-summary(dt_ineq$gini)
-dt_ineq[year==2000 & gini>mean(gini, na.rm=T), uniqueN(iso3)]
-dt_ineq[year==2017 & gini>mean(gini, na.rm=T), uniqueN(iso3)]
-dt_ineq[gini>mean(gini, na.rm=T), table(iso3, year)]
-
-#TODO move this to be at pixel level
-#calculate rates of change
-these_cols <- c('hap_pct', 'dfu', 'tap_paf', 'tap_pc')
-d_cols <- paste0(these_cols, '_d')
-dr_cols <- paste0(these_cols, '_dr')
-aroc_cols <- paste0(these_cols, '_aroc')
-dt_d <- setkey(dt, ADM0_CODE, ADM2_CODE) %>% 
-  .[year %in% c(2000, end_year)] %>% 
-  .[, (d_cols) := .SD-data.table::shift(.SD,n=1), .SDcols=these_cols, by=key(dt)] %>% 
-  .[, (dr_cols) := (.SD-data.table::shift(.SD,n=1))/data.table::shift(.SD,n=1), .SDcols=these_cols, by=key(dt)] %T>% 
-  .[, (aroc_cols) := (.SD-data.table::shift(.SD,n=1))/(end_year-2000), .SDcols=these_cols, by=key(dt)] %T>% 
-  #also output the file for later
-  write.csv(., file.path(data.dir, 'admin_2_delta_summary.csv'), row.names = F)
-
-#plot change in HAP share
-ggplot(dt_d[year==2017], aes(x=(hap_pct-.5), y=hap_pct_d, color=super_region_name, alpha=log(tap_pc))) + 
-  geom_point() + 
-  geom_hline(yintercept=0) +
-  geom_vline(xintercept=0) +
-  #scale_size_area('TAP dose', max_size=3) +
-  scale_color_brewer(palette='Dark2') +
-  xlim(c(-.6, .6)) +
-  ylim(c(-.6, .3)) +
-  theme_bw() 
-ggsave(filename=file.path(out.dir, 'hap_share_change.png'),
-       width=15, height=10, units='in', dpi=900)
-
-#facet plot change in HAP share
-ggplot(dt[year %in% c(2000,2017)], aes(x=(hap_pct-.5), y=tap_pc, color=super_region_name)) + 
-  geom_point() + 
-  #geom_hline(yintercept=0) +
-  geom_vline(xintercept=0) +
-  facet_wrap(~year) +
-  #scale_size_area('TAP dose', max_size=3) +
-  scale_color_brewer(palette='Dark2') +
-  xlim(c(-.6, .6)) +
-  #ylim(c(-.6, .3))  +
-  coord_flip() +
-  theme_bw() 
-ggsave(filename=file.path(out.dir, 'hap_share_change_facet.png'),
-       width=15, height=10, units='in', dpi=900)
-
+#read in results for lri/children
+dt_d <- file.path(data.dir, 'admin_2_delta_summary_children.csv') %>% fread
 
 #read in input data and prepare it for mapping
 data <-  
@@ -214,7 +145,7 @@ data <-
                    cores=cores)
 data_d <-
   load_map_results(indicator, indicator_group, run_date, raked, 
-                   start_year=2000, end_year=2017,
+                   single_year=2018,
                    custom_path = hap.paths.d,
                    geo_levels=c('admin2'),
                    cores=cores)
@@ -230,6 +161,7 @@ plot.dt <- dt %>%
   copy %>% 
   .[year %in% c(2000, 2017)] %>% 
   .[year==2017, year := 2018] %>% 
+  .[cause=='lri' & grouping=='child']
   na.omit(., cols=c('hap_pct', 'tap_paf'))
 
 #setup the list of top countries
@@ -245,20 +177,58 @@ top_countries_c <- #defined based on LRI counts as suggested by simon
   tail(14) %>%
   .[, unique(iso3)]
 
+#top country per GBD region
+top_countries_gbdreg <- #defined based on LRI rates as suggested by simon
+  dt[year==min(dt$year), .(sum=sum(lri_c, na.rm=T)), by=.(iso3,region_name)] %>%
+  .[, .SD[which.max(sum)], by=region_name]
+
+#top country per MBG region
+regs <- load_adm0_lookup_table() %>% .[,.(mbg_reg_name=reg_name, mbg_reg, iso3=toupper(iso3))] %>% unique
+dt <- merge(dt, regs, by='iso3')
+top_countries_mbgreg <- #defined based on LRI rates as suggested by simon
+  dt[year==min(dt$year), .(sum=sum(lri_c, na.rm=T)), by=.(iso3,mbg_reg)] %>%
+  .[, .SD[which.max(sum)], by=mbg_reg]
+
+second_countries_reg <- #defined based on LRI rates as suggested by simon
+  dt[year==min(dt$year), .(sum=sum(lri_c, na.rm=T)), by=.(iso3,mbg_reg_name)] %>% 
+  .[!(iso3 %in% unique(top_countries_gbdreg$iso3))] %>% 
+  .[, .SD[which.max(sum)], by=mbg_reg_name]
+
+
 custom_countries <- #defined based on aesthetics - all countries in different range
   c('ETH', 'KEN', 'IND', 'MNG', 'THA') 
 
 custom_cols <- c('Ethiopia'='midnightblue', 'Kenya'='cornflowerblue', 'India'='darkgoldenrod', 
                  'Mongolia'='firebrick', 'Thailand'='seagreen')
 
-custom_cols <- c('Ethiopia'='firebrick', 'Kenya'='indianred2', 'India'='darkgoldenrod', 
-                 'Mongolia'='mediumorchid4', 'Thailand'='olivedrab')
+custom_cols <- c('Ethiopia'='firebrick4', 'Kenya'='indianred2', 'India'='darkgoldenrod', 
+                 'Mongolia'='darkgreen', 'Thailand'='midnightblue')
 
 master_plot <- 
   ggplot(plot.dt[iso3 %in% custom_countries], 
          aes(x=1-hap_pct, y=tap_paf, color=location_name, shape=year %>% as.factor, group=ADM2_CODE)) + 
   annotate("rect", xmin = -.02, xmax = .5, ymin = .15, ymax = .60, fill='steelblue', alpha = .2) +
   annotate("rect", xmin = .5, xmax = 1.02, ymin = .15, ymax = .60, fill='tomato', alpha = .2) +
+  annotate("text", x = .32, y = .59, label = "majority household sources") +
+  annotate("text", x = .66, y = .59, label = "majority ambient sources") +
+  annotate(
+    geom = "segment",
+    x = .81, 
+    xend = .85, 
+    y = .59,
+    yend = .59,
+    colour = "black",
+    arrow = arrow(length = unit(0.2, "cm"), type = "closed")
+  ) +
+  annotate(
+    geom = "segment",
+    x = .16, 
+    xend = 0.12,
+    y = .59, 
+    yend = .59,
+    colour = "black",
+    arrow = arrow(length = unit(0.2, "cm"), type = "closed")
+  ) +
   geom_line(alpha=.1) +
   geom_point(size=2) + 
   geom_vline(xintercept=.5, linetype="dashed") +
@@ -282,8 +252,10 @@ ggsave(filename=file.path(out.dir, 'presub_figure_2b.png'),
        width=12, height=8, units='in', dpi=900)
 
 #helper function to create smaller inset versions of this plot
-makeInset <- function(loc, type='scatter', scale_labels=F) {
-  
+makeInset <- function(i, loclist, type='scatter', scale_labels=F) {
+
+  loc <- loclist[i]
+  n <- length(loclist)
   message('plotting ', loc)
 
   dt <- plot.dt[iso3%in%loc]
@@ -297,21 +269,31 @@ makeInset <- function(loc, type='scatter', scale_labels=F) {
     plot <- ggplot(dt, aes(x=1-hap_pct, y=tap_paf, color=year %>% as.factor, group=ADM2_CODE)) + 
       geom_point(size=4, alpha=.3) + 
       geom_vline(xintercept=.5, linetype="dashed") +
-      scale_colour_manual('', values=c('2000'='steelblue', '2018'='midnightblue'), guide=F)
+      scale_colour_manual('', values=c('2000'='darkorange2', '2018'='purple4'), guide=F)
 
-  } else if (type=='cloud') {
+  } else if (type %like% 'cloud') {
 
     #Egypt needs to be noised slightly in 2018 because hap is so universally low that it cannot be plotted as a contour
     dt[, noise := runif(.N, min=0, max=0.025)]
     dt[iso3=='EGY' & year==2018, hap_pct := hap_pct + noise]
-
-    plot <- ggplot(dt, aes(x=1-hap_pct, y=tap_paf)) + 
-      geom_density_2d(data=dt[year==2000], color='steelblue', binwidth=5) +
-      #
-      geom_density_2d(data=dt[year==2018], color='midnightblue', binwidth=5) 
     
+    if (type=='cloud_contour') {
+      
+      plot <- ggplot(dt, aes(x=1-hap_pct, y=tap_paf)) + 
+        geom_density_2d(data=dt[year==2000], color='darkorange2', binwidth=5) +
+        geom_density_2d(data=dt[year==2018], color='purple4', binwidth=5)
+      
+    } else if (type=='cloud_alpha') {
+      
+      plot <- ggplot(dt, aes(x=1-hap_pct, y=tap_paf)) + 
+        stat_density_2d(data=dt[year==2000], aes(alpha = after_stat(level)), geom = "polygon", fill='darkorange2', contour=TRUE, binwidth=20) +
+        stat_density_2d(data=dt[year==2018], aes(alpha = after_stat(level)), geom = "polygon", fill='purple4', contour=TRUE, binwidth=20) +
+        scale_alpha(guide=F, range=c(.1, 0.01))
+      
+    }
+
   }
-  
+
   #standard settings
   plot <- plot +
     geom_vline(xintercept=.5, linetype="dashed") +
@@ -322,27 +304,31 @@ makeInset <- function(loc, type='scatter', scale_labels=F) {
     theme_bw(base_size=16) +
     theme(plot.title=element_text(hjust=0.55, size=12, margin=margin(0,0,0,0)),
           axis.title=element_blank())
-    
-  if (!scale_labels | loc %in% c('AFG', 'AGO', 'COD', 'EGY', 'MMR', 'NER')) {
+
+  #remove the labels for the top left insets or if there are no scale labels requested
+  if (!scale_labels | (n==9 & i %in% c(1, 3, 5)) | (n==12 & i %in% c(1:2, 4:5, 7:8))) {
     
     plot <- plot + theme(axis.text=element_blank(), 
                          axis.ticks=element_blank(),
                          plot.margin=margin(2, 4, 12, 8, "pt"))
     
-  } else if (loc %in% c('BGD', 'IDN', 'NGA')) {
+  #remove just the x labels for right insets
+  } else if ((n==9 & i %in% c(2,4,6)) | (n==12 & i %in% c(3,6,9))) {
     
     plot <- plot + theme(axis.text.x=element_blank(), 
                          axis.ticks.x=element_blank(),
                          axis.text.y.right=element_text(angle = -90, vjust=0, hjust=.4),
                          plot.margin=margin(2, 0, 12, 0, "pt"))
     
-  } else if (loc %in% c('PAK', 'PHL')) {
+  #remove just th y labels for the bottom left insets  
+  } else if ((n-i) %in% (1:2)) {
     
     plot <- plot + theme(axis.text.y=element_blank(), 
                          axis.ticks.y=element_blank(),
                          plot.margin=margin(0, 4, 0, 8, "pt"))
     
-  } else if (loc == 'TZA') {
+  #keep all labels for the bottom right insets  
+  } else if (i==n) {
     
     plot <- plot + theme(axis.text.y.right=element_text(angle = -90, vjust=0, hjust=.4),
                          plot.margin=margin(0, 0, 0, 0, "pt"))
@@ -353,62 +339,12 @@ makeInset <- function(loc, type='scatter', scale_labels=F) {
 
 }
 
-#now make a single inset plot for each of the remaining top 10 countries
-insets <- top_countries_c[5:14] %>% 
-  .[!(. %in% custom_countries)] %>% 
-  sort %>% 
-  lapply(., makeInset, scale_labels=T)
-
-##scatter version##
-#arrange into master figure
-all_grobs <- copy(insets)
-all_grobs[[9]] <- master_plot
-lay <- rbind(c(9,9,9,9,1,2),
-             c(9,9,9,9,3,4),
-             c(9,9,9,9,5,6),
-             c(9,9,9,9,7,8))
-plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
-                                 gp = gpar(fontsize=24)),
-                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
-                                    gp = gpar(fontsize=17))
-                    ) %>% 
-  grid.arrange
-
-ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2.png'),
-       width=12, height=8, units='in', dpi=900)
-
-##cloud version##
-#now make a single inset plot for each of the remaining top 10 countries
-insets <- top_countries_c[5:14] %>% 
-  .[!(. %in% custom_countries)] %>% 
-  sort %>% 
-  lapply(., makeInset, scale_labels=T, type='cloud')
-
-#arrange into master figure
-all_grobs <- copy(insets)
-all_grobs[[9]] <- master_plot
-lay <- rbind(c(9,9,9,9,1,2),
-             c(9,9,9,9,3,4),
-             c(9,9,9,9,5,6),
-             c(9,9,9,9,7,8))
-plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
-                                 gp = gpar(fontsize=24)),
-                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
-                                    gp = gpar(fontsize=17))
-) %>% 
-  grid.arrange
-
-ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud.png'),
-       width=12, height=8, units='in', dpi=900)
-
 ##cloud version with top 14##
-#now make a single inset plot for each of the remaining top 14 countries
-insets <- top_countries_c %>% 
+#now make a single inset plot for each of the remaining top by region (and add Pakistan to round it out)
+insets <- c(top_countries_gbdreg[, iso3]) %>% 
   .[!(. %in% custom_countries)] %>% 
   sort %>% 
-  lapply(., makeInset, scale_labels=T, type='cloud')
+  lapply(1:length(.), makeInset, loclist=., scale_labels=T, type='cloud_contour')
 
 #arrange into master figure
 all_grobs <- copy(insets)
@@ -425,9 +361,33 @@ plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay,
 ) %>% 
   grid.arrange
 
-ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud_14.png'),
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud_contour.png'),
        width=12, height=8, units='in', dpi=900)
 
+##cloud version with top 14##
+#now make a single inset plot for each of the remaining top by region (and add Pakistan to round it out)
+insets <- c(top_countries_gbdreg[, iso3]) %>% 
+  .[!(. %in% custom_countries)] %>% 
+  sort %>% 
+  lapply(1:length(.), makeInset, loclist=., scale_labels=T, type='cloud_alpha')
+
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[13]] <- master_plot
+lay <- rbind(c(13,13,13,13,1,2,3),
+             c(13,13,13,13,4,5,6),
+             c(13,13,13,13,7,8,9),
+             c(13,13,13,13,10,11,12))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud_alpha.png'),
+       width=12, height=8, units='in', dpi=900)
 
 #make for all countries
 makeFigure2 <- function(country) {
@@ -500,7 +460,7 @@ dr_values <- c(seq(-.6, -.35, length.out = 2), seq(-.25, .25, length.out = 7), s
   rescale
 
 global <-
-  plot_map(data$admin2, this_var='dfu',
+  plot_map(data$admin2, this_var='hap',
            annotations, limits=c(0, 1), title='DFU% in 2017', 
            legend_color_values=color_values,
            legend_title='DFU %',
@@ -553,11 +513,11 @@ ggsave(filename=file.path(out.dir, 'global_tap_lri.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='dfu_d',
-           annotations, limits=c(-.2, .2), title='DFU% Change from 2000-2017', 
+           annotations, limits=c(-.2, .2), title='DFU% Change from 2000-2018', 
            legend_colors=d_colors, legend_color_values=d_values,
            legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
            legend_title='dfu%', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_dfu_d.png'), plot=global, 
@@ -565,11 +525,11 @@ ggsave(filename=file.path(out.dir, 'global_dfu_d.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='dfu_dr',
-           annotations, limits=c(-.2, .2), title='DFU% Change from 2000-2017', 
+           annotations, limits=c(-.2, .2), title='DFU% Change from 2000-2018', 
            legend_colors=d_colors, legend_color_values=d_values,
            legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
            legend_title='dfu%', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_dfu_dr.png'), plot=global, 
@@ -577,11 +537,11 @@ ggsave(filename=file.path(out.dir, 'global_dfu_dr.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='tap_paf_d',
-           annotations, limits=c(-.2, .2), title='PAF Change from 2000-2017', 
+           annotations, limits=c(-.2, .2), title='PAF Change from 2000-2018', 
            legend_colors=d_colors, legend_color_values=d_values,
            legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
            legend_title='PAF', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_paf_d.png'), plot=global, 
@@ -589,11 +549,11 @@ ggsave(filename=file.path(out.dir, 'global_paf_d.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='tap_paf_dr',
-           annotations, limits=c(-.2, .2), title='PAF Change from 2000-2017', 
+           annotations, limits=c(-.2, .2), title='PAF Change from 2000-2018', 
            legend_colors=d_colors, legend_color_values=d_values,
            legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
            legend_title='PAF', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_paf_dr.png'), plot=global, 
@@ -601,11 +561,11 @@ ggsave(filename=file.path(out.dir, 'global_paf_dr.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='hap_pct_d',
-           annotations, limits=c(-1, 1), title='HAP Share Change from 2000-2017', 
+           annotations, limits=c(-1, 1), title='HAP Share Change from 2000-2018', 
            # legend_colors=d_colors, legend_color_values=d_values,
            # legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
            legend_title='HAP/TAP', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_hap_pct_d.png'), plot=global, 
@@ -613,11 +573,11 @@ ggsave(filename=file.path(out.dir, 'global_hap_pct_d.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='hap_pct_dr',
-           annotations, limits=c(-1, 1), title='HAP Share Change from 2000-2017', 
+           annotations, limits=c(-1, 1), title='HAP Share Change from 2000-2018', 
            # legend_colors=d_colors, legend_color_values=d_values,
            # legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
            legend_title='HAP/TAP', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_hap_pct_dr.png'), plot=global, 
@@ -625,11 +585,11 @@ ggsave(filename=file.path(out.dir, 'global_hap_pct_dr.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='tap_pc_dr',
-           annotations, limits=c(-.6, .3), title='Annual Per-Capita TAP Dose, change from 2000-2017', 
+           annotations, limits=c(-.6, .3), title='Annual Per-Capita TAP Dose, change from 2000-2018', 
            legend_colors=d_colors, legend_color_values=dr_values,
            # legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
            legend_title='% change in PM2.5 ug/m3', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_tap_pc_dr.png'), plot=global, 
@@ -637,10 +597,10 @@ ggsave(filename=file.path(out.dir, 'global_tap_pc_dr.png'), plot=global,
 
 global <-
   plot_map(data_d$admin2, this_var='tap_paf_dr',
-           annotations, limits=c(-.6, .3), title='PAF of LRI attributable to TAP, change from 2000-2017', 
+           annotations, limits=c(-.6, .3), title='PAF of LRI attributable to TAP, change from 2000-2018', 
            legend_colors=d_colors, legend_color_values=dr_values,
            legend_title='% change in PAF', 
-           subset=list(var='year', value=2017),
+           subset=list(var='year', value=2018),
            debug=F)
 
 ggsave(filename=file.path(out.dir, 'global_tap_paf_dr.png'), plot=global, 
@@ -1117,3 +1077,79 @@ plot <- grid.arrange(arrangeGrob(grobs=insets, layout_matrix=lay,
                                  bottom=textGrob("Percent of TAP contributed by ambient sources")))
 ggsave(plot=plot, filename=file.path(out.dir, 'presub_figure_2_master.png'),
        width=12, height=8, units='in', dpi=900)
+
+#now make a single inset plot for each of the remaining top 10 countries
+insets <- top_countries_c[5:14] %>% 
+  .[!(. %in% custom_countries)] %>% 
+  sort %>% 
+  lapply(., makeInset, scale_labels=T)
+
+##scatter version##
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[9]] <- master_plot
+lay <- rbind(c(9,9,9,9,1,2),
+             c(9,9,9,9,3,4),
+             c(9,9,9,9,5,6),
+             c(9,9,9,9,7,8))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2.png'),
+       width=12, height=8, units='in', dpi=900)
+
+##cloud version##
+#now make a single inset plot for each of the remaining top 10 countries
+insets <- top_countries_c[5:14] %>% 
+  .[!(. %in% custom_countries)] %>% 
+  sort %>% 
+  lapply(., makeInset, scale_labels=T, type='cloud')
+
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[9]] <- master_plot
+lay <- rbind(c(9,9,9,9,1,2),
+             c(9,9,9,9,3,4),
+             c(9,9,9,9,5,6),
+             c(9,9,9,9,7,8))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud.png'),
+       width=12, height=8, units='in', dpi=900)
+
+##cloud version with top 14##
+#now make a single inset plot for each of the remaining top 14 countries
+insets <- top_countries_c %>% 
+  .[!(. %in% custom_countries)] %>% 
+  sort %>% 
+  lapply(., makeInset, scale_labels=T, type='cloud')
+
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[13]] <- master_plot
+lay <- rbind(c(13,13,13,13,1,2,3),
+             c(13,13,13,13,4,5,6),
+             c(13,13,13,13,7,8,9),
+             c(13,13,13,13,10,11,12))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud_14.png'),
+       width=12, height=8, units='in', dpi=900)
+

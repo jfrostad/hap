@@ -26,7 +26,7 @@ if (Sys.info()["sysname"] == "Linux") {
 }
 
 #load external packages
-pacman::p_load(data.table, dplyr, mgsub, raster, sf, fasterize, fst)
+pacman::p_load(assertthat, data.table, dplyr, mgsub, raster, sf, fasterize, fst)
 
 #detect if running interactively
 interactive <- F  %>% #manual override
@@ -37,15 +37,15 @@ if (interactive) {
   
   ## Set repo location, indicator group, and some arguments
   user <- 'jfrostad'
-  core_repo <- "/homes/jfrostad/_code/lbd/lbd_core"
+  core_repo <- "/homes/jfrostad/_code/lbd/hap"
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_04_03_22_49_57'
+  run_date <- '2020_04_29_08_27_45'
   measure <- 'prev'
-  reg <- 'AGO'
+  reg <- 'soas'
   cov_par <- paste(indicator_group, reg, sep='_')
   my_repo <- "/homes/jfrostad/_code/lbd/hap"
   
@@ -62,6 +62,7 @@ if (interactive) {
   run_date        <- commandArgs()[11]
   measure         <- commandArgs()[12]
   holdout         <- as.numeric(commandArgs()[13])
+  my_repo         <- commandArgs()[14]
   age             <- 0
 
 }
@@ -115,11 +116,14 @@ file.path(my_repo, '_lib', 'post', 'aggregate_inputs.R') %>% source
 # ---PREP CONFIG--------------------------------------------------------------------------------------------------------
 ## Read config file and save all parameters in memory
 config_filepath <- 'cooking/model/configs/'
-config <- set_up_config(repo            = core_repo,
+config <- set_up_config(repo            = my_repo,
                         indicator_group = indicator_group,
                         indicator       = indicator,
                         config_name     = paste0('/model/configs/config_', config_par),
-                        covs_name       = paste0('/model/configs/covs_', cov_par))
+                        covs_name       = paste0('/model/configs/covs_', cov_par),
+                        run_tests       = F,
+                        post_est_only   = T,
+)
 
 # Get the necessary variables out from the config object into global env
 #TODO move all to config, some are currently defaulting
@@ -485,19 +489,19 @@ proj_arg <- 'proj_geo_nodes'
 use_geos_nodes <- T
 
 # set memory based on region
-if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- 900
-} else if (reg %in% c('dia_wssa', 'dia_s_america-BRA')) { mymem <- 500
-} else mymem <- 350
+if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
+} else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+} else mymem <- '350G'
 
 jname           <- paste('EdL', reg, indicator, sep = '_')
 
 # set up qsub
 sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
-                  '-l m_mem_free=', mymem, 'G -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                  '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                   '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
 r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
 script <- file.path(my_repo, indicator_group, 'post/3_descent.R')
-args <- paste(reg, run_date, lri_run_date)
+args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
 
 
 # submit qsub

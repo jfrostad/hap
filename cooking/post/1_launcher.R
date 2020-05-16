@@ -13,20 +13,24 @@
   
   # set general arguments
   user            <- Sys.info()['user']
-  repo            <- file.path('/homes', user, '_code/lbd/hap/')
+  core_repo            <- file.path('/homes', user, '_code/lbd/hap/')
+  my_repo            <- file.path('/homes', user, '_code/lbd/hap/')
   indicator_group <- 'cooking'
   parallel_script <- file.path(indicator_group, 'model/parallel_hap')
   
   # Load MBG packages and functions
   message('Loading in required R packages and MBG functions')
   package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
-  source(paste0(repo, '/mbg_central/setup.R'))
-  mbg_setup(package_list = package_list, repos = repo)
+  source(paste0(core_repo, '/mbg_central/setup.R'))
+  mbg_setup(package_list = package_list, repos = core_repo)
   
   # set cluster arguments
   use_geos_nodes  <- T
   proj_arg        <- ifelse(use_geos_nodes, 'proj_geo_nodes', 'proj_geospatial_dia')
   proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
+  
+  # set script arguments
+  skip_entry <- T #use to skip to descent stage
   
   # set covariate arguments
   plot_covariates <- TRUE
@@ -34,7 +38,7 @@
   
   # indicate whether to use old run date
   use_old_run_date <- FALSE
-  old_run_date_input <- ''
+  old_run_date_input <- '2020_05_06_22_40_43'
   
   # set run date
   if (use_old_run_date == FALSE) {
@@ -48,62 +52,92 @@
   regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_name', 'dia_sssa', 
                'dia_mcaca', 'dia_s_america-GUF', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
                'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
-
-  regions <- c('dia_essa-ERI-DJI-YEM', "ERI+DJI+YEM",
-               #'dia_afr_horn-ERI-DJI-YEM',
+  
+  # custom region list
+  regions <- c('essa-ERI-DJI-YEM', "ERI+DJI+YEM",
                'sssa-ZAF', 'ZAF',
                'cssa-AGO-GNQ', 'AGO',
                'wssa-CPV-NGA', 'NGA',
                'noaf-ESH',
-               #'dia_mcaca', 
                'caca-CUB',
-               #'dia_s_america-BRA-GUF', 'BRA',
                'ansa-VEN', 'trsa-GUF',
-               #'dia_central_asia', 
                'stan-TKM',
                'CHN', 'MNG',
                'ocea-MYS',
-               'seas-VNM-THA-MYS', 'VNM', 'THA',
+               'seas-VNM-THA', 'VNM', 'THA',
                'mide+TKM', 'soas')
   
-  #regions <- c('AGO', 'THA', 'VNM', 'ZAF')
+  regions <- c('caca-CUB', 'trsa-GUF', 'ansa-VEN', 'ocea-MYS')
+  regions <- c('noaf-ESH', 'mide+TKM', 'MNG', 'cssa-AGO-GNQ')
   
   ## Set repo location, indicator group, and some arguments
   user <- 'jfrostad'
-  repo <- "/homes/jfrostad/_code/lbd/hap"
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_04_02_23_45_45'
+  run_date <- '2020_05_08_10_01_20'
+  run_date <- '2020_05_06_22_40_43'
   measure <- 'prev'
 
 
+
+if(!skip_entry) {  
+  for (reg in regions) {
   
-for (region in regions) {
- 
-      # set memory based on region
-      if (region %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
-      } else if (region %in% c('dia_wssa', 'dia_s_america-BRA')) { mymem <- '500G'
-      } else mymem <- '350G'
-      
+    # set memory based on region
+    if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
+    } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+    } else mymem <- '350G'
+  
+        #name job
+        jname           <- paste('eDL', reg, indicator, sep = '_')
+  
+        #setup covars file
+        cov_par <- paste(indicator_group, reg, sep='_')
+  
+        # set up qsub
+        sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ',
+                          '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                          '-l fthread=1 -l h_rt=16:00:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+        r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+        script <- file.path(my_repo, indicator_group, 'post/2_entry.R')
+        args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
+  
+        # run launch script
+        paste(sys.sub, r_shell, script, args) %>%
+          system
+  
+  }
+
+} else {
+  #use to launch descent instead if necessary
+  
+  for (reg in regions) {
+  
+    # set memory based on region
+    if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
+    } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS', 'caca-CUB')) { mymem <- '750G'
+      } else mymem <- '500G'
+  
       #name job
-      jname           <- paste('eDL', region, indicator, sep = '_')
-      
+      jname           <- paste('EdL', reg, indicator, sep = '_')
+  
       #setup covars file
-      cov_par <- paste(indicator_group, region, sep='_')
-      
+      cov_par <- paste(indicator_group, reg, sep='_')
+  
       # set up qsub
-      sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
+      sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ',
                         '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                         '-l fthread=1 -l h_rt=16:00:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-      r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
-      script <- file.path(repo, indicator_group, 'post/2_entry.R')
-      args <- paste(user, repo, indicator_group, indicator, config_par, cov_par, region, run_date, measure, holdout)
-      
+      r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+      script <- file.path(my_repo, indicator_group, 'post/3_descent.R')
+      args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
+  
       # run launch script
-      paste(sys.sub, r_shell, script, args) %>% 
+      paste(sys.sub, r_shell, script, args) %>%
         system
-
+  
+  }
 }

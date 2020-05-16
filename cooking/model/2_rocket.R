@@ -55,11 +55,18 @@ my_repo <- commandArgs()[17]
 message('Looking for things in the config that will be needed for this script to run properly')
 
 ## Read config file and save all parameters in memory
-config <- load_config(repo            = my_repo,
-                      indicator_group = indicator_group,
-                      indicator       = indicator,
-                      config_name     = paste0('/model/configs/config_', config_par),
-                      covs_name       = paste0('/model/configs/covs_', cov_par))
+# config <- load_config(repo            = my_repo,
+#                       indicator_group = indicator_group,
+#                       indicator       = indicator,
+#                       config_name     = paste0('/model/configs/config_', config_par),
+#                       covs_name       = paste0('/model/configs/covs_', cov_par))
+
+config <- set_up_config(repo            = my_repo,
+                        indicator_group = indicator_group,
+                        indicator       = indicator,
+                        config_name     = paste0('/model/configs/config_', config_par),
+                        covs_name       = paste0('/model/configs/covs_', cov_par)
+)
 
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')

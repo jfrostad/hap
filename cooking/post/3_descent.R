@@ -28,34 +28,48 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(ccaPP, data.table, dplyr, fst, mgsub, sf, stringr, magrittr)
+pacman::p_load(assertthat, ccaPP, data.table, dplyr, fst, mgsub, sf, stringr, magrittr)
 
 #detect if running interactively
 interactive <- F  %>% #manual override
   ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
   ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
 
-## if running interactively, set arguments
 if (interactive) {
-  warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
-  ## set arguments
-  # TODO currently cannot work with regions that having differing speceification across models
-  # region                      <- 'dia_s_america-GUF'
-  # region                      <- 'dia_name-ESH'
-  region <- 'AGO'
-  hap_run_date <- '2020_04_03_22_49_57'
-  lri_run_date = '2019_10_23_16_13_17'
-
+  ## Set repo location, indicator group, and some arguments
+  user <- 'jfrostad'
+  core_repo <- "/homes/jfrostad/_code/lbd/hap"
+  indicator_group <- 'cooking'
+  indicator <- 'cooking_fuel_solid'
+  config_par   <- 'hap_standard'
+  holdout <- 0
+  age <- 0
+  run_date <- '2020_05_12_13_59_51'
+  run_date <- '2020_05_06_22_40_43'
+  measure <- 'prev'
+  region <- 'soas'
+  region <- 'THA'
+  cov_par <- paste(indicator_group, region, sep='_')
+  my_repo <- "/homes/jfrostad/_code/lbd/hap"
+  
 } else {
   
-  ## otherwise, grab arguments from qsub
-  ## note this requires a shell script with "<$1 --no-save $@", because its starting at 4
-  region                      <- as.character(commandArgs()[4])
-  hap_run_date                <- as.character(commandArgs()[5])
-  lri_run_date                <- as.character(commandArgs()[6])
-
-} 
+  ## Set repo location, indicator group, and some arguments
+  user            <- commandArgs()[4]
+  core_repo       <- commandArgs()[5]
+  indicator_group <- commandArgs()[6]
+  indicator       <- commandArgs()[7]
+  config_par      <- commandArgs()[8]
+  cov_par         <- commandArgs()[9]
+  region          <- commandArgs()[10]
+  run_date        <- commandArgs()[11]
+  measure         <- commandArgs()[12]
+  holdout         <- as.numeric(commandArgs()[13])
+  my_repo         <- commandArgs()[14]
+  age             <- 0
+  
+}
 
 # collect date
 today <- Sys.Date()
@@ -63,45 +77,33 @@ today <- Sys.Date()
 
 # ---OPTIONS------------------------------------------------------------------------------------------------------------
 ## set arguments
-#gbd lri options
-# bwga.ier.version <- 38
-# ier.version <- "33power2_simsd_source_priors"
-rr.data.version <- "33" #rr data version
-rr.model.version <-"power2_simsd_source_priors" #rr model version
-rr.functional.form <- "power2" #rr functional form
 format <- T #set T if needing to reformat the cellpreds to long data.table
+prep_gbd_files <- F #set T if change on GBD side requires reprep of GBD info
+
+#countries we want to process by state 
+#TODO-set based on nrow or ndistrict?
+big_countries <- c(
+  143, #Mexico
+  44, #China
+  47, #DRC
+  65, #Algeria
+  138, #Libya
+  193, #Sudan
+  33, #Brazil
+  108, #Iran
+  150, #Mongolia
+  105 #India
+)
 
 #mbg options
-indicator_groups         <- list(hap='cooking', 
-                                 lri='lri')
-indicators               <- list(hap='cooking_fuel_solid', 
-                                 lri='has_lri')
-run_dates                <- list(hap=hap_run_date, 
-                                 lri=lri_run_date)
-measures                 <- list(hap='prev',
-                                 lri='count')
-suffixes                 <- list(hap='_eb_bin0_0', 
-                                 lri='_eb_bin0_0')
-rks                      <- list(hap=T, 
-                                 lri=T)
-shapefile                <- '2019_09_10' #NEEDS TO MATCH
-covs                        <- c('ihmepm25')
-cov_measures                <- c('mean')
+rk                       <- (indicator=='cooking_fuel_solid')
+suffix                   <- '_eb_bin0_0'
+covs                     <- c('ihmepm25')
+cov_measures             <- c('mean')
 
 #TODO pass from 2_entry.R?
-config_par   <- 'hap_standard'
-cov_par <- paste(indicator_groups[['hap']], region, sep='_')
-
-# #TODO janky fix
-# if (region=='dia_name-ESH') {
-#   hap.region <- 'dia_name'
-# } else if (region=='dia_sssa') {
-#   hap.region <- c('dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF')
-# } else if (region=='dia_s_america-GUF') {
-#   hap.region <- 'dia_s_america'
-# } else hap.region <- region
-
-hap.region <- region
+# config_par   <- 'hap_standard'
+# cov_par <- paste(indicator_groups[['hap']], region, sep='_')
 
 # print out session info so we have it on record
 sessionInfo()
@@ -114,15 +116,19 @@ gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 
 # load MBG packages
-core_repo <- file.path(h_root, '_code/lbd/lbd_core/')
+#core_repo <- file.path(h_root, '_code/lbd/lbd_core/')
+core_repo <- file.path(h_root, '_code/lbd/hap/')
 my_repo <- file.path(h_root, '_code/lbd/hap/')
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
+# load post functions
+file.path(my_repo, '_lib', 'post', 'format_cell_preds.R') %>% source
+file.path(my_repo, '_lib', 'post', 'risk_calculations.R') %>% source
+file.path(my_repo, '_lib', 'post', 'make_projections.R') %>% source
+
 #load erf custom fx
-file.path(h_root, '_code/risks/erf/air_pm/rr/_lib/functional_forms.R') %>% source
-  fobject <- get(rr.functional.form)
 file.path(h_root, '_code/risks/erf/air/_lib/misc.R') %>% source
 file.path(h_root, '_code/risks/erf/air/paf/_lib/paf_helpers.R') %>% source
 
@@ -144,266 +150,6 @@ fix_diacritics <<- function(x) {
   enc2utf8(x) %>% 
     mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
     return
-  
-}
-
-# Helper function to turn a tif raster file into a dt
-raster_to_dt <- function(the_raster,
-                         simple_polygon,
-                         simple_raster,
-                         year_list,
-                         interval_mo,
-                         outputdir,
-                         pixel_id) { #TODO will pull names from raster by default add user pass in functionality
-  
-  #some rasters are badly named with multiple slotnames, subset to first name only
-  raster_name <- names(the_raster)[1]
-  
-  message(paste0("Prepping the ", raster_name, " raster for this region"))
-  ## extend and crop pop raster to ensure it matches the simple raster #not convinced this is totally needed
-  out  <- extend(the_raster, simple_raster, values = NA)
-  out  <- crop(out, extent(simple_raster))
-  out  <- setExtent(out, simple_raster)
-  out  <- raster::mask(out, simple_raster)
-  
-  ## check to ensure the pop raster matches the simple raster in extent and resolution
-  if (extent(out) != extent(simple_raster)) {
-    stop("raster extent does not match simple raster")
-  }
-  if (any(res(out) != res(simple_raster))) {
-    stop("raster resolution does not match simple raster")
-  }
-  
-  #ensure the dimensions are the same
-  stopifnot(dim(out)[1:2] == dim(simple_raster)[1:2])
-  
-  message("converting the raster into a data.table")
-  #convert to datables, reshape and stuff
-  brick_to_dt = function(bbb, pixel_id = pixel_id){
-    dt = setDT(as.data.frame(bbb))
-    dt[, pxid := .I] #probably uncessary
-    
-    #drop rows now in cellIdx
-    dt = dt[pixel_id,]
-    
-    dt = melt(dt, id.vars = 'pxid', variable.factor = F)
-    dt = dt[,.(value)]
-    return(dt)
-  }
-
-  dt <- brick_to_dt(bbb = out, pixel_id = pixel_id) %>% 
-    setnames(., raster_name)
-  
-  # Add pixel_id, but make sure that its recycled explicitly as per data.table 1.12.2 guidelines
-  dt[, pixel_id := rep(pixel_id, times = nrow(dt) / length(pixel_id))]
-  
-  #add year to covdt
-  yyy = as.vector(unlist(lapply(min(year_list):max(year_list), function(x) rep.int(x, times = length(pixel_id)))))
-  dt[,year := yyy]
-  
-  return(dt)
-  
-}
-
-
-#TODO write documentation
-link_cell_pred <- function(ind_gp,
-                           ind,
-                           rd,
-                           reg,
-                           measure,
-                           pop_measure,
-                           year_start,
-                           year_end,
-                           var_names = ind, # name using ind by default, but can pass custom name
-                           n_draws = 250, #TODO automatically check the config file for 'samples' value?
-                           #matrix_pred_name = NULL,
-                           skip_cols = NULL,
-                           rk = T,
-                           coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
-                           rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
-                           shapefile_version = 'current',
-                           covs=NA, #added fx to bring in covariates and merge
-                           debug=F) {
-  
-  if(debug) browser()
-  
-  message('Beginning formatting for ', reg)
-  message('loading simple raster & populations')
-  
-  ## Load simple polygon template to model over
-  gaul_list <- get_adm0_codes(reg, shapefile_version = shapefile_version)
-  simple_polygon_list <- load_simple_polygon(
-    gaul_list = gaul_list, buffer = 1, tolerance = 0.4,
-    shapefile_version = shapefile_version
-  )
-  subset_shape <- simple_polygon_list[[1]]
-  simple_polygon <- simple_polygon_list[[2]]
-  
-  ## Load list of raster inputs (pop and simple)
-  if (coastal_fix) raster_list <- build_simple_raster_pop(subset_shape, link_table = shapefile_version) #uses new simple_raster 
-  else raster_list <- build_simple_raster_pop(subset_shape, link_table = NULL) #uses old rasterize
-  
-  simple_raster <- raster_list[["simple_raster"]]
-  pop_raster <- raster_list[["pop_raster"]]
-  pixel_id <- seegSDM:::notMissingIdx(simple_raster)
-  
-  ## get number of years
-  year_list <- c(year_start:year_end)
-  num_yrs <- length(year_list)
-  
-  message('loading links')
-  #####################################################################
-  # load the cell id to admin units link
-  link_table <- get_link_table(simple_raster, shapefile_version = shapefile_version)
-  
-  # collect and load the population data from the WorldPop rasters
-  covdt <- load_populations_cov(reg, pop_measure, measure = 'count', simple_polygon, simple_raster, 
-                                year_list, interval_mo=12, pixel_id = pixel_id)
-
-  #####################################################################
-  # Prepping the cell_pred and link table to be linked by making sure they have the appropriate identifiers.  Also performs a
-  # zippering at the region boundary where cells that have a portion of their area outside of the modeling region are reintegrated
-  # as a whole cell and considered to be only in one region.  This works becasue a given cell is only modeled in one region.
-  link <- prep_link_table(
-    link_table = link_table,
-    simple_raster = simple_raster,
-    pixel_id = pixel_id
-  )
-  
-  # getting the connector for sub-national or national raking, This connector gets the IHME location_code for our
-  # gbd targets and connects that to the ADM0_CODE or ADM1_CODE as nessecary
-  connector <- get_gbd_locs(
-    rake_subnational, 
-    reg = reg,
-    shapefile_version = shapefile_version
-  )
-  
-  # merge the connector on to the link table by making sure that each cell fragment gets connected to the appropriate
-  # raking geography
-  link <- sub_nat_link_merge(
-    rake_subnational,
-    link,
-    connector
-  )
-  
-  #helper function to load a list of cell preds and then merge them together
-  loadCellPreds <- function(i, 
-                            max_n=n_draws) { 
-    
-    message('~>loading cell pred for: ', ind[[i]])
-    
-    # Load the relevant pred object - loads an object named cell_pred
-    rdata_file <- paste0('/share/geospatial/mbg/', ind_gp[[i]], '/', ind[[i]], '/output/', rd[[i]], '/',
-                         ind[[i]], 
-                         ifelse(rk, "_raked_", measure, "_cell_draws_eb_bin0_","_cell_draws_eb_bin0_"), 
-                         reg, "_0.RData")
-    
-    browser()
-    
-    #TODO improve logic
-    if (rk) {
-      if (file.exists(rdata_file)) {
-        message('loading raked results')
-        load(rdata_file)
-        cell_pred <- raked_cell_pred
-        rm(raked_cell_pred)
-      }
-    } else {
-      if (file.exists(rdata_file)) {
-        message('loading UNraked results')
-        load(rdata_file)
-      }
-    }
-    
-    # Check to make sure loaded correctly
-    if (!exists("cell_pred")) stop("Unable to load raked cell pred object!")
-    
-    # If extra columns at front of cell_pred, can skip here
-    #TODO what is this for
-    if(!(is.null(skip_cols))) cell_pred <- as.matric(cell_pred[, (skip_cols+1):ncol(cell_pred)])
-    
-    # Verify alignment  
-    if(nrow(cell_pred)!=nrow(covdt)) stop('Dimensional mismatch between cell pred and simple raster!!')
-    
-    # Enforce max # of draws
-    message('...subsetting to #', max_n, ' draws!')
-    cell_pred <- cell_pred[, (1:max_n)]
-
-    # set cell pred as a data table, and rename things
-    prep_cell_pred(
-      cell_pred = cell_pred,
-      cell_ids = link_table[[2]],
-      pixel_id = pixel_id,
-      covdt = covdt
-    ) %>% 
-      return
-
-  }
-  
-  #load/format all the cell preds and then merge them together
-  cell_pred <- lapply(1:length(ind), loadCellPreds) %>% 
-    Reduce(function(...) merge(..., all = TRUE), .)
-  
-  #TODO should add a test here to verify that the resulting nrow = original cell_pred/num_yrs/250
-  #tested it now and it looks OK but this is important to make more robust
-  
-  # merge cell_pred on the link
-  # TODO note that pixel_id col in link dt is a duplicate of ID, and causes a merge issue (pixel_id.x|pixel_id.y)
-  # eventually should fix this issue upstream but for now removing it pre-merge is sufficient
-  cell_pred <- merge(link[, -c('pixel_id')], cell_pred, by.x = "ID", by.y = "cell_id", allow.cartesian = TRUE)
-  
-  #also load/merge on any user-provided covariates
-  # TODO note that we need to do this at the end due to using cbind instead of merge for prep_cell_pred
-  #merging before prep_cell_pred will resort the pixel_id/year and then mess up the cbind
-  if (!is.null(covs)) {
-    message('adding requested covariates, ', covs)
-    
-    #load the covariates as a raster
-    cell_pred <- load_and_crop_covariates_annual(covs = covs,
-                                                 measures = cov_measures,
-                                                 simple_polygon = simple_polygon,
-                                                 start_year  = min(year_list),
-                                                 end_year    = max(year_list),
-                                                 interval_mo = 12,
-                                                 agebin = 1) %>% 
-      #convert to DT and combine
-      lapply(., raster_to_dt, simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
-      Reduce(function(...) merge(..., all = TRUE), .) %>% 
-      #force names, auto-extracting from raster can be variable depending on the upload name of the cell pred obj
-      setnames(., c(covs, 'pixel_id', 'year')) %>% 
-      #merge to the input rasters DT
-      merge(cell_pred, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing covariate values?
-    
-  }
-  
-  #if collapsing by other pop measure than total, include total pop as well
-  if (pop_measure!='total') {
-    
-    cell_pred <- load_populations_cov(reg, pop_measure='total', measure = 'count', simple_polygon, 
-                                  simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
-      setnames(., 'pop', 'pop_total') %>% 
-      merge(., cell_pred, by=c('pixel_id', 'year'))
-    
-  }
-
-  #subset to relevant columns and return
-  keep_vars <- c('ADM0_CODE', 'ADM1_CODE', 'ADM2_CODE', 
-                 'pixel_id', 'year', 'pop',
-                 ifelse(pop_measure!='total', 'pop_total', 'pop'),
-                 'area_fraction', unlist(covs), paste0('V', 1:n_draws)) %>% unique
-  cell_pred[, (keep_vars), with=F] %>% 
-    return
-  
-}
-
-#custom function for calculating the LRI RR based on PM2.5
-calcRR <- function(col.n, ratio, exp, exp.cols, curve, curve.n) {
-  
-  crude <- fobject$eval(exp[, get(exp.cols[col.n])], curve[[curve.n]][col.n, ])
-  out <- ratio * crude - ratio + 1
-  
-  return(out)
   
 }
 
@@ -438,9 +184,8 @@ meltAndSave <- function(country, type, dt, debug=F) {
 
 #***********************************************************************************************************************
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ---MBG PREP-----------------------------------------------------------------------------------------------------------
+#Prep MBG inputs/Load Data
 PID <- Sys.getpid()
 tic("Entire script") # Start master timer
 
@@ -450,11 +195,14 @@ set.seed(98118)
 
 ## Read config file and save all parameters in memory
 config_filepath <- 'cooking/model/configs/'
-config <- set_up_config(repo            = core_repo,
-                        indicator_group = indicator_groups[['hap']],
-                        indicator       = indicators[['hap']],
+config <- set_up_config(repo            = my_repo,
+                        indicator_group = indicator_group,
+                        indicator       = indicator,
                         config_name     = paste0('/model/configs/config_', config_par),
-                        covs_name       = paste0('/model/configs/covs_', cov_par))
+                        covs_name       = paste0('/model/configs/covs_', cov_par),
+                        run_tests       = F,
+                        post_est_only   = T,
+                        )
 
 # Get the necessary variables out from the config object into global env
 #TODO move all to config, some are currently defaulting
@@ -468,191 +216,218 @@ year_list <- eval(parse(text = config[V1 == 'year_list', V2]))
 metric_space <- config[V1 == 'metric_space', V2]
 summstats <- eval(parse(text = config[V1 == 'summstats', V2]))
 
-# Setup -------------------------------------------------------------------------
+#***********************************************************************************************************************
 
+# ---IN/OUT-------------------------------------------------------------------------------------------------------------
 #input dirs
-j.home.dir <- file.path(j_root,"WORK/05_risk/risks/air_pm")
-rr.dir <- file.path(j.home.dir, 'data/rr/output', paste0(rr.data.version, rr.model.version))
+rr.dir <- file.path('/ihme/erf/GBD2019/air_pmhap/rr/model/')
+global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', modeling_shapefile_version) #TODO make official
+
+#intermediate data
+data.dir <- file.path('/share/geospatial/mbg/', indicator_group, 'data')
 
 # create outputdir
-outputdir <- paste0('/share/geospatial/mbg/', indicator_groups[[1]], '/pafs/', run_dates['hap'])
+outputdir <- paste0('/share/geospatial/mbg/', indicator_group, '/pafs/', run_date)
   dir.create(paste0(outputdir, '/tmp/'), recursive = T)
-
-# # Make correlation objects ------------------------------------------------------------
+  
+# prep GBD files and values ------------------------------------------------------------
 ##define share directory
-share_dir <- paste0('/share/geospatial/mbg/', indicator_groups[[2]], '/', indicators[[2]], '/output/', run_dates[[2]], '/')
+share_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
 
 ## start master timer
 tic('Master timer')
 
-tic('Loading external datasets')
-# load the gbd location hierarchy
-# note that these IDs are the reporting hierarchy for GBD2019
-locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
-  .[, .(location_id, iso3=ihme_loc_id)] #subset to relevant columns
 
-# load and format the GBD results
-gbd.hap.version <- '092419'
-gbd.hap.pm <- file.path('/ihme/erf/GBD2019/air_hap/map/results/summary', gbd.hap.version, 
-                        paste0('lm_map_', gbd.hap.version, '.csv')) %>% 
-  fread %>% 
-  .[grouping=='child', .(location_id, year=year_id, hap_excess_pm25=mean)] %>% #subset to the under5 results and use the mean, (or median?? bc logspace)
-  merge(., locs, by='location_id', all.x=T) %>% 
-  .[nchar(iso3)<4] %>% #TODO, for now do not use subnationals as they do not merge to adm0 codes
-  .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+#***********************************************************************************************************************
 
-#load and format the gbd RR objects
-age.cause <- ageCauseLister(cause.code='lri', gbd.version='GBD2019', lri.version='single', full.age.range = F)
-# Prep the RR curves into a single object, so that we can loop through different years without hitting the files extra times.
-all.rr <- lapply(1:nrow(age.cause), prepRR, rr.dir=rr.dir) #9 = LRI 
-lri.rr <- all.rr[[9]] %>% 
-  .[, draw := paste0('V', draws)]
+# ---DATA PREP----------------------------------------------------------------------------------------------------------
+if(prep_gbd_files) {
 
-#TODO 
-#create mean/CI
-# lri.ci <- lri.rr %>% 
-#   copy %>% 
-#   .[ mean := ]
-toc(log=TRUE)
+  tic('Processing GBD datasets')
+  # load the gbd location hierarchy
+  # note that these IDs are the reporting hierarchy for GBD2019
+  locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
+    .[, .(location_id, iso3=ihme_loc_id)] #subset to relevant columns
+  
+  # load and format the GBD results
+  gbd.hap.version <- '092419'
+  gbd.hap.pm <- file.path('/ihme/erf/GBD2019/air_hap/map/results/summary', gbd.hap.version, 
+                          paste0('lm_map_', gbd.hap.version, '.csv')) %>% 
+    fread %>% 
+    .[grouping!='indoor', .(location_id, year=year_id, hap_excess_pm25=mean, grouping)] %>% # use the mean, (or median?? bc logspace)
+    merge(., locs, by='location_id', all.x=T) %>% 
+    .[nchar(iso3)<4] %>% #TODO, for now do not use subnationals as they do not merge to adm0 codes
+    .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
+  
+  #choose ages to merge for RRs
+  gbd.hap.pm[grouping=='child', `:=` (age_group_id=2, sex_id=1)]
+  gbd.hap.pm[grouping=='female', `:=` (age_group_id=10, sex_id=2)]
+  gbd.hap.pm[grouping=='male', `:=` (age_group_id=10, sex_id=1)]
+  
+  #load the rr max for SEV
+  rr.max <- fread('/ihme/erf/GBD2019/air_hap/rr_max/air_hap.csv') %>% 
+    setnames(., 'rr', 'rr_max') %>% 
+    .[, draw := paste0("V", draw)] %>% 
+    .[, rei := NULL] %>% #to save space
+    setnames('cause_id', 'cause')
+  
+  #replace the cause ids with their code
+  cause.codes <- c('cvd_ihd',
+                   "cvd_stroke_isch",
+                   "cvd_stroke_intracerebral",
+                   "cvd_stroke_subarachnoid",
+                   "lri",
+                   'neo_lung',
+                   'resp_copd',
+                   't2_dm')
+  
+  cause.ids <- c(493,
+                 495,
+                 496,
+                 497,
+                 322,
+                 426,
+                 509,
+                 976)
+  
+  # then pass to your custom function
+  rr.max <- findAndReplace(rr.max,
+                           cause.ids,
+                           cause.codes,
+                           "cause", 
+                           'cause')
+  
+  #keep only one type of stroke so as not to triple weight this in the SEV collapse
+  rr.max <- rr.max[!(cause %in% c('cvd_stroke_intracerebral', 'cvd_stroke_subarachnoid'))]
+  rr.max[cause %like% 'stroke', cause := 'cvd_stroke']
+  
+  rr.dt <- 
+    list.files(rr.dir) %>% 
+    lapply(formatRR, dir=rr.dir) %>% 
+    rbindlist(use.names=T, fill=T)
+  
+  #remove the RRs that are mediated through shifts
+  #these include low birthweight and gestational age
+  #we will use the GBD pafs for these instead
+  rr.dt <- rr.dt[!(cause %in%  c('bw', 'ga', 'lbw', 'ptb'))]
+  
+  #expand to the appropriate age groups using a custom function
+  rr.dt <- unique(rr.dt$cause) %>% 
+    lapply(causeExpansion, input.table=rr.dt) %>% 
+    rbindlist(use.names=T, fill=T)
+  
+  #now subset to the age/sex combos that you have specific hap pm data for so as not to create a massive join
+  #these are children, women, and men
+  rr.dt <- rr.dt[(age_group_id==2 & sex_id==1) | age_group_id==10]
+  
+  #prep for merge with hap data
+  setnames(rr.dt, 'exposure_spline', 'tap_pc')
+  
+  #combine necessary GBD info
+  gbd_data <- list(
+    'pm'=gbd.hap.pm,
+    'rr'=rr.dt,
+    'rr_max'=rr.max
+  )
+
+  #save 
+  saveRDS(gbd_data,
+          file=file.path(data.dir, 'gbd_data.RDS'))
+  
+  #cleanup
+  rm(gbd.hap.pm, 
+     rr.dt, 
+     rr.max)
+
+} else gbd_data <- file.path(data.dir, 'gbd_data.RDS') %>% readRDS
+
+#read in link_table
+global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>% as.data.table
+adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, ADM2_NAME, ADM2_CODE)] %>% unique
 
 ## find the adm0s/iso3s of countries in this region
-adm0s <- get_adm0_codes(region, shapefile_version = shapefile)
+adm0s <- get_adm0_codes(region, shapefile_version = modeling_shapefile_version)
 countries <- pull_custom_modeling_regions(region) %>% unlist %>% str_split(., pattern='\\+', simplify = T)
 
+#***********************************************************************************************************************
+
+# ---FORMAT PREDS-------------------------------------------------------------------------------------------------------
+#format cell preds into long DTs
 if(format) {
   
   ## create the long data.tables and format them for the TAP calculations
   tic('Make table(s) for HAP')
-  
-  if (length(hap.region)==1) {
-    
-    hap.dt <- link_cell_pred(ind_gp = indicator_groups[['hap']],
-                             ind = indicators[['hap']],
-                             rd = run_dates[['hap']],
-                             reg = hap.region,
-                             measure = measures[['hap']],
-                             pop_measure = 'a0004t', #children <5
-                             covs = covs,
-                             n_draws = 50, #reduce the # of draws to speed up processing
-                             year_start = 2000,
-                             year_end = 2017,
-                             rk = rks[['hap']],
-                             shapefile_version = shapefile,
-                             coastal_fix = T,
-                             debug=F)
-    toc(log = TRUE)
-    
-    tic('Saving results at country level with .fst')
-    lapply(adm0s, meltAndSave, type='hap', dt=hap.dt)
-    rm(hap.dt) #save memory
-    toc(log=TRUE)
-    
-  } else {
-  #note that this logic is to accomodate HAP's use of single country models
-    
-    for (subregion in hap.region) {
-      
-      hap.dt <- link_cell_pred(ind_gp = indicator_groups[['hap']],
-                               ind = indicators[['hap']],
-                               rd = run_dates[['hap']],
-                               reg = subregion,
-                               measure = measures[['hap']],
-                               pop_measure = 'a0004t', #children <5
-                               covs = covs,
-                               n_draws = 50, #reduce the # of draws to speed up processing
-                               year_start = 2000,
-                               year_end = 2017,
-                               rk = rks[['hap']],
-                               shapefile_version = shapefile,
-                               coastal_fix = T,
-                               debug=F)
-      toc(log = TRUE)
-      
-      tic('Saving results at country level with .fst')
-      lapply(adm0s, meltAndSave, type='hap', dt=hap.dt)
-      rm(hap.dt) #save memory
-      toc(log=TRUE)
-      
-    }
-    
-  }
-  
-  # tic('Make table for LRI')
-  # lri.dt <- link_cell_pred(ind_gp = indicator_groups[['lri']],
-  #                          ind = indicators[['lri']],
-  #                          rd = run_dates[['lri']],
-  #                          reg = region,
-  #                          measure = measures[['lri']],
-  #                          pop_measure = 'a0004t', #children <5
-  #                          covs = covs,
-  #                          n_draws = 100, #reduce the # of draws to speed up processing
-  #                          year_start = 2000,
-  #                          year_end = 2017,
-  #                          rk = rks[['lri']],
-  #                          shapefile_version = shapefile,
-  #                          coastal_fix = T,
-  #                          debug=F)
-  # toc(log = TRUE)
-  # 
-  # tic('Saving results at country level with .fst')
-  # lapply(adm0s, meltAndSave, type='lri', dt=lri.dt)
-  # rm(lri.dt) #save memory
-  # toc(log=TRUE)
 
+  hap.dt <- link_cell_pred(ind_gp = indicator_group,
+                           ind = indicator,
+                           rd = run_date,
+                           reg = region,
+                           measure = measure,
+                           pop_measure = 'hap', #men/women/children
+                           covs = covs,
+                           n_draws = 50, #reduce the # of draws to speed up processing
+                           year_start = 2000,
+                           year_end = 2017,
+                           rk = rk,
+                           shapefile_version = modeling_shapefile_version,
+                           coastal_fix = T,
+                           debug=F)
+  toc(log = TRUE)
+  
+  tic('Saving results at country level with .fst')
+  lapply(adm0s, meltAndSave, type='hap', dt=hap.dt)
+  rm(hap.dt) #save memory
+  toc(log=TRUE)
+    
 } else message('skipping format stage as results are preformatted')
 
+#***********************************************************************************************************************
+
+# ---TAP/RISK CALC------------------------------------------------------------------------------------------------------
 #custom function to calculate the ad0/2 level TAP results
 #produces the TAP PAF for LRI, the LRI rate attributable to TAP, and the LRI counts attributable to TAP
-calcTAP <- function(country, dir, 
-                    hap_data=gbd.hap.pm,
+calcTAP <- function(country, dir, rr_data=rr.dt,
+                    adm_info=adm_links,
+                    hap_data=gbd_data,
                     debug=F) {
   
   if(debug) browser()
   
   #makes sure file exists
-  country_files <- list(hap=sprintf('%s/tmp/%s_hap.fst', dir, country),
-                        lri=sprintf('%s/tmp/%s_lri.fst', dir, country))
-  existance <- sapply(country_files, file.exists)
-  existance <- existance[1] #TODO only working on HAP at this time
+  country_file <- sprintf('%s/tmp/%s_hap.fst', dir, country)
+  existance <- file.exists(country_file)
            
-  if (existance %>% all) {
-  
+  if (existance) {
+    
     #read in the long data.tables for the appropriate country
-    message('reading data from: ', country_files)
-    dt <- read_fst(country_files[['hap']], as.data.table = T) %>% .[, ID := .I]
-    #lri.dt <- read_fst(country_files[['lri']], as.data.table = T)  %>% .[, ID := .I]
+    message('\n********\nstarting process for ', 
+            adm_info[ADM0_CODE==country, ADM0_NAME %>% unique], '\n********\n')
+    message('reading data from\n')
+    message(country_file)
+    country_dt <- read_fst(country_file, as.data.table = T) %>% .[, ID := .I]
+    states <- unique(country_dt$ADM1_CODE)
     
-    ##TESTS##
-    #make sure dimensions match
-    # test_result <- (dim(dt)!=dim(lri.dt)) %>% any
-    # if(test_result) { 
-    #   error <- data.table('hap_n'=dt[draw=='V1' & year=='2000', .N], 'lri_n'=lri.dt[draw=='V1' & year=='2000', .N])
-    # } else {
-    #   #make sure tables have not been re-sorted
-    #   #sample 50 random rows and compare them. they should match in all rows except pixel_id and the indicator
-    #   sampled_ids <- sample(dt$ID, 50)
-    #   test_result <- all.equal(lri.dt[ID %in% sampled_ids, -c('pixel_id', 'lri'), with=F], 
-    #                            dt[ID %in% sampled_ids, -c('pixel_id', 'hap'), with=F])
-    #   if(test_result %>% is.character) error <- test_result
-    # }
-    # 
-    # #if errrors are found, record in output folder and return NULL
-    # if(exists('error')) {
-    #   
-    #   message(country, ' encountered error: ', error)
-    #   write.csv(error, file = paste0(dir, '/', country, '_failure.csv'))
-    #   return(NULL)
-    # 
-    # } else {  
-    #   #if no errors, process country  
-    #   #merge tables
-    #   dt[, lri := lri.dt[, lri]] %>% 
-    #     .[, ID := NULL] #no longer needed
-    #     rm(lri.dt) #cleanup
+    #define relevant col vectors
+    geo_cols <- c('iso3', 'location_id', 'ADM0_CODE', 'ADM1_CODE', 'ADM2_CODE', 'area_fraction')
+    pop_cols <- names(country_dt) %>% .[. %like% 'pop']
+    
+    #everything is collapsed by cause but everything except PAFs are only unique to loc/year/grouping
+    ind_cols <- c('hap_pct', 'tap_paf', 'tap_pm', 'hap', 'hap_sev', 'cor') 
+    id_cols <- c('pixel_id', 'year', 'grouping', 'cause')
+    
+    #for larger countries, we will process them by state
+    stateLoop <- function(adm1) {
       
-    
-      #merge on the child HAP excess PM2.5 values for each ad0
-      dt <- merge(dt, hap_data, by=c('ADM0_CODE', 'year'), all.x=T)
+      message('processing draws for ', 
+              ifelse(length(adm1)>1, 'all states', paste0('state=', adm1)))
+      
+      #subset to working adm1
+      dt <- country_dt[ADM1_CODE %in% adm1]
+      
+      #merge on the HAP excess PM2.5 values for each ad0
+      #note that this expands the dt to have man/woman/child values for each pixel
+      message('merging PM2.5 data')
+      dt <- merge(dt, hap_data$pm, by=c('ADM0_CODE', 'year', 'grouping'), all.x=T, allow.cartesian=T)
       
       #calculate the TAP PM2.5/capita values
       message('calculating TAP PM2.5/capita')
@@ -664,92 +439,150 @@ calcTAP <- function(country, dir,
       
       #calculate the hap proportion and other key hap indicators
       dt[, hap_pct := hap_pm/(aap_pm+hap_pm)]
-      dt[, dfu := hap]
-      dt[, cfu := 1-dfu]
       
       #calculate correlations between aap and hap
+      message('making correlation calculations')
       dt[, cor := corSpearman(aap_pm, hap_pm), by=.(pixel_id, draw)]
-      
+  
       #calculate the TAP RR for LRI
-      message('calculating RISK')
-      dt <- merge(dt, lri.rr, by='draw') #merge on the draws of IER parameters
-      dt[tap_pc<=tmrel, tap_rr := 1] #only calculate RR if the exp>tmrel
-      dt[tap_pc>tmrel, tap_rr := 1 + (alpha * (1 - exp(-beta * (tap_pc - tmrel)^gamma)))] #power2 functional form
+      message('merging risk files and expanding dt')
+      #first merge on the RR.max to expand the causes for our cellpred dt
+      dt <- merge(dt, hap_data$rr_max, by=c('draw', 'age_group_id', 'sex_id'), allow.cartesian=T)
       
-      #calculate the TAP PAF for LRI
-      dt[, tap_paf := (tap_rr-1)/tap_rr]
+      #merge on the mrBRT RR predictions using the nearest spline cutpoint
+      message('merging mrBRT predictions in order to estimate RR')
+      dt <- hap_data$rr[dt, on=.(draw, age_group_id, sex_id, cause, tap_pc), roll='nearest'] 
+      
+      #calculate the TAP PAF for each cause
+      message('making PAF calculations')
+      dt[, tap_paf := (rr-1)/rr]
+  
+      #calculate the SEV by cause using the HAP PAF and then average across causes
+      message('making SEV calculations')
+      dt[, hap_sev := (tap_paf*hap_pct/(1-tap_paf*hap_pct))/(rr_max-1)]
+      dt[, hap_sev := mean(hap_sev), by=.(pixel_id, year, draw, grouping)]
+      
+      #population weight using the age/sex distribution per pixel to collapse over causes
+      dt[, hap_sev := sum(hap_sev*pop)/sum(pop), by=.(pixel_id, year, draw)]
+      
+      #we will output SEVs at the cell_pred/pixel level in order to forecast
+      message('producing SEV cell_pred')
+      #TODO note that the V1,V10, etc cols get reordered - shouldnt matter?
+      sev_cell_pred <- dt[, .(pixel_id, cell_pred_id, year, draw, hap_sev, area_fraction)] %>% 
+        unique(., by=c('pixel_id', 'year', 'draw')) %>% 
+        dcast(cell_pred_id+pixel_id+area_fraction+year~draw, value.var='hap_sev') 
       
       #calculate the LRI attrib to TAP
       # dt[, tap_lri_r := tap_paf * lri] #rate
       # dt[, tap_lri_c := tap_paf * lri * pop] #count
-      
+  
       message('collapsing draws')
-      #define relevant col vectors
-      #out_cols <- c('hap_pct', 'tap_paf', 'tap_lri_r', 'tap_lri_c')
-      out_cols <- c('hap_pct', 'tap_paf', 'tap_pm', 'dfu', 'cfu', 'cor')
-      #null_cols <- c(indicators, 'ihmepm25', 'hap', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_rr', 
-      null_cols <- c(indicators, 'hap', 'aap_pm', 'hap_pm', 'tap_rr', 
-                     names(lri.rr)) %>% unlist
-      
-      #collapse over the draws for TAP PAF / LRI attrib and return the mean values
+
+      #first remove any unnecessary cols
+      null_cols <- c('ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pc',
+                     'rr', 'rr_max', 'ID', 'age_group_id', 'sex_id')
+      dt <- dt[, (null_cols) := NULL]
+  
+      #collapse over the draws for all indicators and return the mean values
       agg <- dt %>% 
         copy %>%
-        setkey(., pixel_id, year) %>% 
-        .[, (out_cols) := lapply(.SD, mean, na.rm=T), .SDcols=out_cols, by=key(.)] %>% 
-        .[, (null_cols) := NULL] %>%  #remove unecessary columns
+        setkeyv(., id_cols) %>% 
+        .[, (ind_cols) := lapply(.SD, mean, na.rm=T), .SDcols=ind_cols, by=key(.)] %>% 
+        .[, c(geo_cols, id_cols, ind_cols, pop_cols), with=F] %>% 
         unique(., by=key(.))
-    
-      #TODO move to function part of script
-      #custom function for aggregating columns to ad0/1/2
-      aggResults <- function(dt, by_cols, agg_cols) {
-        
-        # aggregate to ad2
-        message('Aggregating at the level of ', by_cols)
-        
-        #distinguish that count columns should be a weighted sum instead of a weighted mean
-        sum_cols <- agg_cols %>% .[. %like% '_c|_pm|pop'] %T>% 
-          message('Using a weighted sum to aggregate: ', .) 
-        mean_cols <- agg_cols %>% .[!(. %in% sum_cols)] %T>% 
-          message('Using a weighted mean to aggregate: ', .) 
-        
-        #which columns will no longer be relevant after this collapse?
-        null_cols <- c('pixel_id', 'area_fraction', 
-                       names(agg) %>% .[(. %like% 'ADM')] %>% .[!(. %in% by_cols)])
-        
-        #check which pop columns were returned (pop_total is produced if using a non-total pop to aggregate)
-        #append them to sum_cols, they will be likewise summed in the aggregation step
-        pop_cols <- names(agg) %>% .[(. %like% 'pop')]
-        sum_cols <- c(sum_cols, pop_cols)
-        
-        #aggregate and return dt
-        copy(agg) %>% 
-          setkeyv(., by_cols) %>% 
-          #fractional aggregation
-          .[, (mean_cols) := lapply(.SD, weighted.mean, w=pop*area_fraction, na.rm=T), .SDcols=mean_cols, by=key(.)] %>% 
-          .[, (sum_cols) := lapply(.SD, function(x, w) sum(x*w, na.rm=T), w=area_fraction), .SDcols=sum_cols, by=key(.)] %>% 
-          .[, tap_pc := tap_pm / pop] %>% #generate pm per capita
-          .[, (null_cols) := NULL] %>%  #remove unecessary columns
-          unique(., by=key(.)) %>% 
-          return
-        
-      }
       
-      #agg ad0/2
-      ad0 <- aggResults(agg, by_cols=c('ADM0_CODE', 'year'), agg_cols=out_cols)
-      ad2 <- aggResults(agg, by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year'), agg_cols=out_cols)
+      #since only PAFs are unique by cause, copy all other indicators into 'all' cause bracket
+      agg <- agg %>% 
+        copy %>% 
+        .[cause=='lri'] %>% 
+        .[, cause := 'all'] %>%
+        #PAFs are not valid at this level without some kind of outcome weighting which we dont have
+        #TODO could use GBD loc-year outcome rates in order to weight
+        .[, tap_paf := NA] %>% 
+        list(agg, .) %>% rbindlist
+      
+      list('sev_cell_pred'=sev_cell_pred,
+           'agg'=agg)
+      
+    }  
     
-      list('ad0'=ad0,
-           'ad2'=ad2) %>% 
+    if (country %in% big_countries) {
+      
+      #TODO make this piece more memory efficient
+      country_cores <- ifelse(country==33, 1, 3) #brazil states too large to run multicore
+      out_states <- mclapply(states, stateLoop, mc.cores=country_cores)
+      
+      agg <- lapply(out_states, function(x) x[['agg']]) %>% rbindlist
+      sev_cell_pred <- lapply(out_states, function(x) x[['sev_cell_pred']]) %>% rbindlist
+      
+      rm(out_states) #cleanup
+    
+    } else {
+      
+      out_states <- stateLoop(states)
+      agg <- out_states[['agg']]
+      sev_cell_pred <- out_states[['sev_cell_pred']]
+      
+    }
+
+    #TODO move to function part of script
+    #custom function for aggregating columns to ad0/1/2
+    aggResults <- function(dt, by_cols, agg_cols) {
+      
+      # aggregate to ad2
+      message('Aggregating at the level of ', paste(by_cols, collapse=' / '))
+      
+      #distinguish that count columns should be a weighted sum instead of a weighted mean
+      sum_cols <- agg_cols %>% .[. %like% '_c$|_pm$|_pc$'] %T>% 
+        message('--Using a weighted sum to aggregate: ', paste(., collapse=' / ')) 
+      mean_cols <- agg_cols %>% .[!(. %in% sum_cols)] %T>% 
+        message('--Using a weighted mean to aggregate: ', paste(., collapse=' / ')) 
+      
+      #which columns will no longer be relevant after this collapse?
+      null_cols <- c('pixel_id', 'area_fraction', 'tap_pm', 
+                     names(dt) %>% .[(. %like% 'ADM')] %>% .[!(. %in% by_cols)])
+      
+      #check which pop columns were returned (pop_total is produced if using a non-total pop to aggregate)
+      #append them to sum_cols, they will be likewise summed in the aggregation step
+      pop_cols <- names(dt) %>% .[(. %like% 'pop')]
+      sum_cols <- c(sum_cols, pop_cols)
+
+      #aggregate and return dt
+      copy(dt) %>% 
+        setkeyv(., by_cols) %>% 
+        #fractional aggregation
+        .[, (mean_cols) := lapply(.SD, weighted.mean, w=pop*area_fraction, na.rm=T), 
+          .SDcols=mean_cols, by=key(.)] %>% 
+        .[, (sum_cols) := lapply(.SD, function(x, w) sum(x*w, na.rm=T), w=area_fraction), 
+          .SDcols=sum_cols, by=key(.)] %>% 
+        .[, c(by_cols, mean_cols, sum_cols), with=F] %>%  #keep only necessary columns
+        .[, tap_pc := tap_pm / pop] %>% #generate aggregated pm per capita 
+        .[, tap_pm := NULL] %>% #no longer useful
+        unique(., by=key(.)) %>% 
         return
-    #}
+      
+    }
+    
+    #agg ad0/2
+    ad0 <- aggResults(agg, 
+                      by_cols=c('ADM0_CODE', 'year', 'grouping', 'cause'), 
+                      agg_cols=ind_cols)
+    ad2 <- aggResults(agg, 
+                      by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause'), 
+                      agg_cols=ind_cols)
+
+    list('ad0'=ad0,
+         'ad2'=ad2,
+         'cell_pred'=sev_cell_pred) %>% 
+      return
       
   } else {message(country_files[!existance], ' does not exist..skipping!'); return(NULL)}
   
-} 
+}  
 
 #loop over countries and produce ad0/2 results for TAP
 tic('Calculating TAP for each country')
-out <- lapply(adm0s, calcTAP, dir=outputdir, debug=T)
+out <- lapply(adm0s, calcTAP, dir=outputdir, debug=F)
 toc(log=TRUE)
 
 #bind results
@@ -760,7 +593,19 @@ out_ad0 <- lapply(out, function(x) x[['ad0']]) %>%
 out_ad2 <- lapply(out, function(x) x[['ad2']]) %>% 
   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
   rbindlist(use.names=T, fill=T)
+out_sev <- lapply(out, function(x) x[['cell_pred']]) %>% 
+  .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
+  rbindlist(use.names=T, fill=T)
 toc(log=TRUE)
+
+#recombine SEVs into a deduped cell_pred (linking process generates duplicates)
+#TODO setup to check dims against original cellpred?
+# rdata_file <- paste0('/share/geospatial/mbg/cooking/cooking_fuel_solid/output/', run_dates$hap, '/',
+#                      'cooking_fuel_solid_raked_prev_cell_draws_eb_bin0_', region, "_0.RData")
+# load(rdata_file)
+#cell_pred_dims <- dim(raked_cell_pred)
+cell_pred <- names(out_sev) %>% .[. %like% 'V'] %>% 
+  unlink_cell_pred(out_sev, cols=.)
 
 # finish up and save
 tic('Saving ad0')
@@ -774,6 +619,78 @@ out_path <- file.path(outputdir, paste0(region, '_ad2_tap_results.csv'))
 message('-> finished calculating TAP for ad2 level, now saving as \n...', out_path)
 write.csv(out_ad2, file = out_path, row.names = F)
 toc(log = TRUE)
+
+tic('Saving SEV')
+sev_file <- paste0('/share/geospatial/mbg/cooking/cooking_fuel_solid/output/', run_date, '/',
+                   'cooking_fuel_solid_sev_cell_draws_eb_bin0_', region, "_0.RData")
+save(cell_pred, file=sev_file)
+
+#***********************************************************************************************************************
+
+# ---SDG PROJECTIONS----------------------------------------------------------------------------------------------------
+# Define goals: start by initializing goal object
+goals <- add_goal(target_year = 2030, 
+                  target = 0.01,
+                  target_type = "less",
+                  abs_rel = "absolute",
+                  pred_type = c("cell"))
+
+goals <- add_goal(target_year = 2030, 
+                  target = 0.05,
+                  target_type = "less",
+                  abs_rel = "absolute",
+                  pred_type = c("cell"))
+
+#make AROC predictions
+make_aroc(          
+  ind_gp = indicator_group,
+  ind = indicator,
+  rd = run_date,
+  regions = region,
+  inputs = out,
+  #inputs = list('cell_pred'=cell_pred, 'admin_2'=out_ad2),
+  type = c("cell"),
+  admin_types = 2, 
+  measure = "sev",
+  year_list = year_list,
+  uselogit = TRUE,
+  raked = TRUE,
+  weighting_res = 'domain',
+  weighting_type = 'exponential',
+  pow = 1,
+  debug=T
+)
+
+make_proj(
+  ind_gp = indicator_group,
+  ind = indicator,
+  rd = run_date,
+  regions = region,
+  type = c("cell"),
+  admin_types=2,
+  proj_years = seq(2020, 2030, 5),
+  measure = "sev",
+  year_list = year_list,
+  uselogit = TRUE,
+  raked = TRUE,
+) 
+
+
+
+#run comparisons
+compare_to_target(  
+  ind_gp = indicator_group,
+  ind = indicator,
+  rd = run_date,
+  regions = region,
+  goal_obj = goals,
+  measure = "sev", 
+  year_list = year_list,
+  uselogit = TRUE,
+  raked = TRUE
+)
+
+
 
 toc() # End master timer
 #*********************************************************************************************************************** 

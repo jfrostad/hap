@@ -48,7 +48,7 @@ debug.args <- c('simulate',
                 'cooking/model/configs/',
                 'covs_cooking_VNM',
                 'cooking/model/configs/', 
-                '2020_04_03_22_49_57',
+                '2020_05_06_22_40_43',
                 'prev')
 
 #if new vetting activity has occured, need to refresh the local sheet
