@@ -373,7 +373,8 @@ for (iso in unique(dt$ihme_loc_id) %>% sort) {
     
     message('\n', iso, '...NIDs dropped by resample:\n') 
     cat(dropped.nids, sep=' | ')
-    codebook[nid %in% dropped.nids, .(nid, year_start, survey_name)] %>% print
+    #note that WHO WHS is a known issue that currently cannot be geolocated
+    codebook[nid %in% dropped.nids & survey_name!='WHO_WHS', .(nid, year_start, survey_name)] %>% print
     
   }
     

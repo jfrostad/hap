@@ -1,14 +1,86 @@
-## prep_cell_pred_for_aroc ################################################
-#format a cell pred object for use in aroc calculations
-prep_cell_pred_for_aroc <- function(reg,
-                                    obj,
-                                    shapefile_version = 'current') { #TODO is this correct?
+## get_cell_pred_for_aroc ################################################
+
+#' Pull cell pred object and format for aroc or projection calculations
+#'
+#' \code{get_cell_pred_for_aroc()} is a helper function that pulls a
+#' cell pred object and then formats it for use in other functions
+#'
+#' @param ind_gp indicator group
+#' @param ind indicator
+#' @param rd run_date
+#' @param reg region
+#' @param measure prevalence, incidence, mortality, etc
+#' @param matrix_pred_name In \code{sprintf} notation. The one object passed into
+#'   the string should will be a region name. this allows different regions to be
+#'   passed to different named matrix_preds (pixel level, ad0, ad1, ad2, ...)
+#'   e.g. 'had_diarrhea_cell_draws_eb_bin0_%s_diarrhea2_0.RData' which
+#'   will be passed to sprintf('had_diarrhea_cell_draws_eb_bin0_%s_0.RData', reg)
+#' @param skip_cols columns to skip when reading in the cell preds
+#'   For example, if the first two columns store non-pred information in your
+#'   file format, \code{skip_cols = 2} will read in all columns from 3 onwards
+#' @param rk raked? (logical)
+#' @param shapefile_version string which shapefile version to use for indexing cell_preds
+#' @return a formated \code{cell_pred} object
+#' @examples
+#'
+
+get_cell_pred_for_aroc <- function(ind_gp,
+                                   ind,
+                                   rd,
+                                   reg,
+                                   measure,
+                                   obj = NULL,
+                                   matrix_pred_name = NULL,
+                                   skip_cols = NULL,
+                                   rk = T,
+                                   shapefile_version = 'current') {
   
+  #if the cell pred object is already in memory, you can can skip loading
+  
+  if(obj %>% is.null) {
+  
+    # Load the relevant pred object - loads an object named cell_pred
+    # Try both rds file and rdata file until we standardize this
+    rds_file <- sprintf(paste0('/share/geospatial/mbg/%s/%s/output/%s/',
+                               matrix_pred_name), ind_gp, ind, rd, reg, measure)
+    
+    if (rk) {
+      rdata_file <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+                           ind, "_raked_cell_draws_eb_bin0_", reg, "_0.RData")
+    } else {
+      rdata_file <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+                           ind, "_cell_draws_eb_bin0_", reg, "_0.RData")
+    }
+    
+    if (!is.null(matrix_pred_name) & file.exists(rds_file)) {
+      cell_pred <- readRDS(rds_file)
+    }
+    
+    if (rk) {
+      if (file.exists(rdata_file)) {
+        load(rdata_file)
+        cell_pred <- raked_cell_pred
+        rm(raked_cell_pred)
+      }
+    } else {
+      if (file.exists(rdata_file)) {
+        load(rdata_file)
+      }
+    }
+    
+    # Check to make sure loaded correctly
+    if (!exists("cell_pred")) stop("Unable to load raked cell pred object!")
+    
+    # If extra columns at front of cell_pred, can skip here
+    if(!(is.null(skip_cols))) cell_pred <- as.matric(cell_pred[, (skip_cols+1):ncol(cell_pred)])
+  
+  } else cell_pred <- obj  
+    
   ## then we need to load the simple raster to determine the
   ## indexing between pixel-years, and matrix rows
   message('-- making simple raster')
   if (reg %>% is.character) gaul_list <- get_adm0_codes(reg, shapefile_version = shapefile_version)
-  else gaul_list <- reg
+  else gaul_list <- reg #check if the gaul code was passed in, in this case using country-specific calcs
   simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 0.4, subset_only = T,
                                              shapefile_version = shapefile_version)
   subset_shape   <- simple_polygon_list[[1]]
@@ -18,7 +90,7 @@ prep_cell_pred_for_aroc <- function(reg,
   ## then we add two columns to the cell_preds. an spatial index
   ## and a year col
   cell_idx <- seegSDM:::notMissingIdx(simple_raster)
-  num_yrs  <- nrow(obj) / length(cell_idx)
+  num_yrs  <- nrow(cell_pred) / length(cell_idx)
   ## this should be an integer year. if it isn't, something isn't
   ## synced correctly between preds and simple_rasters
   if(round(num_yrs, 0) != num_yrs){
@@ -32,9 +104,9 @@ prep_cell_pred_for_aroc <- function(reg,
   new_cols <- cbind(rep(1:num_yrs, each = length(cell_idx)),
                     rep(cell_idx, num_yrs))
   colnames(new_cols) <- c('year', 'idx')
-  obj <- cbind(new_cols, obj)
+  cell_pred <- cbind(new_cols, cell_pred)
   
-  return(obj)
+  return(cell_pred)
   
 }
 
@@ -112,19 +184,24 @@ prep_cell_pred_for_aroc <- function(reg,
 #'           mult_emp_exp = TRUE)
 
 
-make_aroc <- function(region,
-                      cell_pred,
-                      admin_lvl = 2,
+make_aroc <- function(ind_gp, ind, rd,
+                      regions=NULL,
+                      matrix_pred_name = NULL,
+                      inputs = list('cell_pred'=NULL, 'admin_2'=NULL),
+                      admin_types = 0:2,
                       type,
+                      measure="mortality",
+                      skip_cols = NULL,
                       year_list = c(2000:2015),
                       uselogit = FALSE,
+                      raked,
                       weighting_res = 'domain',
                       weighting_type = 'exponential',
                       pow = 1,
                       input_data = NULL,
                       mult_emp_exp = FALSE,
                       extra_file_tag = '',
-                      shapefile_version = modeling_shapefile_version,
+                      shapefile_version = 'current',
                       debug=F
 ) {
   
@@ -134,11 +211,14 @@ make_aroc <- function(region,
   }
   
   if (debug) browser()
-
-  # # define directories
-  # share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
-  # output_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
-  # dir.create(output_dir, showWarnings=F, recursive = T)
+  
+  # define directories
+  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
+  output_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
+  dir.create(output_dir, showWarnings=F, recursive = T)
+  
+  ## load in regions used in this model and run_date
+  if (regions %>% is.null) regions <- get_output_regions(in_dir = share_dir)
 
   ## get weights to use in either cell or adm aroc calculations
   aroc_weights <- make_aroc_weights(weighting_res = weighting_res,
@@ -150,9 +230,9 @@ make_aroc <- function(region,
   
   ## we also get all the gaul codes that came back from
   ## make_arox_weights() if we're using country resolution
-  # if(weighting_res == 'country'){
-  #   aroc_weight_gauls <- gaul_convert(aroc_weights$country, from = 'iso3', shapefile_version = shapefile_version)
-  # }
+  if(weighting_res == 'country'){
+    aroc_weight_gauls <- gaul_convert(aroc_weights$country, from = 'iso3', shapefile_version = shapefile_version)
+  }
   
   ## we also get the exponential weights which we may need in the
   ## empirical setting if there's no data in a predicted country
@@ -166,24 +246,33 @@ make_aroc <- function(region,
   ## get number of years
   num_yrs <- length(year_list)
   
-  if(type=='cell'){
+  if('cell' %in% type){
     message('Working on CELL level')
-
-      message('- On region: ', region)
+    for(ii in 1:length(regions)){
       
-      cell_pred <- prep_cell_pred_for_aroc(reg = region,
-                                           obj = cell_pred,
-                                           shapefile_version = shapefile_version)
+      
+      message(sprintf('- On region: %s', regions[ii]))
+      
+      cell_pred <- get_cell_pred_for_aroc(ind_gp,
+                                          ind,
+                                          rd,
+                                          regions[ii],
+                                          measure,
+                                          matrix_pred_name,
+                                          inputs[['cell_pred']], 
+                                          skip_cols, rk = raked,
+                                          shapefile_version = shapefile_version)
       
       if(weighting_res == 'country'){
         ## we'll need to match pixels to countries so we load the region simple raster
         message('-- making simple raster')
-        gaul_list <- get_adm0_codes(region, shapefile_version = shapefile_version)
+        if (reg %>% is.character) gaul_list <- get_adm0_codes(regions[ii], shapefile_version = shapefile_version)
+        else gaul_list <- reg #check if the gaul code was passed in, in this case using country-specific calcs
         simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 0.4, subset_only = T)
         subset_shape   <- simple_polygon_list[[1]]
         raster_list    <- build_simple_raster_pop(subset_shape)
         simple_raster  <- raster_list[['simple_raster']] ## this is what we really need
-  
+        
         ## pull out gaul codes and match to cell preds via cell_idx
         cell_idx <- seegSDM:::notMissingIdx(simple_raster)
         ctry_vec <- values(simple_raster)[cell_idx]
@@ -245,112 +334,146 @@ make_aroc <- function(region,
       # achieved_relative_prob <- rowMeans(short_goal)
       message(sprintf('TESTING: Percent of NA rows per column is: %f%%', mean(is.na(aroc_draws[, 1]))))
       message('-- finished making AROC across draws. now saving')
-
-  }
+      saveRDS(object = aroc_draws,
+              file = sprintf('%s/%s_%s_aroc_cell_draw_matrix_%s%s%s.RDs',
+                             output_dir, ind, measure, ifelse(uselogit, "logit_", ""), regions[ii],
+                             extra_file_tag))
+    } # Close region loop
+  } # if ('cell' %in% type)
   
-  if(type %like% 'admin'){
+  if('admin' %in% type){
 
     message('Working on ADMIN level')
-
+      ## load the admin objects
+      ## try two different locations until we standardize
+      
+      if (inputs$admin_2 %>% is.null) {
+        file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_', 
+                          ifelse(raked, "raked", "unraked"), '.Rdata',
+                          ind_gp, ind, rd, ind, measure)
+        file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+                         ind, '_', ifelse(raked, "raked", "unraked"),
+                         '_admin_draws_eb_bin0_0.RData')
+        
+        if (file.exists(file_1)) {
+          load(file_1)
+        } else if (file.exists(file_2)) {
+          load(file_2)
+        } else {
+          stop("Cannot load admin pred object!")
+        }
+      
+      } else admin_2 <- inputs[['admin_2']]
+    
     ## load spatial admin hierarchy
     admins <- get_sp_hierarchy(shapefile_version = shapefile_version)
-
-    ## format this object to look like the one we used for cell level (easier to copy code from above)
-    ## revised now to work with a bigger array of cell pred objects
-    str_match <- stringr::str_match
-    draw_cols <- names(cell_pred)[grep("V[0-9]*", names(cell_pred))]
-    keep_cols <- c("year", paste0("ADM", admin_lvl, "_CODE"), draw_cols)
-    cell_pred <- subset(cell_pred, select = keep_cols)
-    setnames(cell_pred, paste0("ADM", admin_lvl, "_CODE"), "idx")
     
-    ## it needs to be ordered like the regular cell_pred object too!
-    ## all admin_idx for a single year show up, then repeat
-    cell_pred <- setorderv(cell_pred, c('year', 'idx'))
+    ## this contains admin_0, admin_1, and admin_2 matrix_draw objects
+    ## col1 is year, col2 is ADM*_CODE, final column is pop. all other columns are draws
     
-    ## and be a matrix
-    cell_pred <- as.matrix(cell_pred)
-    
-    num_draws <- ncol(cell_pred) - 2
-    
-    # Redid the below line to warn if mismatches in case of non-unique admin codes - JM
-    num_idx <- nrow(cell_pred) / length(year_list)
-    if (num_idx != length(unique(cell_pred[,2]))) {
-      warning(paste0("The number of unique cell_pred indices does not equal the number of ",
-                     "rows of cell_pred divided by the number of years.",
-                     "\nYou may have duplicate admin codes at the admin ", admin_lvl,
-                     " level - check your aggregated objects!"))
-    }
-    num_yrs <- length(unique(cell_pred[, 1]))
-    idx <- cell_pred[which(cell_pred[, 1] == min(cell_pred[, 1])), 2] ## idx in year1
-    
-    if(weighting_res == 'country'){
-      if(admin_lvl == 0){
-        ctry_vec <- idx
-      }else{
-        sp_aa <- admins[[sprintf('ADM%i', admin_lvl)]]
-        aa_vec <- cell_pred[,2] %>% as.data.table %>% setnames(., '.', sprintf('ADM%i_CODE', admin_lvl))
-        aa_vec[, ind := 1:nrow(aa_vec)]
-        ctry_vec <- merge(aa_vec, sp_aa, all.y = FALSE)
-        cctry_vec <- ctry_vec[order(ind), ADM0_CODE]
-        ctry_vec <- ctry_vec[1:num_idx]
+    for(aa in admin_types) { ## for each admin type
+      message(sprintf('- On admin: %i', aa))
+      
+      cell_pred <- get(sprintf('admin_%i', aa))
+      cell_pred <- as.data.table(cell_pred)
+      
+      ## format this object to look like the one we used for cell level (easier to copy code from above)
+      ## revised now to work with a bigger array of cell pred objects
+      str_match <- stringr::str_match
+      draw_cols <- names(cell_pred)[grep("V[0-9]*", names(cell_pred))]
+      keep_cols <- c("year", paste0("ADM", aa, "_CODE"), draw_cols)
+      cell_pred <- subset(cell_pred, select = keep_cols)
+      setnames(cell_pred, paste0("ADM", aa, "_CODE"), "idx")
+      cell_pred <- as.matrix(cell_pred)
+      
+      ## it needs to be ordered like the regular cell_pred object too!
+      ## all admin_idx for a single year show up, then repeat
+      cell_pred <- cell_pred[order(cell_pred[,1], cell_pred[,2]), ]
+      
+      num_draws <- ncol(cell_pred) - 2
+      
+      # Redid the below line to warn if mismatches in case of non-unique admin codes - JM
+      num_idx <- nrow(cell_pred) / length(year_list)
+      if (num_idx != length(unique(cell_pred[,2]))) {
+        warning(paste0("The number of unique cell_pred indices does not equal the number of ",
+                       "rows of cell_pred divided by the number of years.",
+                       "\nYou may have duplicate admin codes at the admin ", aa,
+                       " level - check your aggregated objects!"))
       }
-      ## get all the countries in the pred object
-      all_ctrys <- sort(unique(ctry_vec))
-    }
-    
-    ## for each draw, calculate the rates of change between years and
-    ## then the weighted total AROC across all years
-    message('-- making AROC between years for each draw')
-    aroc_draws <- matrix(ncol = num_draws, nrow = num_idx)
-    
-    if(uselogit){
-      cell_pred_logit <- cell_pred
-      cell_pred_logit[, 3:ncol(cell_pred)] <- log(cell_pred[, 3:ncol(cell_pred)] / (1 - cell_pred[, 3:ncol(cell_pred)]))
-    }
-    
-    for(dd in 1:(ncol(cell_pred) - 2)){
-      if(dd %% 50 == 1) message(sprintf('---- on draw %i out of %i', dd, num_draws))
-      aroc_mat <- matrix(ncol = num_yrs - 1, nrow = num_idx)
-      for(yy in 1:(num_yrs - 1)){
-        if(uselogit){
-          aroc_mat[, yy] <- cell_pred_logit[1:num_idx + (yy) * num_idx, dd + 2] -  cell_pred_logit[1:num_idx + (yy - 1) * num_idx, dd + 2]
+      num_yrs <- length(unique(cell_pred[, 1]))
+      idx <- cell_pred[which(cell_pred[, 1] == min(cell_pred[, 1])), 2] ## idx in year1
+      
+      if(weighting_res == 'country'){
+        if(aa == 0){
+          ctry_vec <- idx
         }else{
-          aroc_mat[, yy] <- log(cell_pred[1:num_idx + (yy) * num_idx, dd + 2]) -  log(cell_pred[1:num_idx + (yy - 1) * num_idx, dd + 2])
+          sp_aa <- admins[[sprintf('ADM%i', aa)]]
+          aa_vec <- cell_pred[, sprintf('ADM%i_CODE', aa), with = F]
+          aa_vec[, ind := 1:nrow(aa_vec)]
+          ctry_vec <- merge(aa_vec, sp_aa, all.y = FALSE)
+          ctry_vec <- ctry_vec[order(ind), ADM0_CODE]
+          ctry_vec <- ctry_vec[1:num_idx]
         }
+        ## get all the countries in the pred object
+        all_ctrys <- sort(unique(ctry_vec))
       }
       
-      if(weighting_res == 'domain'){
-        ## then there is only a single weight vector for all locs
-        aroc_vec <- aroc_mat %*% aroc_weights
+      ## for each draw, calculate the rates of change between years and
+      ## then the weighted total AROC across all years
+      message('-- making AROC between years for each draw')
+      aroc_draws <- matrix(ncol = num_draws, nrow = num_idx)
+      
+      if(uselogit){
+        cell_pred_logit <- cell_pred
+        cell_pred_logit[, 3:ncol(cell_pred)] <- log(cell_pred[, 3:ncol(cell_pred)] / (1 - cell_pred[, 3:ncol(cell_pred)]))
       }
-      if(weighting_res == 'country'){
-        ## we have a different set of weights for each country and must match accordingly
-        aroc_vec <- rep(0.0, nrow(aroc_mat))
-        for(cc in 1:length(all_ctrys)){
-          ctry_gaul <- all_ctrys[cc]
-          ctry_idx <- which(ctry_vec == ctry_gaul)
-          if(ctry_gaul %in% aroc_weight_gauls){ ## use empirical weight if possible
-            ctry_wt <- as.numeric(aroc_weights[which(aroc_weight_gauls == ctry_gaul), 2:ncol(aroc_weights)])
-          }else{ ## otherwise use exponential weight
-            ctry_wt <- exp_weights
+      
+      for(dd in 1:(ncol(cell_pred) - 2)){
+        if(dd %% 50 == 1) message(sprintf('---- on draw %i out of %i', dd, num_draws))
+        aroc_mat <- matrix(ncol = num_yrs - 1, nrow = num_idx)
+        for(yy in 1:(num_yrs - 1)){
+          if(uselogit){
+            aroc_mat[, yy] <- cell_pred_logit[1:num_idx + (yy) * num_idx, dd + 2] -  cell_pred_logit[1:num_idx + (yy - 1) * num_idx, dd + 2]
+          }else{
+            aroc_mat[, yy] <- log(cell_pred[1:num_idx + (yy) * num_idx, dd + 2]) -  log(cell_pred[1:num_idx + (yy - 1) * num_idx, dd + 2])
           }
-          aroc_vec[ctry_idx] <- aroc_mat[ctry_idx, ] %*% as.vector(ctry_wt)
         }
         
+        if(weighting_res == 'domain'){
+          ## then there is only a single weight vector for all locs
+          aroc_vec <- aroc_mat %*% aroc_weights
+        }
+        if(weighting_res == 'country'){
+          ## we have a different set of weights for each country and must match accordingly
+          aroc_vec <- rep(0.0, nrow(aroc_mat))
+          for(cc in 1:length(all_ctrys)){
+            ctry_gaul <- all_ctrys[cc]
+            ctry_idx <- which(ctry_vec == ctry_gaul)
+            if(ctry_gaul %in% aroc_weight_gauls){ ## use empirical weight if possible
+              ctry_wt <- as.numeric(aroc_weights[which(aroc_weight_gauls == ctry_gaul), 2:ncol(aroc_weights)])
+            }else{ ## otherwise use exponential weight
+              ctry_wt <- exp_weights
+            }
+            aroc_vec[ctry_idx] <- aroc_mat[ctry_idx, ] %*% as.vector(ctry_wt)
+          }
+          
+        }
+        
+        aroc_draws[, dd] <- aroc_vec
       }
       
-      aroc_draws[, dd] <- aroc_vec
-    }
-    
-    message(sprintf('TESTING: Percent of NA rows per column is: %f%%', mean(is.na(aroc_draws[, 1]))))
-    message('-- finished making AROC across draws. now saving')
-    aroc_draws <- cbind(idx, aroc_draws)
-    colnames(aroc_draws)[1] <- sprintf('ADM%i_CODE', admin_lvl)
-
+      message(sprintf('TESTING: Percent of NA rows per column is: %f%%', mean(is.na(aroc_draws[, 1]))))
+      message('-- finished making AROC across draws. now saving')
+      final_aroc <- cbind(idx, aroc_draws)
+      colnames(final_aroc)[1] <- sprintf('ADM%i_CODE', aa)
+      
+      saveRDS(object = final_aroc,
+              file = sprintf('%s/%s_%s_aroc_adm%i_draw_matrix%s%s.RDs',
+                             output_dir, ind, measure, aa, ifelse(uselogit, "_logit", ""),
+                             extra_file_tag))
+      
+    } # For aa in admin
   } # if ('admin' %in% type)...
-  
-  return(aroc_draws)
-  
 }
 
 ## make_proj #############################################################
@@ -394,100 +517,158 @@ make_aroc <- function(region,
 #'           year_list = c(2000:2015),
 #'           uselogit = TRUE)
 
-make_proj <- function(aroc_draws,
-                      cell_pred,
-                      region,
+make_proj <- function(ind_gp, ind, rd,
+                      regions=NULL,
                       type,
-                      admin_lvl=2,
+                      admin_types=0:2,
                       proj_years = c(2020, 2025),
                       measure="mortality",
                       skip_cols = NULL,
+                      raked, 
+                      matrix_pred_name = NULL,
                       year_list = c(2000:2015),
                       uselogit = FALSE,
                       extra_file_tag = '',
-                      shapefile_version = modeling_shapefile_version,
-                      debug=F
+                      shapefile_version = 'current'
 ) {
   
-  if(debug) browser()
+  if (regions %>% is.null) {
+    ## load in regions used in this model and run_date
+    regions <- get_output_regions(in_dir = paste0('/share/geospatial/mbg/',
+                                                  ind_gp, '/',
+                                                  ind, '/output/',
+                                                  rd))
+ }
   
-  # # define directories
-  # share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
-  # aroc_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
-  # output_dir <- paste0(share_dir, "/pred_derivatives/proj/")
-  # 
-  # dir.create(output_dir, recursive = T, showWarnings = F)
+  
+  # define directories
+  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
+  aroc_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
+  output_dir <- paste0(share_dir, "/pred_derivatives/proj/")
+  
+  dir.create(output_dir, recursive = T, showWarnings = F)
   
   ## make projections at the cell level
-  if (type=='cell') {
-    
+  if ('cell' %in% type) {
     message('Working on CELL level')
-
-    # Get number of draws
-    num_draws <- ncol(aroc_draws)
-    if (num_draws != ncol(cell_pred)) stop("cell_pred & aroc draw #s do not match!")
-
-    # Make projections -----------------------------------
-    ## also make projections and save them
-    message('-- making projections')
-
-    ## grab last year of modeled estiamtes
-    final_year <- cell_pred[which(cell_pred[, 1] == max(cell_pred[, 1])), ] ## first col is year
-    last_year <- final_year[, -(1:2)]
-    
-    #find the first row of the final year
-    first_row <- nrow(cell_pred)-nrow(cell_pred)/length(year_list)+1
-    final_year <- cell_pred[first_row:nrow(cell_pred),]
-
-    ## unlist all draws into vector, apply forecast, and convert back to matrix
-    final_year <- as.vector(final_year) ## unlist only the draw columns
-
-    ## unlist aroc draw matrix
-    aroc_draws <- as.vector(aroc_draws)
-
-    ## set up a list to capture the projection output
-    proj_draws_list <- list()
-
-    for (yr in proj_years) {
-
-      message(paste0('--- year: ', yr))
-
-      ## figure out how many years to project
-      proj_dur <- as.numeric(yr) - max(year_list)
-
-      ## make projection from final_yr out proj_dur years
-      if(uselogit){
-        proj_draws_logit <- log(final_year / (1 - final_year)) + (aroc_draws * proj_dur)
-        proj_draws <- exp(proj_draws_logit) / (1 + exp(proj_draws_logit))
-      }else{
-        proj_draws <- final_year * exp(aroc_draws * proj_dur)
-      }
-
-      ## convert back to matrix
-      proj_draws <- matrix(proj_draws, ncol = num_draws)
-
-      ## insert into list
-      proj_draws_list[[as.character(yr)]] <- proj_draws
-      rm(proj_draws)
+    for(ii in 1:length(regions)){
+      message(sprintf('- On region: %s', regions[ii]))
+      
+      # Pull cell pred
+      cell_pred <- get_cell_pred_for_aroc(ind_gp,
+                                          ind,
+                                          rd,
+                                          regions[ii],
+                                          measure,
+                                          matrix_pred_name,
+                                          skip_cols,
+                                          rk = raked, 
+                                          shapefile_version = shapefile_version)
+      
+      # Load aroc object
+      message('-- loading aroc')
+      
+      aroc_draws <- readRDS(sprintf('%s/%s_%s_aroc_cell_draw_matrix_%s%s%s.RDs',
+                                    aroc_dir, ind, measure, ifelse(uselogit, "logit_", ""),
+                                    regions[ii], extra_file_tag))
+      
+      # Get number of draws
+      num_draws <- ncol(aroc_draws)
+      if (ncol(aroc_draws) != ncol(cell_pred) - 2) stop("cell_pred & aroc draw #s do not match!")
+      
+      # Make projections -----------------------------------
+      ## also make projections and save them
+      message('-- making projections')
+      
+      ## grab last year of modeled estiamtes
+      final_year <- cell_pred[which(cell_pred[, 1] == max(cell_pred[, 1])), ] ## first col is year
+      last_year <- final_year[, -(1:2)]
+      
+      ## grab idx
+      idx <- final_year[,2]
+      
+      ## unlist all draws into vector, apply forecast, and convert back to matrix
+      final_year <- as.vector(final_year[, -(1:2)]) ## unlist only the draw columns
+      
+      ## unlist aroc draw matrix
+      aroc_draws <- as.vector(aroc_draws)
+      
+      ## set up a list to capture the projection output
+      proj_draws_list <- list()
+      
+      for (yr in proj_years) {
         
-    }
-
+        message(paste0('--- year: ', yr))
+        
+        ## figure out how many years to project
+        proj_dur <- as.numeric(yr) - max(year_list)
+        
+        ## make projection from final_yr out proj_dur years
+        if(uselogit){
+          proj_draws_logit <- log(final_year / (1 - final_year)) + (aroc_draws * proj_dur)
+          proj_draws <- exp(proj_draws_logit) / (1 + exp(proj_draws_logit))
+        }else{
+          proj_draws <- final_year * exp(aroc_draws * proj_dur)
+        }
+        
+        ## convert back to matrix
+        proj_draws <- matrix(proj_draws, ncol = num_draws)
+        
+        ## insert into list
+        proj_draws_list[[as.character(yr)]] <- proj_draws
+        rm(proj_draws)
+        
+      }
+      
+      ## save
+      message('-- saving projections')
+      
+      lapply(1:length(proj_draws_list), function(i) {
+        saveRDS(object = proj_draws_list[[i]],
+                file = sprintf('%s/%s_%s_%s_projections_cell_draw_matrix_%s%s.RDs',
+                               output_dir, ind, measure, names(proj_draws_list)[i],
+                               ifelse(uselogit, "logit_", ""), regions[ii]))
+      })
+    } # close regions loop
   } # if ('cell' %in% type)
   
   # make projections as the admin level
-  if (type=='admin') {
+  if ('admin' %in% type) {
     
     message('Working on ADMIN level')
-
-      message(paste0("- admin level: ", admin_lvl))
-
+    ## load the admin objects
+    ## try two different locations until we standardize
+    message('- loading admin objects')
+    file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_', 
+                      ifelse(raked, "raked", "unraked"), '.Rdata',
+                      ind_gp, ind, rd, ind, measure)
+    file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+                     ind, '_', ifelse(raked, "raked", "unraked"), 
+                     '_admin_draws_eb_bin0_0.RData')
+    
+    if (file.exists(file_1)) {
+      load(file_1)
+    } else if (file.exists(file_2)) {
+      load(file_2)
+    } else {
+      stop("Cannot load admin pred object!")
+    }
+    
+    for(aa in admin_types){ ## for each admin type
+      
+      message(paste0("- admin level: ", aa))
+      
+      # create pseudo cell-pred object
+      cell_pred <- get(sprintf('admin_%i', aa))
+      cell_pred <- as.data.table(cell_pred)
+      
       ## format this object to look like the one we used for cell level (easier to copy code from above)
       ## revised now to work with a bigger array of cell pred objects
       str_match <- stringr::str_match
       draw_cols <- names(cell_pred)[grep("V[0-9]*", names(cell_pred))]
-      keep_cols <- c("year", paste0("ADM", admin_lvl, "_CODE"), draw_cols)
+      keep_cols <- c("year", paste0("ADM", aa, "_CODE"), draw_cols)
       cell_pred <- subset(cell_pred, select = keep_cols)
-      setnames(cell_pred, paste0("ADM", admin_lvl, "_CODE"), "idx")
+      setnames(cell_pred, paste0("ADM", aa, "_CODE"), "idx")
       cell_pred <- as.matrix(cell_pred)
       
       ## it needs to be ordered like the regular cell_pred object too!
@@ -499,7 +680,7 @@ make_proj <- function(aroc_draws,
       if (num_idx != length(unique(cell_pred[,2]))) {
         warning(paste0("The number of unique cell_pred indices does not equal the number of ",
                        "rows of cell_pred divided by the number of years.",
-                       "\nYou may have duplicate admin codes at the admin ", admin_lvl,
+                       "\nYou may have duplicate admin codes at the admin ", aa,
                        " level - check your aggregated objects!"))
       }
       num_yrs <- length(unique(cell_pred[, 1]))
@@ -507,7 +688,10 @@ make_proj <- function(aroc_draws,
       
       # load aroc
       message("-- loading aroc")
-
+      aroc_draws <- readRDS(sprintf('%s/%s_%s_aroc_adm%i_draw_matrix%s%s.RDs',
+                                    aroc_dir, ind, measure, aa, ifelse(uselogit, "_logit", ""),
+                                    extra_file_tag))
+      
       # remove first column (spatial index) and store separately
       spatial_idx <- aroc_draws[, 1]
       aroc_draws <- aroc_draws[, 2:ncol(aroc_draws)]
@@ -560,10 +744,17 @@ make_proj <- function(aroc_draws,
         rm(proj_draws)
         
       }
-
+      
+      ## save
+      message('-- saving projections')
+      lapply(1:length(proj_draws_list), function(i) {
+        saveRDS(object = proj_draws_list[[i]],
+                file = sprintf('%s/%s_%s_%s_projections_adm%i_draw_matrix%s.RDs',
+                               output_dir, ind, measure, names(proj_draws_list)[i],
+                               aa, ifelse(uselogit, "_logit", "")))
+      })
+    } # close admin levels loop
   } # if ('admin' %in% type)
-  
-  return(proj_draws_list)
   
 }
 
@@ -610,29 +801,47 @@ make_proj <- function(aroc_draws,
 #'                   year_list = c(2000:2015),
 #'                   uselogit = T)
 
-compare_to_target <- function(obj,
-                              cell_pred=NULL,
-                              region,
+compare_to_target <- function(ind_gp,
+                              ind,
+                              rd,
+                              regions=NULL,
                               goal_obj,
                               measure,
                               year_list = c(2000:2015),
                               uselogit,
-                              shapefile_version = modeling_shapefile_version,
-                              debug=T) {
+                              raked, 
+                              skip_cols = NULL,
+                              matrix_pred_name = NULL,
+                              shapefile_version = 'current'){
   
-  if(debug) browser()
-
-  loopGoals <- function(ii) {  
+  ## load in regions used in this model and run_date
+  if (regions %>% is.null) {
+    regions <- get_output_regions(in_dir = paste0('/share/geospatial/mbg/',
+                                                  ind_gp, '/',
+                                                  ind, '/output/',
+                                                  rd))
+  }
+  
+  # define directories
+  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
+  aroc_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
+  proj_dir <- paste0(share_dir, "/pred_derivatives/proj/")
+  output_dir <- paste0(share_dir, "/pred_derivatives/target_probs/")
+  
+  dir.create(output_dir, showWarnings = F, recursive = T)
+  
+  
+  for (n in 1:nrow(goal_obj)) {
     
     # Load parameters for this row
-    target_year <- as.integer(goal_obj[ii, target_year])
-    target <- as.numeric(goal_obj[ii, target])
-    target_type <- as.character(goal_obj[ii, target_type])
-    abs_rel <- as.character(goal_obj[ii, abs_rel])
-    if (abs_rel == "relative") baseline_year <- as.integer(goal_obj[ii,baseline_year])
-    proj <- as.logical(goal_obj[ii, proj])
-    pred_type <- as.character(goal_obj[ii, pred_type])
-    goal_type <- as.character(goal_obj[ii, target_type])
+    target_year <- as.integer(goal_obj[n, target_year])
+    target <- as.numeric(goal_obj[n, target])
+    target_type <- as.character(goal_obj[n, target_type])
+    abs_rel <- as.character(goal_obj[n, abs_rel])
+    if (abs_rel == "relative") baseline_year <- as.integer(goal_obj[n,baseline_year])
+    proj <- as.logical(goal_obj[n, proj])
+    pred_type <- as.character(goal_obj[n, pred_type])
+    goal_type <- as.character(goal_obj[n, target_type])
     message(paste0("\n------------------------------------------------",
                    "\nWorking on target comparison for:",
                    "\n  target_year: ", target_year,
@@ -641,7 +850,7 @@ compare_to_target <- function(obj,
                    "\n  abs_rel: ", abs_rel,
                    ifelse(abs_rel == "relative", paste0("\n  baseline_year: ",baseline_year), ""),
                    "\n  proj: ", proj,
-                   "\n  pred_type: ", goal_obj[ii, pred_type]), "\n") # character version for pred_type
+                   "\n  pred_type: ", goal_obj[n, pred_type]), "\n") # character version for pred_type
     
     # TODO: build in ability to use cell_pred objects too
     if(proj == F) stop("For now, can only use projected values")
@@ -649,13 +858,15 @@ compare_to_target <- function(obj,
     if (grepl('cell', pred_type, fixed=TRUE)) {
       message('Working on CELL level')
       
-      # for(ii in 1:length(regions)){
-        # message(sprintf('- On region: %s', regions[ii]))
+      for(ii in 1:length(regions)){
+        message(sprintf('- On region: %s', regions[ii]))
         
         # Load proj_draws object
         message("-- Loading proj_draws object...")
 
-        proj_draws <- obj[[target_year %>% as.character]]
+        proj_draws <- readRDS(sprintf('%s/%s_%s_%s_projections_cell_draw_matrix%s_%s.RDs',
+                                      proj_dir, ind, measure, target_year,
+                                      ifelse(uselogit, "_logit",""), regions[ii]))
         
         # Generate probabilities
         if (abs_rel == "absolute") {
@@ -669,14 +880,19 @@ compare_to_target <- function(obj,
           
           absolute_goal_draws[is.na(absolute_goal_draws)] <- 0
           absolute_goal_prob <- rowMeans(absolute_goal_draws)
-
-          return(absolute_goal_prob)
+          
+          # Save
+          message("-- Saving probabilities...")
+          saveRDS(object = absolute_goal_prob,
+                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_", abs_rel, "_",
+                                target_type, '_', target, '_cell_target_probs_', regions[ii], '.RDs'))
+          
+          rm(absolute_goal_prob, absolute_goal_draws)
           
         } else if (abs_rel == "relative") {
           
           # Need to load the pred files for this one...
           # Pull cell pred
-          # TODO fix to pass
           cell_pred <- get_cell_pred_for_aroc(ind_gp,
                                               ind,
                                               rd,
@@ -701,9 +917,17 @@ compare_to_target <- function(obj,
           relative_proj_draws[is.na(relative_proj_draws)] <- 0
           relative_goal_prob <- rowMeans(relative_proj_draws)
           
-          return(relateive_goal_prob)
+          # Save
+          message("-- Saving probabilities...")
+          saveRDS(object = relative_goal_prob,
+                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_vs_",
+                                baseline_year, "_", abs_rel, "_", target_type, '_', target,
+                                '_cell_target_probs_', regions[ii], '.RDs'))
           
-      } # close abs/relative if/then/else
+          rm(relative_goal_prob, relative_proj_draws)
+          
+        } # close abs/relative if/then/else
+      } #close regions loop
     } # close cell loop
     
     if (grepl('admin', pred_type, fixed=TRUE)) {
@@ -711,98 +935,130 @@ compare_to_target <- function(obj,
       
       # Load sp hierarchy
       sp_h <- get_sp_hierarchy(shapefile_version = shapefile_version)
-
-      #extract desired admin lvl
-      admin_lvl <- pred_type %>% stringr::str_sub(-1) %>% as.numeric
       
-      #load draws
-      proj_draws <- obj[[target_year %>% as.character]]
-
-      # Split off spatial index
-      spatial_idx <- proj_draws[,1]
-      proj_draws <- proj_draws[, 2:ncol(proj_draws)]
-      
-      # Generate probabilities
-      if (abs_rel == "absolute") {
-        if (target_type == "greater") {
-          absolute_goal_draws <- ifelse(proj_draws >= target, 1, 0)
-        } else if (target_type == "less") {
-          absolute_goal_draws <- ifelse(proj_draws <= target, 1, 0)
+      for(aa in 0:2) { ## for each admin type
+        
+        # Load proj_draws object
+        message("-- Loading proj_draws object...")
+        proj_draws <- readRDS(sprintf('%s/%s_%s_%s_projections_adm%i_draw_matrix%s.RDs',
+                                      proj_dir, ind, measure, target_year, aa,
+                                      ifelse(uselogit, "_logit","")))
+        
+        # Split off spatial index
+        spatial_idx <- proj_draws[,1]
+        proj_draws <- proj_draws[, 2:ncol(proj_draws)]
+        
+        # Generate probabilities
+        if (abs_rel == "absolute") {
+          if (target_type == "greater") {
+            absolute_goal_draws <- ifelse(proj_draws >= target, 1, 0)
+          } else if (target_type == "less") {
+            absolute_goal_draws <- ifelse(proj_draws <= target, 1, 0)
+          }
+          
+          absolute_goal_draws[is.na(absolute_goal_draws)] <- 0
+          absolute_goal_prob <- rowMeans(absolute_goal_draws)
+          
+          # Add spatial index
+          absolute_goal_prob <- cbind(spatial_idx, absolute_goal_prob)
+          
+          # Save
+          message("-- Saving probabilities...")
+          
+          # RDS
+          saveRDS(object = absolute_goal_prob,
+                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_", abs_rel, "_",
+                                target_type, '_', target, '_adm_', aa, '_target_probs.RDs'))
+          
+          # CSV
+          absolute_goal_prob <- merge_sp_hierarchy(df = absolute_goal_prob,
+                                                   admin_level = aa,
+                                                   idx_col = "spatial_idx",
+                                                   sp_h = sp_h)
+          
+          write.csv(absolute_goal_prob,
+                    file = paste0(output_dir, ind, "_", measure, "_", target_year, "_", abs_rel, "_",
+                                  target_type, '_', target, '_adm_', aa, '_target_probs.csv'),
+                    row.names = F)
+          
         }
         
-        absolute_goal_draws[is.na(absolute_goal_draws)] <- 0
-        absolute_goal_prob <- rowMeans(absolute_goal_draws)
-        
-        # Add spatial index
-        absolute_goal_prob <- cbind(spatial_idx, absolute_goal_prob)
-
-        return(absolute_goal_prob)
-        
-      }
-      
-      ## Did it meet relative goal?
-      if (abs_rel == "relative") {
-        ## load the admin objects
-        ## try two different locations until we standardize
-        message('- loading admin objects')
-        file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_raked.Rdata',
-                          ind_gp, ind, rd, ind, measure)
-        file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                         ind, '_raked_admin_draws_eb_bin0_0.RData')
-        
-        if (file.exists(file_1)) {
-          load(file_1)
-        } else if (file.exists(file_2)) {
-          load(file_2)
-        } else {
-          stop("Cannot load admin pred object!")
-        }
-        
-        # Need to load "pseudo cell_pred" admin object to get baseline year
-        cell_pred <- get(sprintf('admin_%i', admin_lvl))
-        cell_pred <- as.data.table(cell_pred)
-        
-        ## format this object to look like the one we used for cell level (easier to copy code from above)
-        ## revised now to work with a bigger array of cell pred objects
-        str_match <- stringr::str_match
-        draw_cols <- names(cell_pred)[grep("V[0-9]*", names(cell_pred))]
-        keep_cols <- c("year", paste0("ADM", admin_lvl, "_CODE"), draw_cols)
-        cell_pred <- subset(cell_pred, select = keep_cols)
-        setnames(cell_pred, paste0("ADM", admin_lvl, "_CODE"), "idx")
-        cell_pred <- as.matrix(cell_pred)
-        
-        num_draws <- ncol(cell_pred) - 2
-        
-        # Redid the below line to warn if mismatches in case of non-unique admin codes - JM
-        num_idx <- nrow(cell_pred) / length(year_list)
-        if (num_idx != length(unique(cell_pred[,2]))) {
-          warning(paste0("The number of unique cell_pred indices does not equal the number of ",
-                         "rows of cell_pred divided by the number of years.",
-                         "\nYou may have duplicate admin codes at the admin ", admin_lvl,
-                         " level - check your aggregated objects!"))
-        }
-        
-        # Assess relative goals
-        if (target_type == "greater") {
-          relative_proj_draws <- ifelse(proj_draws / baseline_year_draws >= 1 - relative_goal, 1, 0)
-        } else if (target_type == "less") {
-          relative_proj_draws <- ifelse(proj_draws / baseline_year_draws <= 1 - relative_goal, 1, 0)
-        }
-        relative_proj_draws[is.na(relative_proj_draws)] <- 0
-        relative_goal_prob <- rowMeans(relative_proj_draws)
-        
-        # Add spatial index
-        relative_goal_prob <- cbind(spatial_idx, relative_goal_prob)
-        
-        return(relative_goal_prob)
-        
-      } # close relative loop
+        ## Did it meet relative goal?
+        if (abs_rel == "relative") {
+          ## load the admin objects
+          ## try two different locations until we standardize
+          message('- loading admin objects')
+          file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_raked.Rdata',
+                            ind_gp, ind, rd, ind, measure)
+          file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+                           ind, '_raked_admin_draws_eb_bin0_0.RData')
+          
+          if (file.exists(file_1)) {
+            load(file_1)
+          } else if (file.exists(file_2)) {
+            load(file_2)
+          } else {
+            stop("Cannot load admin pred object!")
+          }
+          
+          # Need to load "pseudo cell_pred" admin object to get baseline year
+          cell_pred <- get(sprintf('admin_%i', aa))
+          cell_pred <- as.data.table(cell_pred)
+          
+          ## format this object to look like the one we used for cell level (easier to copy code from above)
+          ## revised now to work with a bigger array of cell pred objects
+          str_match <- stringr::str_match
+          draw_cols <- names(cell_pred)[grep("V[0-9]*", names(cell_pred))]
+          keep_cols <- c("year", paste0("ADM", aa, "_CODE"), draw_cols)
+          cell_pred <- subset(cell_pred, select = keep_cols)
+          setnames(cell_pred, paste0("ADM", aa, "_CODE"), "idx")
+          cell_pred <- as.matrix(cell_pred)
+          
+          num_draws <- ncol(cell_pred) - 2
+          
+          # Redid the below line to warn if mismatches in case of non-unique admin codes - JM
+          num_idx <- nrow(cell_pred) / length(year_list)
+          if (num_idx != length(unique(cell_pred[,2]))) {
+            warning(paste0("The number of unique cell_pred indices does not equal the number of ",
+                           "rows of cell_pred divided by the number of years.",
+                           "\nYou may have duplicate admin codes at the admin ", aa,
+                           " level - check your aggregated objects!"))
+          }
+          
+          # Assess relative goals
+          if (target_type == "greater") {
+            relative_proj_draws <- ifelse(proj_draws / baseline_year_draws >= 1 - relative_goal, 1, 0)
+          } else if (target_type == "less") {
+            relative_proj_draws <- ifelse(proj_draws / baseline_year_draws <= 1 - relative_goal, 1, 0)
+          }
+          relative_proj_draws[is.na(relative_proj_draws)] <- 0
+          relative_goal_prob <- rowMeans(relative_proj_draws)
+          
+          # Add spatial index
+          relative_goal_prob <- cbind(spatial_idx, relative_goal_prob)
+          
+          message("-- Saving probabilities...")
+          saveRDS(object = relative_goal_prob,
+                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_vs_",
+                                baseline_year, "_", abs_rel, "_", target_type, '_', target,
+                                '_adm_', aa, '_target_probs.RDs'))
+          
+          # CSV
+          relative_goal_prob <- merge_sp_hierarchy(df = relative_goal_prob,
+                                                   admin_level = aa,
+                                                   idx_col = "spatial_idx",
+                                                   sp_h = sp_h)
+          
+          write.csv(relative_goal_prob,
+                    file = paste0(output_dir, ind, "_", measure, "_", target_year, "_vs_",
+                                  baseline_year, "_", abs_rel, "_", target_type, '_', target,
+                                  '_adm_', aa, '_target_probs.csv'),
+                    row.names = F)
+          
+        } # close relative loop
+      } # close admin loop
     } # close if_admin section
   } # close goal_obj row loop
-  
-  lapply(1:nrow(goal_obj), loopGoals) %>% 
-    return
-  
 }
 
 
@@ -840,7 +1096,7 @@ prepare_aroc_proj_rasters <- function(regions='all',
                                       target,
                                       target_type, 
                                       baseline_year = NULL, 
-                                      shapefile_version = modeling_shapefile_version,
+                                      shapefile_version = 'current',
                                       debug=F){
   
   if(debug) browser()
@@ -851,7 +1107,8 @@ prepare_aroc_proj_rasters <- function(regions='all',
   if (is.null(baseline_year)) baseline_year <- 2018
   
   # Define dir to search
-  input_dir <- file.path('/share/geospatial/mbg', indicator_group, 'post', run_date, 'sdg_projections')
+  input_dir <- file.path('/share/geospatial/mbg', indicator_group, indicator,
+                         'output', run_date, 'pred_derivatives', pred_deriv, '/')
   
   message('searching for results in\n', input_dir)
 
@@ -934,15 +1191,11 @@ prepare_aroc_proj_rasters <- function(regions='all',
     
     if(pred_deriv == "target_probs"){
       if(abs_rel == "absolute"){
-        # cell_deriv <- readRDS(paste0(dir,
-        #                              indicator, '_', measure, '_',  target_yr, "_", abs_rel,"_", target_type, "_", 
-        #                              target, "_cell_target_probs_", reg, '.RDs'))
+        cell_deriv <- readRDS(paste0(dir,
+                                     indicator, '_', measure, '_',  target_yr, "_", abs_rel,"_", target_type, "_", 
+                                     target, "_cell_target_probs_", reg, '.RDs'))
         
-        #TODO improve function
-        cell_deriv <- file.path(data.dir, 'sdg_projections', paste0(reg, '_sev_cell_probs.RDS')) %>% 
-          readRDS %>% 
-          unlist
-        yrs <- length(cell_deriv)/length(cellIdx(simple_raster))
+        yrs = length(cell_deriv)/length(cellIdx(simple_raster))
         message(sprintf('Making a RasterBrick with %i layers', yrs))
         mean_deriv_raster <- insertRaster(simple_raster,  matrix(cell_deriv,  ncol = yrs))
         
@@ -1039,8 +1292,7 @@ prepare_aroc_proj_rasters <- function(regions='all',
 
   }
 
-  #TODO improve
-  if (regions=='all') regions <- list.files(input_dir, pattern='cell') %>% stringr::str_match(., "(.*?)\\_") %>% .[,2]
+  if (regions=='all') regions <- list.files(input_dir) %>% stringr::str_match(., ".*_([^\\.]*)\\.RDs*") %>% .[,2]
   if (length(regions)>1) {
     
     out <- mclapply(regions, regLoop, mc.cores=3)

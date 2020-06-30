@@ -1006,6 +1006,7 @@ unlink_cell_pred <- function(dt, cols, test_dims=0) {
     #faster than weighted mean to split this into 2 steps
     .[, (cols) := lapply(.SD, function(x) x * area_fraction), .SDcols=cols] %>% 
     .[, lapply(.SD, sum), .SDcols=cols, by=cell_pred_id] %>% 
+    unique(., by='cell_pred_id') %>% #keep one row per cell id now that they are collapsed
     setorder(., cell_pred_id) %>% #reorder
     .[, (cols), with=F] %>%  #keep just the draws
     as.matrix %T>% 
@@ -1706,6 +1707,11 @@ calculate_fractional_rfs <- function(overs = overs,
   fractional_rf <- fractional_rf[, c("location_id", "year", "mbg_prev", "gbd_prev", "rf")]
   
   if(rake_method == "logit"){
+    
+    #TODO should be set higher in fx
+    #define logit raking specific settings
+    zero_heuristic <- T
+    approx_0_1 <- T
     
     cell_pred <- cell_pred[, (overs) := lapply(.SD, function(x) x / pop_raked), .SDcols=overs]
     

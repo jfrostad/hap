@@ -43,9 +43,9 @@ if (interactive) {
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_04_29_08_27_45'
+  run_date <- '2020_05_17_11_40_28'
   measure <- 'prev'
-  reg <- 'soas'
+  reg <- 'ERI+DJI+YEM'
   cov_par <- paste(indicator_group, reg, sep='_')
   my_repo <- "/homes/jfrostad/_code/lbd/hap"
   
@@ -285,7 +285,7 @@ if (rake_countries) {
   }
   
   ## determine if a crosswalk is needed
-  if (modeling_shapefile_version == raking_shapefile_version) crosswalk <- F else crosswalk <- T
+  crosswalk <- modeling_shapefile_version != raking_shapefile_version
   
   # Assume linear raking unless specified as logit
   if (rake_transform == "logit") rake_method <- "logit" else rake_method <- "linear"
@@ -485,12 +485,12 @@ message(paste0("Done with post-estimation and aggregation for ", reg))
 
 # Define best LRI run_date and cluster specs
 lri_run_date = '2019_10_23_16_13_17'
-proj_arg <- 'proj_geo_nodes'
-use_geos_nodes <- T
+proj_arg <- 'proj_geospatial'
+use_geos_nodes <- F
 
 # set memory based on region
-if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
-} else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+if (reg %in% c('CHN', 'trsa-GUF')) { mymem <- '650G'
+} else if (reg %in% c('wssa-CPV-NGA', 'soas', 'ansa-VEN', 'ocea-MYS', 'caca-CUB')) { mymem <- '500G'
 } else mymem <- '350G'
 
 jname           <- paste('EdL', reg, indicator, sep = '_')

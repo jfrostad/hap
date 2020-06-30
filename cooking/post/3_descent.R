@@ -45,11 +45,10 @@ if (interactive) {
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_05_12_13_59_51'
-  run_date <- '2020_05_06_22_40_43'
+  run_date <- '2020_05_17_11_40_28'
   measure <- 'prev'
-  region <- 'soas'
-  region <- 'THA'
+  #region <- 'soas'
+  region <- 'ERI+DJI+YEM'
   cov_par <- paste(indicator_group, region, sep='_')
   my_repo <- "/homes/jfrostad/_code/lbd/hap"
   
@@ -94,6 +93,8 @@ big_countries <- c(
   150, #Mongolia
   105 #India
 )
+
+super_big_countries <- c(44, 33) #run these states singlecore
 
 #mbg options
 rk                       <- (indicator=='cooking_fuel_solid')
@@ -227,7 +228,7 @@ global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', mode
 data.dir <- file.path('/share/geospatial/mbg/', indicator_group, 'data')
 
 # create outputdir
-outputdir <- paste0('/share/geospatial/mbg/', indicator_group, '/pafs/', run_date)
+outputdir <- paste0('/share/geospatial/mbg/', indicator_group, '/post/', run_date)
   dir.create(paste0(outputdir, '/tmp/'), recursive = T)
   
 # prep GBD files and values ------------------------------------------------------------
@@ -236,7 +237,6 @@ share_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '
 
 ## start master timer
 tic('Master timer')
-
 
 #***********************************************************************************************************************
 
@@ -375,7 +375,7 @@ if(format) {
   toc(log = TRUE)
   
   tic('Saving results at country level with .fst')
-  lapply(adm0s, meltAndSave, type='hap', dt=hap.dt)
+  lapply(adm0s, meltAndSave, type='dfu', dt=hap.dt)
   rm(hap.dt) #save memory
   toc(log=TRUE)
     
@@ -394,10 +394,9 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
   if(debug) browser()
   
   #makes sure file exists
-  country_file <- sprintf('%s/tmp/%s_hap.fst', dir, country)
-  existance <- file.exists(country_file)
+  country_file <- sprintf('%s/tmp/%s_dfu.fst', dir, country)
            
-  if (existance) {
+  if (country_file %>% file.exists) {
     
     #read in the long data.tables for the appropriate country
     message('\n********\nstarting process for ', 
@@ -405,34 +404,40 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
     message('reading data from\n')
     message(country_file)
     country_dt <- read_fst(country_file, as.data.table = T) %>% .[, ID := .I]
-    states <- unique(country_dt$ADM1_CODE)
-    
-    #define relevant col vectors
-    geo_cols <- c('iso3', 'location_id', 'ADM0_CODE', 'ADM1_CODE', 'ADM2_CODE', 'area_fraction')
-    pop_cols <- names(country_dt) %>% .[. %like% 'pop']
-    
-    #everything is collapsed by cause but everything except PAFs are only unique to loc/year/grouping
-    ind_cols <- c('hap_pct', 'tap_paf', 'tap_pm', 'hap', 'hap_sev', 'cor') 
-    id_cols <- c('pixel_id', 'year', 'grouping', 'cause')
-    
+    states <- unique(country_dt$ADM1_CODE) %>% sort
+
     #for larger countries, we will process them by state
-    stateLoop <- function(adm1) {
+    stateLoop <- function(i, state_list, debug=F) {
       
-      message('processing draws for ', 
-              ifelse(length(adm1)>1, 'all states', paste0('state=', adm1)))
+      if(debug) browser()
       
+      #which state
+      state <- state_list[i]
+      
+      #display progress based on quantiles
+      prog_list <- quantile(state_list, p=c(.2, .4, .6, .8)) %>% as.list
+      status <- sapply(prog_list, function(x) state_list[which.min(abs(state_list-x))]) %>% 
+        sapply(., function(x) abs(state-x) < 1e-5) %>% 
+        .[.] %>% 
+        names
+      
+      #if at quantile, give messages
+      msg <- length(status)==1
+      
+      if (msg) message(status, ' complete, starting on state=', state)
+
       #subset to working adm1
-      dt <- country_dt[ADM1_CODE %in% adm1]
-      
+      dt <- country_dt[ADM1_CODE %in% state]
+
       #merge on the HAP excess PM2.5 values for each ad0
       #note that this expands the dt to have man/woman/child values for each pixel
-      message('merging PM2.5 data')
+      if (msg) message('-merging PM2.5 data')
       dt <- merge(dt, hap_data$pm, by=c('ADM0_CODE', 'year', 'grouping'), all.x=T, allow.cartesian=T)
       
       #calculate the TAP PM2.5/capita values
-      message('calculating TAP PM2.5/capita')
+      if (msg) message('-calculating TAP PM2.5/capita')
       dt[, aap_pm := pop * ihmepm25]
-      dt[, hap_pm := pop * hap * hap_excess_pm25]
+      dt[, hap_pm := pop * dfu * hap_excess_pm25]
       dt[, tap_pm := (aap_pm + hap_pm)]
       dt[, tap_pc := tap_pm / pop]
       dt[pop==0, tap_pc := 0] #must assume no exposure in zero population cells
@@ -441,142 +446,179 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       dt[, hap_pct := hap_pm/(aap_pm+hap_pm)]
       
       #calculate correlations between aap and hap
-      message('making correlation calculations')
-      dt[, cor := corSpearman(aap_pm, hap_pm), by=.(pixel_id, draw)]
+      #TODO output this at pixel level instead and map?
+      #message('making correlation calculations')
+      #dt[, cor := corSpearman(aap_pm, hap_pm), by=.(pixel_id, draw)]
   
       #calculate the TAP RR for LRI
-      message('merging risk files and expanding dt')
+      if (msg) message('-merging risk files and expanding dt')
       #first merge on the RR.max to expand the causes for our cellpred dt
       dt <- merge(dt, hap_data$rr_max, by=c('draw', 'age_group_id', 'sex_id'), allow.cartesian=T)
       
       #merge on the mrBRT RR predictions using the nearest spline cutpoint
-      message('merging mrBRT predictions in order to estimate RR')
+      if (msg) message('-merging mrBRT predictions in order to estimate RR')
       dt <- hap_data$rr[dt, on=.(draw, age_group_id, sex_id, cause, tap_pc), roll='nearest'] 
       
       #calculate the TAP PAF for each cause
-      message('making PAF calculations')
+      if (msg) message('-making PAF calculations')
       dt[, tap_paf := (rr-1)/rr]
   
       #calculate the SEV by cause using the HAP PAF and then average across causes
-      message('making SEV calculations')
+      if (msg) message('-making SEV calculations')
       dt[, hap_sev := (tap_paf*hap_pct/(1-tap_paf*hap_pct))/(rr_max-1)]
       dt[, hap_sev := mean(hap_sev), by=.(pixel_id, year, draw, grouping)]
       
       #population weight using the age/sex distribution per pixel to collapse over causes
       dt[, hap_sev := sum(hap_sev*pop)/sum(pop), by=.(pixel_id, year, draw)]
-      
-      #we will output SEVs at the cell_pred/pixel level in order to forecast
-      message('producing SEV cell_pred')
+
+      #we will output SEVs at the cell_pred/admin_2 level in order to make forecasts
+      if (msg) message('-producing SEV cell_pred')
       #TODO note that the V1,V10, etc cols get reordered - shouldnt matter?
-      sev_cell_pred <- dt[, .(pixel_id, cell_pred_id, year, draw, hap_sev, area_fraction)] %>% 
-        unique(., by=c('pixel_id', 'year', 'draw')) %>% 
-        dcast(cell_pred_id+pixel_id+area_fraction+year~draw, value.var='hap_sev') 
+      #child grouping is arbitrary since SEV is now collapsed, we just choose this one to have a single SEV per cellid
+      sev_cell_pred <- dt[grouping=='child', .(cell_pred_id, year, draw, hap_sev, area_fraction)] %>% 
+        data.table::dcast(area_fraction+cell_pred_id+year~draw, value.var='hap_sev')
       
+      if (msg) message('-producing admin_2 SEV')
+      
+      #fractional aggregation
+      sev_admin_2 <- dt[grouping=='child', .(ADM2_CODE, year, draw, hap_sev, pop_total, area_fraction)] %>% 
+        setkeyv(., cols=c('ADM2_CODE', 'year', 'draw')) %>% 
+        .[, hap_sev := weighted.mean(hap_sev, w=pop_total*area_fraction, na.rm=T), by=key(.)] %>% 
+        unique(., by=key(.)) %>% #keep one row per adm2/year/draw now that they are collapsed
+        .[, `:=` (area_fraction=NULL, pop_total=NULL)] %>% #no longer needed
+        data.table::dcast(ADM2_CODE+year~draw, value.var='hap_sev') #cast back to wide
+      
+      #add on the identifying info
+      sev_admin_2 <- merge(sev_admin_2, adm_links, by='ADM2_CODE')
+
       #calculate the LRI attrib to TAP
       # dt[, tap_lri_r := tap_paf * lri] #rate
       # dt[, tap_lri_c := tap_paf * lri * pop] #count
-  
-      message('collapsing draws')
 
       #first remove any unnecessary cols
-      null_cols <- c('ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pc',
+      null_cols <- c('ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pm',
                      'rr', 'rr_max', 'ID', 'age_group_id', 'sex_id')
       dt <- dt[, (null_cols) := NULL]
-  
-      #collapse over the draws for all indicators and return the mean values
-      agg <- dt %>% 
-        copy %>%
-        setkeyv(., id_cols) %>% 
-        .[, (ind_cols) := lapply(.SD, mean, na.rm=T), .SDcols=ind_cols, by=key(.)] %>% 
-        .[, c(geo_cols, id_cols, ind_cols, pop_cols), with=F] %>% 
-        unique(., by=key(.))
+
+      #helper function for aggregating columns from pixel-draws to ad0/1/2 C.I.s
+      aggResults <- function(dt, by_cols, agg_cols, mbg_var, make_ci=T, make_sums=T) {
+        
+        agg <- copy(dt)
+        
+        # aggregate to ad2
+        if (msg) message('-Aggregating at the level of ', paste(by_cols, collapse=' / '))
+        
+        #distinguish that count columns should be a weighted sum instead of a weighted mean
+        sum_cols <- agg_cols %>% .[. %like% '_c$'] 
+        mean_cols <- agg_cols %>% .[!(. %in% sum_cols)] 
+        
+        #which columns will no longer be relevant after this collapse?
+        null_cols <- c('pixel_id', 'area_fraction', 
+                       names(agg) %>% .[(. %like% 'ADM')] %>% .[!(. %in% by_cols)])
+        
+        #check which pop columns were returned (pop_total is produced if using a non-total pop to aggregate)
+        #append them to sum_cols, they will be likewise summed in the aggregation step
+        pop_cols <- names(agg) %>% .[(. %like% 'pop')]
+        sum_cols <- c(sum_cols, pop_cols)
+        
+        #find out prev of missingness in primary variable
+        if (msg) message('-checking missingness in ', mbg_var)
+        setkeyv(agg, by_cols)
+        agg[, miss := mbg_var %>% get %>% is.na %>% sum %>% as.numeric, by=key(agg)]
+        agg[, miss := miss/.N, by=by_cols]
+        #TODO set up reporting diagnostic for units that are 100% missing
+        
+        #apply area fraction to weight the summed variables (pops)
+        agg[, (sum_cols) := lapply(.SD, function(x) x * area_fraction), .SDcols=sum_cols]
+
+        #aggregate means w/ fractional aggregation
+        if (msg) message('-producing means')
+        agg[miss<1, paste0(mean_cols) := lapply(.SD,  Hmisc::wtd.mean, weights=pop), .SDcols=mean_cols, by=key(agg)] 
+
+        #TODO currently only summing pop so it has no C.I. -> how to handle C.I.s for counts?
+        if (make_sums) agg[, (sum_cols) := lapply(.SD, sum, na.rm=T), .SDcols=sum_cols, by=key(agg)] 
+        
+        #select which cols to keep
+        keep_cols <- c(by_cols, mean_cols)
+        if (make_sums) keep_cols <- c(keep_cols, sum_cols)
+        
+        #collapse and return
+        unique(agg, by=key(agg)) %>% 
+          .[, keep_cols, with=F] %>% 
+          return
+        
+      }
+      
+      #agg ad2s by grouping
+      agg <- aggResults(dt, 
+                        by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'draw'), 
+                        agg_cols=c('hap_pct', 'tap_pc', 'dfu', 'hap_sev'),
+                        mbg_var='dfu', 
+                        make_sums=F)
+      
+      #agg pafs by cause
+      agg <- aggResults(dt, 
+                        by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'draw', 'cause'), 
+                        agg_cols='tap_paf',
+                        mbg_var='dfu') %>% 
+        merge(agg, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'draw'), allow.cartesian=T)
       
       #since only PAFs are unique by cause, copy all other indicators into 'all' cause bracket
-      agg <- agg %>% 
-        copy %>% 
-        .[cause=='lri'] %>% 
+      agg <- agg %>%
+        copy %>%
+        .[cause=='lri'] %>%
         .[, cause := 'all'] %>%
         #PAFs are not valid at this level without some kind of outcome weighting which we dont have
-        #TODO could use GBD loc-year outcome rates in order to weight
-        .[, tap_paf := NA] %>% 
+        #TODO could use GBD loc-year outcome rates in order to weight?
+        .[, tap_paf := NA] %>%
         list(agg, .) %>% rbindlist
+
+      #cleanup to save space
+      rm(dt)
       
+      #collapse over draws to create C.I.
+      #if (msg) message('collapsing draws to mean/C.I.')
+      ind_cols <- c('hap_pct', 'tap_pc', 'dfu', 'hap_sev', 'tap_paf')
+      agg[, paste0(ind_cols, '_lower') := lapply(.SD, quantile, p=.025, na.rm=T), 
+          .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause')] 
+      agg[, paste0(ind_cols, '_mean') := lapply(.SD, mean, na.rm=T), 
+          .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause')] 
+      agg[, paste0(ind_cols, '_upper') := lapply(.SD, quantile, p=.975, na.rm=T), 
+          .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause')] 
+      agg <- unique(agg, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause'))
+      
+      #reorder names for legibility
+      agg <- agg[, c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause',
+                     names(agg) %>% .[. %like% 'pop'],
+                     names(agg) %>% .[. %like% 'lower|mean|upper'] %>% sort), with=F]
+
       list('sev_cell_pred'=sev_cell_pred,
-           'agg'=agg)
-      
-    }  
-    
-    if (country %in% big_countries) {
-      
-      #TODO make this piece more memory efficient
-      country_cores <- ifelse(country==33, 1, 3) #brazil states too large to run multicore
-      out_states <- mclapply(states, stateLoop, mc.cores=country_cores)
-      
-      agg <- lapply(out_states, function(x) x[['agg']]) %>% rbindlist
-      sev_cell_pred <- lapply(out_states, function(x) x[['sev_cell_pred']]) %>% rbindlist
-      
-      rm(out_states) #cleanup
-    
-    } else {
-      
-      out_states <- stateLoop(states)
-      agg <- out_states[['agg']]
-      sev_cell_pred <- out_states[['sev_cell_pred']]
-      
-    }
-
-    #TODO move to function part of script
-    #custom function for aggregating columns to ad0/1/2
-    aggResults <- function(dt, by_cols, agg_cols) {
-      
-      # aggregate to ad2
-      message('Aggregating at the level of ', paste(by_cols, collapse=' / '))
-      
-      #distinguish that count columns should be a weighted sum instead of a weighted mean
-      sum_cols <- agg_cols %>% .[. %like% '_c$|_pm$|_pc$'] %T>% 
-        message('--Using a weighted sum to aggregate: ', paste(., collapse=' / ')) 
-      mean_cols <- agg_cols %>% .[!(. %in% sum_cols)] %T>% 
-        message('--Using a weighted mean to aggregate: ', paste(., collapse=' / ')) 
-      
-      #which columns will no longer be relevant after this collapse?
-      null_cols <- c('pixel_id', 'area_fraction', 'tap_pm', 
-                     names(dt) %>% .[(. %like% 'ADM')] %>% .[!(. %in% by_cols)])
-      
-      #check which pop columns were returned (pop_total is produced if using a non-total pop to aggregate)
-      #append them to sum_cols, they will be likewise summed in the aggregation step
-      pop_cols <- names(dt) %>% .[(. %like% 'pop')]
-      sum_cols <- c(sum_cols, pop_cols)
-
-      #aggregate and return dt
-      copy(dt) %>% 
-        setkeyv(., by_cols) %>% 
-        #fractional aggregation
-        .[, (mean_cols) := lapply(.SD, weighted.mean, w=pop*area_fraction, na.rm=T), 
-          .SDcols=mean_cols, by=key(.)] %>% 
-        .[, (sum_cols) := lapply(.SD, function(x, w) sum(x*w, na.rm=T), w=area_fraction), 
-          .SDcols=sum_cols, by=key(.)] %>% 
-        .[, c(by_cols, mean_cols, sum_cols), with=F] %>%  #keep only necessary columns
-        .[, tap_pc := tap_pm / pop] %>% #generate aggregated pm per capita 
-        .[, tap_pm := NULL] %>% #no longer useful
-        unique(., by=key(.)) %>% 
+           'sev_admin_2'=sev_admin_2,
+           'admin_2'=agg) %>% 
         return
       
-    }
-    
-    #agg ad0/2
-    ad0 <- aggResults(agg, 
-                      by_cols=c('ADM0_CODE', 'year', 'grouping', 'cause'), 
-                      agg_cols=ind_cols)
-    ad2 <- aggResults(agg, 
-                      by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause'), 
-                      agg_cols=ind_cols)
+    }  
 
-    list('ad0'=ad0,
-         'ad2'=ad2,
-         'cell_pred'=sev_cell_pred) %>% 
+    #define country parallelization
+    #TODO make this piece more memory efficient
+    if(country%in%big_countries) country_cores <- ifelse(country%in%super_big_countries, 1, 3) 
+    else country_cores <- 7
+
+    #run all states in country
+    out_states <- mclapply(1:length(states), stateLoop, state_list=states, mc.cores=country_cores)
+    
+    #combine results
+    admin_2 <- lapply(out_states, function(x) x[['admin_2']]) %>% rbindlist
+    sev_cell_pred <- lapply(out_states, function(x) x[['sev_cell_pred']]) %>% rbindlist
+    sev_admin_2 <- lapply(out_states, function(x) x[['sev_admin_2']]) %>% rbindlist
+
+    #output
+    list('admin_2'=admin_2,
+         'sev_admin_2'=sev_admin_2,
+         'sev_cell_pred'=sev_cell_pred) %>% 
       return
       
-  } else {message(country_files[!existance], ' does not exist..skipping!'); return(NULL)}
+  } else {message(country_file[!existance], ' does not exist..skipping!'); return(NULL)}
   
 }  
 
@@ -587,15 +629,18 @@ toc(log=TRUE)
 
 #bind results
 tic('Extracting results from lists')
-out_ad0 <- lapply(out, function(x) x[['ad0']]) %>% 
+out_ad2 <- lapply(out, function(x) x[['admin_2']]) %>% 
   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
   rbindlist(use.names=T, fill=T)
-out_ad2 <- lapply(out, function(x) x[['ad2']]) %>% 
+
+sev_admin_2 <- lapply(out, function(x) x[['sev_admin_2']]) %>% 
   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
   rbindlist(use.names=T, fill=T)
-out_sev <- lapply(out, function(x) x[['cell_pred']]) %>% 
+
+out_sev <- lapply(out, function(x) x[['sev_cell_pred']] %>% as.data.table) %>%
   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
-  rbindlist(use.names=T, fill=T)
+  rbindlist(use.names=T, fill=T) 
+
 toc(log=TRUE)
 
 #recombine SEVs into a deduped cell_pred (linking process generates duplicates)
@@ -604,16 +649,10 @@ toc(log=TRUE)
 #                      'cooking_fuel_solid_raked_prev_cell_draws_eb_bin0_', region, "_0.RData")
 # load(rdata_file)
 #cell_pred_dims <- dim(raked_cell_pred)
-cell_pred <- names(out_sev) %>% .[. %like% 'V'] %>% 
+sev_cell_pred <- names(out_sev) %>% .[. %like% 'V'] %>%
   unlink_cell_pred(out_sev, cols=.)
 
 # finish up and save
-tic('Saving ad0')
-out_path <- file.path(outputdir, paste0(region, '_ad0_tap_results.csv'))
-message('-> finished calculating TAP for ad0 level, now saving as \n...', out_path)
-write.csv(out_ad0, file = out_path, row.names = F)
-toc(log = TRUE)
-
 tic('Saving ad2')
 out_path <- file.path(outputdir, paste0(region, '_ad2_tap_results.csv'))
 message('-> finished calculating TAP for ad2 level, now saving as \n...', out_path)
@@ -623,7 +662,7 @@ toc(log = TRUE)
 tic('Saving SEV')
 sev_file <- paste0('/share/geospatial/mbg/cooking/cooking_fuel_solid/output/', run_date, '/',
                    'cooking_fuel_solid_sev_cell_draws_eb_bin0_', region, "_0.RData")
-save(cell_pred, file=sev_file)
+save(sev_cell_pred, file=sev_file)
 
 #***********************************************************************************************************************
 
@@ -633,63 +672,119 @@ goals <- add_goal(target_year = 2030,
                   target = 0.01,
                   target_type = "less",
                   abs_rel = "absolute",
-                  pred_type = c("cell"))
+                  pred_type = c("admin_2"))
 
-goals <- add_goal(target_year = 2030, 
+goals <- add_goal(goal_obj=goals,
+                  target_year = 2030,
                   target = 0.05,
+                  target_type = "less",
+                  abs_rel = "absolute",
+                  pred_type = c("admin_2"))
+
+goals <- add_goal(goal_obj=goals,
+                  target_year = 2018,
+                  target = 0.01,
+                  target_type = "less",
+                  abs_rel = "absolute",
+                  pred_type = c("admin_2"))
+
+goals <- add_goal(goal_obj=goals,
+                  target_year = 2018,
+                  target = 0.05,
+                  target_type = "less",
+                  abs_rel = "absolute",
+                  pred_type = c("admin_2"))
+
+#make AROC predictions
+aroc <- 
+  make_aroc(          
+    region = region,
+    cell_pred = sev_admin_2,
+    type = "admin",
+    admin_lvl = 2, 
+    year_list = year_list,
+    uselogit = TRUE,
+    weighting_res = 'domain',
+    weighting_type = 'exponential',
+    pow = 1,
+    debug=F
+  )
+
+proj <-
+  make_proj(
+    aroc_draws=aroc,
+    cell_pred=sev_admin_2,
+    region = region,
+    type = "admin",
+    admin_lvl=2,
+    proj_years = c(2018, seq(2020, 2030, 5)),
+    year_list = year_list,
+    uselogit = TRUE,
+    debug=F
+  ) 
+
+probs <- 
+  compare_to_target(  
+    obj=proj,
+    region = region,
+    goal_obj = goals,
+    year_list = year_list,
+    uselogit = TRUE,
+    debug=F
+  )
+
+#save outputs
+sdg_dir <- file.path(outputdir, 'sdg_projections') %T>% dir.create(recursive = T) 
+list('goals'=goals,
+     'aroc'=aroc,
+     'proj'=proj,
+     'probs'=probs) %>% 
+  saveRDS(., file=file.path(sdg_dir, paste0(region, '_admin_2_outputs.RDS')))
+
+## Attempt to calculate at cell level as well
+# Define goals: start by initializing goal object
+goals <- add_goal(target_year = 2030, 
+                  target = 0.01,
                   target_type = "less",
                   abs_rel = "absolute",
                   pred_type = c("cell"))
 
-#make AROC predictions
-make_aroc(          
-  ind_gp = indicator_group,
-  ind = indicator,
-  rd = run_date,
-  regions = region,
-  inputs = out,
-  #inputs = list('cell_pred'=cell_pred, 'admin_2'=out_ad2),
-  type = c("cell"),
-  admin_types = 2, 
-  measure = "sev",
-  year_list = year_list,
-  uselogit = TRUE,
-  raked = TRUE,
-  weighting_res = 'domain',
-  weighting_type = 'exponential',
-  pow = 1,
-  debug=T
-)
-
-make_proj(
-  ind_gp = indicator_group,
-  ind = indicator,
-  rd = run_date,
-  regions = region,
-  type = c("cell"),
-  admin_types=2,
-  proj_years = seq(2020, 2030, 5),
-  measure = "sev",
-  year_list = year_list,
-  uselogit = TRUE,
-  raked = TRUE,
-) 
-
-
-
 #run comparisons
-compare_to_target(  
-  ind_gp = indicator_group,
-  ind = indicator,
-  rd = run_date,
-  regions = region,
-  goal_obj = goals,
-  measure = "sev", 
-  year_list = year_list,
-  uselogit = TRUE,
-  raked = TRUE
-)
+cell_probs <- 
+  make_aroc(          
+    region = region,
+    cell_pred = sev_cell_pred,
+    type = "cell",
+    admin_lvl = 2, 
+    year_list = year_list,
+    uselogit = TRUE,
+    weighting_res = 'domain',
+    weighting_type = 'exponential',
+    pow = 1,
+    debug=F
+  ) %>% 
+  make_proj(
+    aroc_draws=.,
+    cell_pred=sev_cell_pred,
+    region = region,
+    type = "cell",
+    admin_lvl=2,
+    proj_years = seq(2020, 2030, 5),
+    year_list = year_list,
+    uselogit = TRUE,
+    debug=F
+  ) %>% 
+  compare_to_target(  
+    obj=.,
+    region = region,
+    goal_obj = goals,
+    year_list = year_list,
+    uselogit = TRUE,
+    debug=F
+  )
 
+#save outputs
+saveRDS(cell_probs, file=file.path(sdg_dir, paste0(region, '_sev_cell_probs.RDS')))
 
 
 toc() # End master timer

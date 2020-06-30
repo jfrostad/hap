@@ -73,8 +73,7 @@ load_map_annotations <- function(use.sf=T, mask_stage3=T) {
 
 ## load_map_results --------------------------------------------------------------------------------
 
-load_map_results <- function(indicator, indicator_group, run_date, raked, 
-                             start_year, end_year, single_year,
+load_map_results <- function(indicator=NA, indicator_group=NA, run_date=NA, raked=NA, year_list=NA,
                              geo_levels = c("raster", "admin1", "admin2"),
                              custom_path=NULL, subvars=NULL,
                              use.sf=T,
@@ -82,12 +81,6 @@ load_map_results <- function(indicator, indicator_group, run_date, raked,
                              debug=F) {
   
   if (debug) browser()
-  
-  #setup years to plot
-  if (missing(single_year)) { 
-    years <- paste(start_year, end_year, sep="_")
-    year_list <- start_year:end_year 
-  } else year_list <- single_year
 
   ## Set the input directory
   maps_path <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date)
@@ -361,3 +354,16 @@ plot_map <- function(map_data, annotations, title, limits, this_var='outcome',
   return(gg)
   
 }
+
+#function to make quick map data for ctry diagnostics
+quick_data <- function(dt, var, country, year) {
+
+  load_map_results(indicator='x', indicator_group='x', run_date='x', raked='x', year_list=year,
+                   custom_path = list('admin2'=dt),
+                   geo_levels=c('admin2'), subvars=var,
+                   cores=cores) %>%
+    .[['admin2']] %>% 
+    filter(NAME_0==country) %>% 
+    return
+
+} 

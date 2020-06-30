@@ -26,7 +26,7 @@
   
   # set cluster arguments
   use_geos_nodes  <- T
-  proj_arg        <- ifelse(use_geos_nodes, 'proj_geo_nodes', 'proj_geospatial_dia')
+  proj_arg        <- ifelse(use_geos_nodes, 'proj_geo_nodes', 'proj_geospatial')
   proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
   
   # set script arguments
@@ -37,8 +37,8 @@
   covariate_plotting_only <- FALSE
   
   # indicate whether to use old run date
-  use_old_run_date <- FALSE
-  old_run_date_input <- '2020_05_06_22_40_43'
+  use_old_run_date <- TRUE
+  old_run_date_input <- '2020_05_17_11_40_28'
   
   # set run date
   if (use_old_run_date == FALSE) {
@@ -67,8 +67,8 @@
                'seas-VNM-THA', 'VNM', 'THA',
                'mide+TKM', 'soas')
   
-  regions <- c('caca-CUB', 'trsa-GUF', 'ansa-VEN', 'ocea-MYS')
-  regions <- c('noaf-ESH', 'mide+TKM', 'MNG', 'cssa-AGO-GNQ')
+  regions <- c('CHN', 'trsa-GUF')
+  regions <- 'ERI+DJI+YEM'
   
   ## Set repo location, indicator group, and some arguments
   user <- 'jfrostad'
@@ -77,8 +77,6 @@
   config_par   <- 'hap_standard'
   holdout <- 0
   age <- 0
-  run_date <- '2020_05_08_10_01_20'
-  run_date <- '2020_05_06_22_40_43'
   measure <- 'prev'
 
 
@@ -89,6 +87,7 @@ if(!skip_entry) {
     # set memory based on region
     if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
     } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+    } else if (reg %in% c('seas-VNM-THA', 'VNM', 'THA', "ERI+DJI+YEM", 'sssa-ZAF')) { mymem <- '200G'
     } else mymem <- '350G'
   
         #name job
@@ -117,16 +116,17 @@ if(!skip_entry) {
   for (reg in regions) {
   
     # set memory based on region
-    if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
-    } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS', 'caca-CUB')) { mymem <- '750G'
-      } else mymem <- '500G'
+    if (reg %in% c('CHN', 'trsa-GUF')) { mymem <- '750G'
+    } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+    } else if (reg %in% c('seas-VNM-THA', 'VNM', 'THA', "ERI+DJI+YEM", 'sssa-ZAF')) { mymem <- '200G'
+    } else mymem <- '350G'
   
       #name job
       jname           <- paste('EdL', reg, indicator, sep = '_')
   
       #setup covars file
       cov_par <- paste(indicator_group, reg, sep='_')
-  
+      
       # set up qsub
       sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ',
                         '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),

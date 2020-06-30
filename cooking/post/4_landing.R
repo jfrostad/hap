@@ -61,7 +61,7 @@ mbg_setup(package_list = package_list, repos = core_repo)
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_05_06_22_40_43'
+run_date <- '2020_05_17_11_40_28'
 lri_run_date <- '2020_01_10_15_18_27'
 shapefile <- "2019_09_10"
 
@@ -86,7 +86,7 @@ map_ind_gp <- 'hap'
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #results
-data.dir <- file.path('/ihme/geospatial/mbg/cooking/pafs', run_date)
+data.dir <- file.path('/ihme/geospatial/mbg/cooking/post', run_date)
 
 lri_dir <- '/ihme/geospatial/mbg/lri/has_lri/output'
   lri_rate_path <- 'has_lri_admin_2_raked_mortality_summary.csv'
@@ -99,6 +99,7 @@ global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', shap
 hap.paths <- data.table(admin2=file.path(data.dir, 'admin_2_summary_children.csv'))
 hap.paths.d <- data.table(admin2=file.path(data.dir, 'admin_2_delta_summary.csv'))
 out.dir  <- file.path('/ihme/geospatial/mbg/cooking/maps', run_date) %T>% dir.create(recursive = T)
+  annotations_path <- file.path(out.dir, 'annotations.RDs')
 map.dir <- file.path(j_root, 'WORK/11_geospatial/09_MBG_maps', map_ind_gp)
 #***********************************************************************************************************************
 
@@ -133,11 +134,30 @@ saveMappingInput <- function(dt,
   
   #setup dt
   out <- copy(dt) %>% 
-    .[, c(paste0('ADM', admin_level, '_CODE'), paste0(data_ind, data_measure), 'year'), with=F] %>% 
-    setnames(paste0(data_ind, data_measure), 'value')
+    .[, c(paste0('ADM', admin_level, '_CODE'), paste(data_ind, data_measure, sep='_'), 'year'), with=F] %>% 
+    setnames(paste(data_ind, data_measure, sep='_'), 'value')
   
   #save
   write.csv(out, file=out_path, row.names=F)
+  
+}
+
+#helper fx to pull/prep the appropriate files from our list of SDG projection objects
+prepCasts <- function(id, type, list=sdg_files, id_dt=NA, id_var=NA) {
+  
+  #format ID var if necessary
+  if(nchar(id)==4) id <- as.character(id) #if the ID is a year, format as character
+  
+  #helper function to extract the correct object
+  extractObj <- ifelse(type!='aroc',
+                       function(x) list[[x]][[type]][[id]] %>% as.data.table,
+                       function(x) list[[x]][[type]] %>% as.data.table ) #aroc only has one object
+
+  #do the formatting and extractions
+  lapply(1:length(list), extractObj) %>% 
+    rbindlist %>% 
+    { if(id_var %>% is.na) cbind(., id_dt[id,]) else .[, (id_var) := id] } %>% 
+    return
   
 }
 #***********************************************************************************************************************
@@ -158,6 +178,9 @@ config <- set_up_config(repo            = my_repo,
 global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>% as.data.table
 adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, ADM2_NAME, ADM2_CODE)] %>% unique
 
+#TODO does the same thing
+admins <- get_sp_hierarchy(shapefile_version = modeling_shapefile_version)
+
 #read in shps
 stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad2_gadm.shp')
 stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad2_gadm.shp')
@@ -176,35 +199,30 @@ iso3_map$geometry <- NULL
 iso3_map <- as.data.table(iso3_map) %>% unique
 locs <- merge(locs, iso3_map, by='iso3')
 
-#read LRI rates/counts
+#read LRI rates per 1000/counts
 has_lri <- file.path(lri_dir, lri_run_date, 'pred_derivatives/admin_summaries', lri_rate_path) %>% 
   fread %>% 
-  .[, .(ADM0_CODE, ADM2_CODE, year, lri=mean, cause='lri', grouping='child')]
+  .[, .(ADM0_CODE, ADM2_CODE, year, cause='lri', grouping='child',
+        lri_lower=lower, lri_mean=mean, lri_upper=upper)]
 
 has_lri_c <- file.path('/ihme/geospatial/mbg/lri/has_lri/output', 
                        lri_run_date, 'pred_derivatives/admin_summaries', lri_counts_path) %>% 
   fread %>% 
-  .[, .(ADM0_CODE, ADM2_CODE, year, lri_c=mean, cause='lri', grouping='child')]
+  .[, .(ADM0_CODE, ADM2_CODE, year, cause='lri', grouping='child',
+        lri_c_lower=lower, lri_c_mean=mean, lri_c_upper=upper)]
 
 #combine and save all ad2 level results
+vars <- c('_mean', '_lower', '_upper')
 dt <-
   list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>% 
   lapply(., fread) %>% 
   rbindlist(use.names=T, fill=T) %>% 
   merge(has_lri, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'cause', 'grouping'), all.x=T) %>% 
-  merge(has_lri_c, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'cause', 'grouping'), all.x=T) %>% 
-  .[, tap_lri := lri * 1000 * tap_paf] %>% #do some postestimation
-  .[, hap_lri := lri * 1000 * tap_paf*hap_pct] %>% 
-  .[, aap_lri := lri * 1000 * tap_paf*(1-hap_pct)] %>% 
-  .[, tap_lri_c := lri_c * tap_paf] %>% #do some postestimation
-  .[, hap_lri_c := lri_c * tap_paf*hap_pct] %>% 
-  .[, aap_lri_c := lri_c * tap_paf*(1-hap_pct)] %T>% 
-  #also output the file for later
-  write.csv(., file.path(data.dir, 'admin_2_summary.csv'), row.names = F)
+  merge(has_lri_c, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'cause', 'grouping'), all.x=T)
 
-#also save a version just for children
-dt[grouping=='child' & cause=='lri'] %>% 
-  write.csv(., file.path(data.dir, 'admin_2_summary_children.csv'), row.names = F)
+#generate mean/CI for the attributable LRI variables
+dt[, paste0('tap_lri', vars) := lapply(vars, function(x) paste0('lri', x) %>% get * paste0('tap_paf', x) %>% get)] 
+dt[, paste0('tap_lri_c', vars) := lapply(vars, function(x) paste0('lri_c', x) %>% get * paste0('tap_paf', x) %>% get)]
 
 #for now, we are using 2017 results as if they were 2018
 #TODO model 2018
@@ -213,6 +231,91 @@ dt <- copy(dt) %>%
   .[, year := 2018] %>% 
   list(dt, .) %>% rbindlist
 
+#output file
+write.csv(dt, file.path(data.dir, 'admin_2_summary.csv'), row.names = F)
+ 
+#also save a version just for children
+dt[grouping=='child' & cause=='lri'] %>% 
+  write.csv(., file.path(data.dir, 'admin_2_summary_children.csv'), row.names = F)
+
+#resample into draws for each variable and then do weighted aggregations in order to produce the AD0 stats
+aggConfidenceIntervals <- function(dt, var, by_vars,
+                                   n_draws=100,
+                                   wt_var='pop',
+                                   debug=F) {
+  
+  if (debug) browser()
+  
+  message('working on ', var)
+  
+  #define variables
+  var_types <- c('lower', 'mean', 'upper')
+  id_vars <- names(dt) %>% .[!(. %like% 'pop|lower|mean|upper')]
+  ind_vars <- paste(var, var_types, sep="_")
+  draw_vars <- paste0('draw_', 1:n_draws)
+  
+  #define transformation based on var
+  logit_space <- !(var %like% 'lri|_c|_pc')
+  count_space <- var %like% '_c'
+  
+  #copy dt with relevant vars
+  out <- dt[, c(id_vars, ind_vars, wt_var), with=F] %>% 
+    copy %>% 
+    setnames(., c(ind_vars, wt_var), c(var_types, 'n'))
+
+  #resample draws using delta method
+  message('resampling')
+  out[, row_id := .I]
+  out[, se := (upper-lower)/3.92] #median N per cluster
+  
+  if(logit_space) {
+  
+    out[, logit_se := sqrt((1/(mean - mean^2))^2 * se^2)]
+    out[, logit_mean := logit(mean)]
+    out[, (draw_vars) := lapply(1:n_draws, function(x) rnorm(.N, logit_mean, logit_se))]
+    out[, (draw_vars) := lapply(.SD, inv.logit), .SDcols=draw_vars]
+    
+  } else out[, (draw_vars) := lapply(1:n_draws, function(x) msm::rtnorm(.N, mean, se, lower=0))]
+  
+  message('aggregating')
+
+  if (count_space) out[, (draw_vars) := lapply(.SD, sum, na.rm=T), .SDcols=draw_vars, by=by_vars]
+  else out[, (draw_vars) := lapply(.SD,  Hmisc::wtd.mean, weights=n), .SDcols=draw_vars, by=by_vars]
+  out <- unique(out, by=by_vars)
+  
+  message('summarizing')
+  out[, mean := rowMeans(.SD), .SDcols=draw_vars]
+  out[, upper := apply(.SD, 1, quantile, p=.975, na.rm=T), .SDcols=draw_vars]
+  out[, lower := apply(.SD, 1, quantile, p=.025, na.rm=T), .SDcols=draw_vars]
+
+  out[, (draw_vars) := NULL]
+  
+  setnames(out, var_types, ind_vars)
+  setkeyv(out, id_vars)
+  
+  out[, c(id_vars, ind_vars), with=F]
+  
+  
+}
+
+ad0_results <-
+mclapply(c('dfu', 'hap_pct', 'tap_pc', 'tap_paf', 'tap_lri', 'tap_lri_c'), aggConfidenceIntervals,
+       dt=dt[grouping=='child' & cause=='lri'], by_vars=c('ADM0_CODE', 'year', 'cause', 'grouping'), mc.cores=3) %>%
+  Reduce(function(...) merge(..., all = TRUE), .)
+
+write.csv(ad0_results, file.path(data.dir, 'admin_0_summary.csv'), row.names = F)
+
+#resample into draws for each variable and then do weighted aggregations in order to produce the AD1 stats
+ad1_results <- 
+  mclapply(c('dfu', 'hap_pct', 'tap_pc', 'tap_paf', 'tap_lri', 'tap_lri_c'), aggConfidenceIntervals, 
+         dt=merge(dt[grouping=='child' & cause=='lri'], 
+                  adm_links[, .(ADM0_CODE, ADM2_CODE, ADM1_CODE)], 
+                  by=c('ADM0_CODE', 'ADM2_CODE')), 
+         by_vars=c('ADM0_CODE', 'ADM1_CODE', 'year', 'cause', 'grouping'), mc.cores=3) %>% 
+  Reduce(function(...) merge(..., all = TRUE), .)
+
+write.csv(ad1_results, file.path(data.dir, 'admin_1_summary.csv'), row.names = F)
+
 #merge sr region names/IDs
 dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
 dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'))
@@ -220,33 +323,22 @@ dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'))
 #intermediate measures
 dt[, u5_pct := pop/pop_total]
 
-#format names
-setnames(dt, 'hap', 'dfu')
-
-#also combine and save all ad0 level results
-dt_ad0 <-
-  list.files(data.dir, pattern='ad0_tap_results', full.names = T) %>% 
-  lapply(., fread) %>% 
-  rbindlist(use.names=T, fill=T) %>% 
-  merge(., locs, by='ADM0_CODE', all.x=T) %T>%
-  #also output the file for later   
-  write.csv(., file.path(data.dir, 'admin_0_summary.csv'), row.names = F)
-
 #produce inequality metrics
 #calculate GINI/MAD at country level
-dt_ineq <- dt[year %in% c(start_year, end_year), .(iso3, year, ADM0_CODE, ADM2_CODE, ADM2_NAME, dfu, 
+dt_ineq <- dt[year %in% c(start_year, end_year), .(iso3, year, ADM0_CODE, ADM2_CODE, ADM2_NAME, dfu_mean, 
                                                   super_region_id, super_region_name, region_id, region_name)]
-dt_ineq[, gini := gini(dfu), by=.(iso3, year)]
-dt_ineq[, mad := mad(dfu, center = mean(dfu)), by=.(iso3, year)]
-dt_ineq[, mean := mean(dfu, na.rm=T), by=.(iso3, year)]
-dt_ineq[, max := max(dfu, na.rm=T), by=.(iso3, year)]
-dt_ineq[, min := min(dfu, na.rm=T), by=.(iso3, year)]
+dt_ineq[, gini := gini(dfu_mean), by=.(iso3, year)]
+dt_ineq[, mad := mad(dfu_mean, center = mean(dfu_mean)), by=.(iso3, year)]
+dt_ineq[, mean := mean(dfu_mean, na.rm=T), by=.(iso3, year)]
+dt_ineq[, max := max(dfu_mean, na.rm=T), by=.(iso3, year)]
+dt_ineq[, min := min(dfu_mean, na.rm=T), by=.(iso3, year)]
 dt_ineq[, range := max-min]
 
 #produce change metrics
 #TODO move this to be at pixel level
 #calculate rates of change
-these_cols <- c('hap_pct', 'dfu', 'tap_paf', 'tap_pc')
+these_cols <- c('hap_pct', 'dfu', 'tap_paf', 'tap_pc', 'tap_lri')
+these_cols <- paste0(these_cols, '_mean')
 d_cols <- paste0(these_cols, '_d')
 dr_cols <- paste0(these_cols, '_dr')
 aroc_cols <- paste0(these_cols, '_aroc')
@@ -262,7 +354,7 @@ dt_d <- setkey(dt, ADM0_CODE, ADM2_CODE, grouping, cause) %>%
 #also create ad2 sf object for spatial analyses
 data <-  
   load_map_results(indicator, indicator_group, run_date, raked, 
-                   start_year=start_year, end_year=end_year,
+                   year_list=c(start_year:end_year),
                    custom_path = hap.paths,
                    geo_levels=c('admin2'),
                    cores=cores,
@@ -270,51 +362,10 @@ data <-
 
 data_d <-  
   load_map_results(indicator, indicator_group, run_date, raked, 
-                   single_year=2018,
+                   year_list=2018,
                    custom_path = list('admin2'=dt_d),
                    geo_levels=c('admin2'),
                    cores=cores)
-
-#***********************************************************************************************************************
-
-# ---SAVE MAPPING INPUTS------------------------------------------------------------------------------------------------
-#output files for Kim to produce key figures
-#Figure 1: Selected AD2 Results
-#A: DFU levels
-saveMappingInput(
-  dt, 
-  map_ind='dfu',
-  data_ind='dfu',
-  map_measure='mean',
-  data_measure=''
-)
-
-#B: Change rate for TAP_PC 2000-2018
-saveMappingInput(
-  dt_d, 
-  map_ind='tap_pc',
-  data_ind='tap_pc',
-  map_measure='change_rate',
-  data_measure='_dr'
-)
-
-#C: Change rate for TAP_PAF 2000-2018
-saveMappingInput(
-  dt_d, 
-  map_ind='tap_paf',
-  data_ind='tap_paf',
-  map_measure='change_rate',
-  data_measure='_dr'
-)
-
-#D: Attributable LRI levels
-saveMappingInput(
-  dt, 
-  map_ind='tap_lri',
-  data_ind='tap_lri',
-  map_measure='mean',
-  data_measure=''
-)
 
 #***********************************************************************************************************************
 
@@ -325,7 +376,6 @@ saveMappingInput(
 
 # ---SEV CELL_PREDS-----------------------------------------------------------------------------------------------------
 #read in the proper annotations (borders, lakes, mask)
-annotations_path <- file.path(out.dir, 'annotations.RDs')
 check <- file.exists(annotations_path)
 annotations <- ifelse(
   check,
@@ -334,61 +384,220 @@ annotations <- ifelse(
 )
 if(!check) saveRDS(annotations, file=annotations_path)
 
+#append the ADM2 files
+sdg_files <-
+file.path(data.dir, 'sdg_projections') %>% list.files(pattern='admin_2', full.names = T) %>% 
+  lapply(., readRDS)
+
+#extract goal obj to index over
+goals <- lapply(1:length(sdg_files), function(x) sdg_files[[x]]$goals) %>% rbindlist %>% unique
+
+#create a dt with all probabilities
+probs <- lapply(1:nrow(goals), prepCasts, type='probs', id_dt=goals) %>% 
+  rbindlist %>% 
+  setnames(c('target_year', 'spatial_idx'), c('year', 'ADM2_CODE')) %>% 
+  merge(., adm_links[, .(ADM2_CODE, ADM0_CODE)], by='ADM2_CODE')  
+
+#create a dt with all projections
+projs <- 
+  lapply(c(2018, seq(2020, 2030, 5)), prepCasts, type='proj', id_var='year') %>% 
+  rbindlist %>% 
+  setnames('spatial_idx', 'ADM2_CODE') %>% 
+  melt(measure = patterns("V"), variable.name = "draw", value.name='sev')
+
+#create a dt with aroc and combine
+projs <- prepCasts(2018, type='aroc', id_var='year') %>% 
+  melt(measure = patterns("V"), variable.name = "draw", value.name='aroc') %>% 
+  merge(., projs, by=c('ADM2_CODE', 'year', 'draw'), all.y=T) %>% 
+  merge(., adm_links[, .(ADM2_CODE, ADM0_CODE)], by='ADM2_CODE')
+
+#generate mean/ci
+#cols <- paste0('V', 2:51) #TODO, weird why are they numbered like this..?
+cols <- c('aroc', 'sev')
+setkey(projs, year, ADM2_CODE)
+projs[, paste0(cols, '_mean') := lapply(.SD, mean, na.rm=T), .SDcols=cols, by=key(projs)]
+projs[, paste0(cols, '_lower') := lapply(.SD, quantile, probs=.025, na.rm=T), .SDcols=cols, by=key(projs)]
+projs[, paste0(cols, '_upper') := lapply(.SD, quantile, probs=.975, na.rm=T), .SDcols=cols, by=key(projs)]
+projs <- unique(projs, by=key(projs)) %>% 
+  .[, c(cols, 'draw') := NULL]
+
+#calculate relative uncertainty of SEV
+projs[, sev_rel_uncertainty := (sev_upper-sev_lower)/2/sev_mean]
+projs[sev_rel_uncertainty>1, sev_rel_uncertainty := 1] #cap at 1
+
+#make sf datasets for plotting
+threshold <- .01
+data_projs <-  
+  load_map_results(indicator, indicator_group, run_date, raked, 
+                   year_list=c(2018, 2020, 2030),
+                   custom_path = list('admin2'=projs),
+                   geo_levels=c('admin2'),
+                   cores=cores)
+data_sdg <-  
+  load_map_results(indicator, indicator_group, run_date, raked, 
+                   year_list=2030,
+                   custom_path = list('admin2'=probs),
+                   geo_levels=c('admin2'),
+                   cores=cores)
+
+#make colorscales
+d_colors <- brewer_pal(palette='BrBG')(11) %>% rev 
+d_values <- c(seq(-.2, -.1, length.out = 2), seq(-.1, 0, length.out = 7), seq(0, .2, length.out = 2)) %>%
+  unique %>%
+  rescale
+
+p_colors <- brewer_pal(palette='BrBG')(11) %>% .[c(1, 3:9, 11)]
+p_values <- c(seq(0, .05, length.out = 2), seq(.1, .9, length.out = 5), seq(.95, 1, length.out = 2)) %>%
+  unique %>%
+  rescale
+
+s_values <- c(seq(0, .05, length.out = 2), seq(.1, 1, length.out = 9)) %>% 
+  unique %>%
+  rescale
+
+#make ad2 plots
+#plot AROCs
+global <-
+  data_projs$admin2 %>% 
+  filter(year==2018) %>% 
+  plot_map(., this_var='aroc_mean',
+           annotations, limits=c(-.2, .2), title='Mean AROC of SEV, 2000-2018', 
+           legend_colors=d_colors, legend_color_values = d_values,
+           legend_title='AROC',
+           #zoom=zoom.global,
+           debug=F)
+ggsave(filename=file.path(out.dir, 'sev_aroc.png'), plot=global, 
+       width=12, height=8, units='in', dpi=500)
+
+#plot projections
+global <-
+  data_projs$admin2 %>% 
+  filter(year==2018) %>% 
+  plot_map(., this_var='sev_mean',
+           annotations, limits=c(0, 1), title='Mean SEV, 2020', 
+           legend_color_values = p_values,
+           legend_title='SEV',
+           #zoom=zoom.global,
+           debug=F)
+ggsave(filename=file.path(out.dir, 'sev_2020.png'), plot=global, 
+       width=12, height=8, units='in', dpi=500)
+
+global <-
+  data_projs$admin2 %>% 
+  filter(year==2018) %>% 
+  plot_map(., this_var='sev_lower',
+           annotations, limits=c(0, 1), title='Lower C.I. for SEV, 2020', 
+           legend_color_values = p_values,
+           legend_title='SEV',
+           #zoom=zoom.global,
+           debug=F)
+ggsave(filename=file.path(out.dir, 'sev_2020_lower.png'), plot=global, 
+       width=12, height=8, units='in', dpi=500)
+
+#make plots of probabilities of attainment
+global <-  
+  data_sdg$admin2 %>% 
+  filter(target==threshold) %>% 
+  plot_map(., this_var='absolute_goal_prob',
+           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.01%) in 2030', 
+           legend_colors=p_colors, legend_color_values = p_values,
+           legend_title='Probability',
+           #zoom=zoom.global,
+           debug=F)
+ggsave(filename=file.path(out.dir, 'sdg_7_probs.png'), plot=global, 
+       width=12, height=8, units='in', dpi=500)
+
+global <-
+  data_sdg$admin2 %>% 
+  filter(target==.05) %>% 
+  plot_map(., this_var='absolute_goal_prob',
+           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.05%) in 2030', 
+           legend_colors=p_colors, legend_color_values = p_values,
+           legend_title='Probability',
+           #zoom=zoom.global,
+           debug=F)
+ggsave(filename=file.path(out.dir, 'sdg_7_probs_05.png'), plot=global, 
+       width=12, height=8, units='in', dpi=500)
+
+#testing country specific plots
+ctry.name <- 'Sudan'
+ctry_data <- data_sdg$admin2 %>% 
+  filter(NAME_0==ctry.name & target==threshold) 
+ctry.zoom <- data.table(x1=1, x2=15, y1=3, y2=15) #NGA
+
+ctry.dfu <-
+  plot_map(ctry_data, this_var='absolute_goal_prob',
+           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.05%) in 2030', 
+           legend_colors=viridis(10, direction=-1),
+           legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
+           legend_title='DFU %', legend_flip=T,
+           zoom=T,
+           debug=F)
+
+ctry.name <- 'Pakistan'
+ctry_data <- data_sdg$admin2 %>% 
+  copy %>% 
+  filter(NAME_0==ctry.name & target==threshold) 
+
+ctry.dfu <-
+  plot_map(ctry_data, this_var='absolute_goal_prob',
+           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.05%) in 2030', 
+           legend_colors=viridis(10, direction=-1),
+           legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
+           legend_title='DFU %', legend_flip=T,
+           zoom=T,
+           debug=F)
+
 #create raster from probabilities
-out <- 
+out <-
   prepare_aroc_proj_rasters(
     regions='all',
     indicator_group = indicator_group,
     indicator = indicator,
     run_date = run_date,
     measure='sev',
-    pred_deriv='target_probs', 
-    raking='raked', 
+    pred_deriv='target_probs',
+    raking='raked',
     uselogit=T,
     abs_rel = 'absolute',
     target_yr = '2030',
     target = .01,
-    target_type = 'less', 
-    baseline_year = 2017, 
+    target_type = 'less',
+    baseline_year = 2017,
     shapefile_version = modeling_shapefile_version,
     debug=F
   )
 
-proj_raster <- lapply(out, function(x) x[['raster']]) 
-
-proj_ad0 <- lapply(out, function(x) x[['ad0']]) %>% 
-  .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
-  rbindlist(use.names=T, fill=T) %>%
-  merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>% 
-  merge(., adm_links[, .(ADM0_CODE, ADM0_NAME)] %>% unique, by=c('ADM0_CODE')) %T>% 
-  write.csv(., file.path(data.dir, 'admin_0_sdg_summary.csv'), row.names = F)
-
-proj_ad2 <- lapply(out, function(x) x[['ad2']]) %>% 
-  .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
-  rbindlist(use.names=T, fill=T) %>%
-  merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>% 
-  merge(., adm_links, by=c('ADM0_CODE', 'ADM2_CODE')) %T>% 
-  write.csv(., file.path(data.dir, 'admin_2_sdg_summary.csv'), row.names = F)
-
-#save data for kim to make ARCmaps
-#E: Attributable LRI levels
-saveMappingInput(
-  proj_ad2, 
-  map_ind='sdg_prob',
-  data_ind='mean',
-  map_measure='mean',
-  data_measure=''
-)
+proj_raster <- lapply(out, function(x) x[['raster']])
 
 #TODO move this section to spirit.R
 #make plots of raster vals
-rasterPlot <- function(x) {
+rasterPlot <- function(x, this_var, legend_color_values=NA) {
   
-  df <- as.data.frame(x, xy = TRUE)
+  df <- as.data.frame(x, xy = TRUE) %>% as.data.table
+  df[, plot_var := get(this_var)]
+  
+  if(legend_color_values %>% is.na) {
+    
+    message('->color values not provided, building from data IQR')
+    
+    data_min <- df$plot_var %>% min(na.rm=T) %>% floor
+    data_p25 <- df$plot_var %>% quantile(probs=.2, na.rm=T)
+    data_p75 <- df$plot_var %>% quantile(probs=.8, na.rm=T)
+    data_max <- df$plot_var %>% max(na.rm=T) %>% ceiling
+    
+    legend_color_values <- c(seq(data_min, data_p25, length.out = 2), 
+                             seq(data_p25, data_p75, length.out = 8), #bring out the variation in the IQR
+                             seq(data_p75, data_max, length.out = 2)) %>%
+      unique %T>% 
+      print %>%
+      rescale
+    
+  }
   
   plot <- ggplot() +
-    geom_raster(data =df, aes(x = x, y = y, fill = layer)) + 
-    scale_fill_viridis_c(guide=F, na.value="white") +
+    geom_raster(data =df, aes(x = x, y = y, fill = plot_var)) + 
+    scale_fill_viridis_c(guide=F, na.value="white", values = legend_color_values) + #matching ad2 aggs) +
     coord_quickmap() +
     theme_bw() +
     theme(axis.text=element_blank(), 
@@ -400,10 +609,18 @@ rasterPlot <- function(x) {
 }
 
 #make plot of all regions
-grobs <- lapply(proj_raster, rasterPlot)
+grobs <- lapply(proj_raster, rasterPlot, this_var='layer', legend_color_values=ad2_values)
 arrangeGrob(grobs=grobs) %>% grid.arrange
-            
-#make ad2 plot
+
+#plot ad2s aggregated from cells
+proj_ad2 <- lapply(out, function(x) x[['ad2']]) %>%
+  .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
+  rbindlist(use.names=T, fill=T) %>%
+  merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>%
+  merge(., adm_links, by=c('ADM0_CODE', 'ADM2_CODE')) %T>%
+  write.csv(., file.path(data.dir, 'agg_admin_2_sdg_summary.csv'), row.names = F)
+
+#make ad2 plot at stricter threshold
 data_sdg <-  
   load_map_results(indicator, indicator_group, run_date, raked, 
                    single_year=2030,
@@ -413,13 +630,109 @@ data_sdg <-
 
 global <-
   plot_map(data_sdg$admin2, this_var='mean',
-           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 in 2030', 
-           # legend_color_values=color_values,
+           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.01%) in 2030', 
+           legend_colors=viridis(10, direction=-1),
            legend_title='Probability',
            #zoom=zoom.global,
            debug=F)
-ggsave(filename=file.path(out.dir, 'sdg_7_probs.png'), plot=global, 
-       width=12, height=8, units='in', dpi=300)
+ggsave(filename=file.path(out.dir, 'sdg_7_probs_01_agg.png'), plot=global, 
+       width=12, height=8, units='in', dpi=500)
+#***********************************************************************************************************************
+ 
+# ---SAVE MAPPING INPUTS------------------------------------------------------------------------------------------------
+#output files for Kim to produce key figures
+##Figure 1: Selected AD2 Results for 2018##
+#A: DFU levels
+saveMappingInput(
+  dt, 
+  map_ind='dfu',
+  data_ind='dfu',
+  map_measure='mean',
+  data_measure='mean'
+)
+
+#B: TAP PC levels
+saveMappingInput(
+  dt_d, 
+  map_ind='tap_pc',
+  data_ind='tap_pc',
+  map_measure='mean',
+  data_measure='mean'
+)
+
+#C: HAP PCT levels
+saveMappingInput(
+  dt_d, 
+  map_ind='hap_pct',
+  data_ind='hap_pct',
+  map_measure='mean',
+  data_measure='mean'
+)
+
+#D: Attributable LRI rates
+saveMappingInput(
+  dt, 
+  map_ind='tap_lri',
+  data_ind='tap_lri',
+  map_measure='mean',
+  data_measure='mean'
+)
+
+##Figure 2: Selected AD2 Trends 2000-2018##
+#A: DFU levels
+saveMappingInput(
+  dt_d, 
+  map_ind='dfu',
+  data_ind='dfu',
+  map_measure='change_rate',
+  data_measure='mean_dr'
+)
+
+#B: Change rate for TAP_PC 2000-2018
+saveMappingInput(
+  dt_d, 
+  map_ind='tap_pc',
+  data_ind='tap_pc',
+  map_measure='change_rate',
+  data_measure='mean_dr'
+)
+
+#C: Change rate for attributable LRI 2000-2018
+saveMappingInput(
+  dt_d, 
+  map_ind='tap_lri',
+  data_ind='tap_lri',
+  map_measure='change_rate',
+  data_measure='mean_dr'
+)
+
+#D: SEV in 2018
+saveMappingInput(
+  projs, 
+  map_ind='sev',
+  data_ind='sev',
+  map_measure='mean',
+  data_measure='mean'
+)
+
+#E: Probability of hitting SDG threshold
+saveMappingInput(
+  projs, 
+  map_ind='sev_uncertainty',
+  data_ind='sev',
+  map_measure='relative_uncertainty',
+  data_measure='rel_uncertainty'
+)
+
+#F: Probability of hitting SDG threshold
+threshold <- 0.05
+saveMappingInput(
+  probs[target==threshold], 
+  map_ind='sdg_prob',
+  data_ind='absolute_goal',
+  map_measure='mean',
+  data_measure='prob'
+)
 #***********************************************************************************************************************
 
 # ---FIGURE 4-----------------------------------------------------------------------------------------------------------
@@ -518,5 +831,20 @@ sel = unlist(st_relate(tmp, tmp, pattern = "F***0****"))
 sel = st_touches(tmp, tmp) %>% unlist
 plot(st_geometry(tmp))
 plot(st_geometry(tmp[sel,]), add = TRUE, col = 'grey')
+
+
+# proj_ad0 <- lapply(out, function(x) x[['ad0']]) %>% 
+#   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
+#   rbindlist(use.names=T, fill=T) %>%
+#   merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>% 
+#   merge(., adm_links[, .(ADM0_CODE, ADM0_NAME)] %>% unique, by=c('ADM0_CODE')) %T>% 
+#   write.csv(., file.path(data.dir, 'admin_0_sdg_summary.csv'), row.names = F)
+# 
+# proj_ad2 <- lapply(out, function(x) x[['ad2']]) %>% 
+#   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
+#   rbindlist(use.names=T, fill=T) %>%
+#   merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>% 
+#   merge(., adm_links, by=c('ADM0_CODE', 'ADM2_CODE')) %T>% 
+#   write.csv(., file.path(data.dir, 'admin_2_sdg_summary.csv'), row.names = F)
 
 #***********************************************************************************************************************

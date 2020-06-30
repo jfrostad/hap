@@ -35,8 +35,8 @@ plot_covariates <- TRUE
 covariate_plotting_only <- FALSE
 
 # indicate whether to use old run date
-use_old_run_date <- F
-old_run_date_input <- '2020_05_06_22_40_43'
+use_old_run_date <- T
+old_run_date_input <- '2020_05_17_11_40_28'
 
 # set run date
 if (use_old_run_date == FALSE) {
@@ -85,10 +85,10 @@ regions <- c('essa-ERI-DJI-YEM', "ERI+DJI+YEM",
              'seas-VNM-THA', 'VNM', 'THA',
              'mide+TKM', 'soas')
 
-regions <- c('CHN', 'trsa-GUF', 'soas')
-regions <- c('soas', 'CHN', 'trsa-GUF')
+# regions <- c('CHN', 'trsa-GUF', 'soas')
+# regions <- c('soas', 'CHN', 'trsa-GUF')
 
-#regions <- c('AGO', 'VNM', 'THA', 'ZAF')
+regions <- 'ERI+DJI+YEM'
 
 # list indicators
 indics <- 'cooking_fuel_solid'
