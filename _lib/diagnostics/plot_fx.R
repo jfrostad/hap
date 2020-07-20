@@ -1,6 +1,6 @@
 #***********************************************************************************************************************
 
-# ---FIGURE 2-----------------------------------------------------------------------------------------------------------
+# ---FIGURE 4-----------------------------------------------------------------------------------------------------------
 #helper function to create smaller inset versions of the transition plot
 makeInset <- function(i, loclist, 
                       colors=c('2000'='#737373', '2018'='#08519c'),
@@ -93,7 +93,7 @@ makeInset <- function(i, loclist,
 
 #***********************************************************************************************************************
 
-# ---FIGURE 4-----------------------------------------------------------------------------------------------------------
+# ---FIGURE 3-----------------------------------------------------------------------------------------------------------
 #helper function to give us the intervals for binwidth after cutting
 cut_borders <- function(x){
   pattern <- "(\\(|\\[)(-*[0-9]+\\.*[0-9]*),(-*[0-9]+\\.*[0-9]*)(\\)|\\])"
@@ -115,49 +115,53 @@ makeTapDensityPlot <- function(
   sequence, #what bin sequence to use
   smoother=.6, #what span to use for the smoother
   nudge=1e-5, #how much to nudge values in order to work in logspace (prevent NaNs for 0)
+  plot_quartiles=F, #if wanting to display quartiles as dotted lines
   debug=F
 ) {
   
   if(debug) browser()
   
   #prepare input data
-  dt <- input_dt %>% copy
+  dt <- input_dt[type!='TAP'] %>% copy #we will recalculate TAP later
   dt[iso3 %in% locs, loc := ADM0_NAME]
   dt[is.na(loc), loc := "All other LMICs"]
   dt[loc=='Democratic Republic of the Congo', loc := 'D.R. Congo']
 
   #create data.table from the sequence
-  log.dt <- data.table(tap_bin_id=cut(sequence, sequence, include.lowest = TRUE, labels=F))
-  log.dt[, c('start', 'end') := cut(sequence, sequence, include.lowest = TRUE, dig.lab=4) %>% cut_borders]
-  log.dt[1, `:=` (start=1e-5, end=sequence[1], tap_bin_id=0)]
+  seq.dt <- data.table(tap_bin_id=cut(sequence, sequence, include.lowest = TRUE, labels=F))
+  seq.dt[, c('start', 'end') := cut(sequence, sequence, include.lowest = TRUE, dig.lab=4) %>% cut_borders]
+  seq.dt[1, `:=` (start=1e-5, end=sequence[1], tap_bin_id=0)]
   
   #expand the dt to include all relevant vars
   skeleton <- expand.grid(year=c(start_year, end_year),
-                          source=c('aap', 'hap'),
+                          type=c('AAP', 'HAP'),
                           loc=unique(dt$loc),
                           stringsAsFactors = F)
-  log.dt <- tidyr::crossing(log.dt, skeleton) %>% as.data.table
+  seq.dt <- tidyr::crossing(seq.dt, skeleton) %>% as.data.table
   
   #merge TAP values onto the nearest bin
-  dt[, tap_bin := cut(tap_pc_mean, sequence, include.lowest = TRUE, dig.lab=4), by=.(loc, year)]
-  dt[, tap_bin_id := cut(tap_pc_mean, sequence, include.lowest = TRUE, labels=F), by=.(loc, year)]
+  dt[, tap_pm := sum(pm_pc_mean), by=.(year, ADM2_CODE)] #first, recalculate TAP
+  dt[, tap_bin := cut(tap_pm, sequence, include.lowest = TRUE, dig.lab=4), by=.(loc, year)]
+  dt[, tap_bin_id := cut(tap_pm, sequence, include.lowest = TRUE, labels=F), by=.(loc, year)]
   
   #generate sums
   dt[, sum_var := get(wt_var)]
-  dt[, sum := sum(sum_var, na.rm=T), by=.(year)]
-  dt[, bin_sum := sum(sum_var, na.rm=T), by=.(loc, year, tap_bin_id)]
-  
+  dt[, sum := sum(sum_var, na.rm=T), by=.(type, year)]
+  #split tap by share & collapse to bin/types
+  dt[, bin_sum := sum(sum_var*share_mean, na.rm=T), by=.(loc, year, type, tap_bin_id)]
+
   #split into types
-  dt <- tidyr::crossing(dt, data.table(source=factor(c('aap','hap')))) %>% as.data.table
-  dt[source=='hap', bin_sum := sum(sum_var*hap_pct_mean, na.rm=T), by=.(loc, year, tap_bin_id)]
-  dt[source=='aap', bin_sum := sum(sum_var*(1-hap_pct_mean), na.rm=T), by=.(loc, year, tap_bin_id)]
+  # dt[, bin_sum ]
+  # dt <- tidyr::crossing(dt, data.table(source=factor(c('aap','hap')))) %>% as.data.table
+  # dt[source=='hap', bin_sum := sum(sum_var*hap_pct_mean, na.rm=T), by=.(loc, year, tap_bin_id)]
+  # dt[source=='aap', bin_sum := sum(sum_var*(1-hap_pct_mean), na.rm=T), by=.(loc, year, tap_bin_id)]
   
   #collapse
-  bin.dt <- unique(dt, by=c('loc', 'source', 'year', 'tap_bin')) %>% .[(order(source, year, tap_bin_id))]
+  bin.dt <- unique(dt, by=c('loc', 'type', 'year', 'tap_bin')) %>% .[(order(type, year, tap_bin_id))]
   
   #add on the missing bins
-  bin.dt <- merge(bin.dt, log.dt, by=c('loc', 'source', 'year', 'tap_bin_id'), all.y=T, allow.cartesian=T)
-  bin.dt[, sum := nafill(sum, type = "nocb"), by=.(source, year)]
+  bin.dt <- merge(bin.dt, seq.dt, by=c('loc', 'type', 'year', 'tap_bin_id'), all.y=T, allow.cartesian=T)
+  bin.dt[, sum := zoo::na.aggregate(sum), by=.(type, year)]
   bin.dt[is.na(bin_sum), bin_sum := 0]
   
   #calculate density
@@ -170,37 +174,49 @@ makeTapDensityPlot <- function(
   bin.dt[, smooth := loess(log(density+nudge) ~ mid, span=smoother) %>% 
            predict(.SD) %>% 
            exp, 
-         by=.(source, loc, year)]
+         by=.(type, loc, year)]
   
+  #calculate cumulative density across sample
+  stats <- copy(bin.dt) %>% setkey(., mid, year)
+  stats[, sum := sum(prob, na.rm=T), by=key(stats)]
+  stats <- stats %>% .[, .(sum, mid, year)] %>% unique(., by=key(.))
+  stats[, cum := cumsum(sum), by = year]
+  
+  #define stats to print
+  quantiles <- expand.grid(year=c(start_year, end_year),
+                            cum=c(.2, 0.25, .4, .5, .6, .75, .8)) %>% as.data.table
+  
+  quantiles <- stats[quantiles, on=.(year, cum), roll='nearest'] 
+  print(quantiles)
+
   #melt years to make a new variable
-  bin.dt <- bin.dt[, .(loc, source, year, mid, smooth)] #drop everything else that varies by year and cleanup dt
+  bin.dt <- bin.dt[, .(loc, type, year, mid, smooth)] #drop everything else that varies by year and cleanup dt
   bin.dt[, year := paste0('smooth_', year)]
   bin.dt <- dcast(bin.dt, ...~year, value.var='smooth')
   
   #make color palette
   bin.dt[, loc := factor(loc)]
-  #bin.dt[, loc := forcats::fct_rev(factor(loc))]
   if(uniqueN(bin.dt$loc)>2) loc_colors <- brewer.pal(uniqueN(bin.dt$loc)-1, "Paired")
   else loc_colors <- c('#a6cee3', '#fdbf6f')
   loc_colors <- c('#bdbdbd', loc_colors) #force other to grey
 
   #make plot
   plot <-
-    ggplot(data=bin.dt, 
-           aes(x=mid, y=smooth_2018, fill=loc, color=loc, alpha=source)) +
+    ggplot(data=bin.dt[type!='TAP'], 
+           aes(x=mid, y=smooth_2018, fill=loc, color=loc, alpha=type)) +
     #endyear plots
     geom_area() +
     #start year plots
     geom_area(aes(y=smooth_2000*-1)) + #invert for the mirrored comparison
     #thresholds
-    geom_vline(xintercept=10, linetype='dashed', color='gray10') +
+    geom_vline(xintercept=10, linetype='dashed', color='dodgerblue2') +
     geom_hline(yintercept=0, color='gray10', size=1) +
     #scales
     scale_x_sqrt('', limits=c(0+nudge, 750),
                  breaks=c(10, 25, 50, 100, 200, 400, 750)) +
     scale_color_manual('Country', values=loc_colors) +
     scale_fill_manual('Country', values=loc_colors) +
-    scale_alpha_manual(values=c('aap'=.4, 'hap'=1), guide=F) +
+    scale_alpha_manual(values=c('AAP'=.4, 'HAP'=1), guide=F) +
     theme_minimal() +
     labs(title = '') +
     #annotations
@@ -214,6 +230,24 @@ makeTapDensityPlot <- function(
           legend.margin = margin(6, 6, 6, 6),
           plot.margin = margin(0, 0, 0, 0, "pt")
           )
+  
+  if(plot_quartiles) {
+    
+    plot <- plot +     #quartiles
+    geom_segment(aes(y=0, yend=.01, x=quartiles[year==2018 & cum==.25, mid],
+                     xend=quartiles[year==2018 & cum==.25, mid]), linetype='dotted', color='gray10') +
+    geom_segment(aes(y=0, yend=.01, x=quartiles[year==2018 & cum==.5, mid],
+                     xend=quartiles[year==2018 & cum==.5, mid]), linetype='dotted', color='gray10') +
+    geom_segment(aes(y=0, yend=.01, x=quartiles[year==2018 & cum==.75, mid],
+                     xend=quartiles[year==2018 & cum==.75, mid]), linetype='dotted', color='gray10') +
+    geom_segment(aes(y=0, yend=-.01, x=quartiles[year==2000 & cum==.25, mid],
+                     xend=quartiles[year==2000 & cum==.25, mid]), linetype='dotted', color='gray10') +
+    geom_segment(aes(y=0, yend=-.01, x=quartiles[year==2000 & cum==.5, mid],
+                     xend=quartiles[year==2000 & cum==.5, mid]), linetype='dotted', color='gray10') +
+    geom_segment(aes(y=0, yend=-.01, x=quartiles[year==2000 & cum==.75, mid],
+                     xend=quartiles[year==2000 & cum==.75, mid]), linetype='dotted', color='gray10')
+    
+  }
   
   return(plot)
   

@@ -43,9 +43,9 @@ if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
   
   ## set arguments
-  reg                      <- 'AGO'
+  reg                      <- 'noaf-ESH'
   age                      <- 0
-  run_date                 <- "2020_03_26_15_42_57"
+  run_date                 <- "2020_05_17_11_40_28"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -580,9 +580,11 @@ if (as.logical(skiptoinla) == FALSE) {
                              simple      = simple_polygon,
                              max_edge    = mesh_s_max_edge,
                              mesh_offset = mesh_s_offset)
+  saveRDS(mesh_s, file=file.path(outputdir, paste0(reg, '_mesh_s.RDS')))
   
   ## Build temporal mesh (standard for now)
   mesh_t <- build_time_mesh(periods=eval(parse(text=mesh_t_knots)))
+  saveRDS(mesh_t, file=file.path(outputdir, paste0(reg, '_mesh_t.RDS')))
   
   ## ## For raw covs, don't want to center-scale (as that will happen in `build_mbg_data_stack()`)
   ##

@@ -1,9 +1,9 @@
 "","covariate","measure","include","gbd"
 "1","access2","mean",TRUE,FALSE
-"2","crutsfrs","sum",TRUE,FALSE
+"2","crutsdtr","mean",TRUE,FALSE
 "3","crutspet","mean",TRUE,FALSE
-"4","depratio","youngage",TRUE,FALSE
-"5","distriverslakes","mean",TRUE,FALSE
+"4","distriverslakes","mean",TRUE,FALSE
+"5","dmspntl","mean",TRUE,FALSE
 "6","elevation","mean",TRUE,FALSE
 "7","escroplandarea","mean",TRUE,FALSE
 "8","evi","median",TRUE,FALSE
@@ -13,8 +13,7 @@
 "12","herreronyield","vita",TRUE,FALSE
 "13","irrigation","mean",TRUE,FALSE
 "14","landcover","proportionalclass13",TRUE,FALSE
-"15","lst_avg_v6","mean_mean",TRUE,FALSE
-"16","mswep","sum",TRUE,FALSE
-"17","sanitation_prop","mean",TRUE,TRUE
-"18","tcb_v6","mean_mean",TRUE,FALSE
-"19","worldpop","total",TRUE,FALSE
+"15","mswep","sum",TRUE,FALSE
+"16","sanitation_prop","mean",TRUE,TRUE
+"17","tcw_v6","mean_mean",TRUE,FALSE
+"18","worldpop","total",TRUE,FALSE

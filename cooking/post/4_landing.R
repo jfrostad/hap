@@ -49,7 +49,7 @@ commondir       <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', s
 package_lib    <- sprintf('%s_code/_lib/pkg',h_root)
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
-pacman::p_load(data.table, scales, ggplot2, RColorBrewer, sf, viridis, farver, reldist) 
+pacman::p_load(data.table, fst, scales, ggplot2, RColorBrewer, sf, stringr, viridis, farver, reldist) 
 package_list    <- package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 # Use setup.R functions to load common LBD packages and mbg_central "function" scripts
@@ -62,7 +62,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 run_date <- '2020_05_17_11_40_28'
-lri_run_date <- '2020_01_10_15_18_27'
+lri_run_date <- '2020_06_11_11_19_26'
 shapefile <- "2019_09_10"
 
 indicator_group <- 'cooking'
@@ -89,8 +89,8 @@ map_ind_gp <- 'hap'
 data.dir <- file.path('/ihme/geospatial/mbg/cooking/post', run_date)
 
 lri_dir <- '/ihme/geospatial/mbg/lri/has_lri/output'
-  lri_rate_path <- 'has_lri_admin_2_raked_mortality_summary.csv'
-  lri_counts_path <- 'has_lri_c_admin_2_raked_mortality_summary.csv'
+  lri_rate_path <- 'has_lri_raked_mortality_admin_draws_eb_bin0_0.RData'
+  lri_counts_path <- 'has_lri_raked_mortality_c_admin_draws_eb_bin0_0.RData'
   
 #link
 global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', shapefile) #TODO make official
@@ -107,59 +107,13 @@ map.dir <- file.path(j_root, 'WORK/11_geospatial/09_MBG_maps', map_ind_gp)
 ##function lib##
 #PE functions#
 file.path(my_repo, '_lib', 'post', 'map_fx.R') %>% source
-file.path(my_repo, '_lib', 'post', 'make_projections.R') %>% source
+file.path(my_repo, '_lib', 'post', 'landing_gear.R') %>% source
 
 #gbd fx
 gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 
-#custom function to save files into the central mapping format
-saveMappingInput <- function(dt, 
-                             map_ind,
-                             data_ind=map_ind, #but it could be different if misnamed
-                             map_measure,
-                             data_measure=map_measure, #but it could be different if misnamed 
-                             raking_label=raked,
-                             admin_level=2,
-                             parent_dir=map.dir
-) {
-  
-  #define dirs and paths (also create recursively)
-  out_dir <- file.path(parent_dir, map_ind, run_date, 'inputs') %T>% dir.create(recursive=T) 
-  out_path <- file.path(out_dir, paste0(map_ind, '_', map_measure,
-                                        ifelse(raking_label, '_raked_', '_unraked_'), 
-                                        'ad', admin_level, '.csv')) %T>%
-    message('saving data for ind=', data_ind, ' (', map_measure, ') as\n',
-            .)
-  
-  #setup dt
-  out <- copy(dt) %>% 
-    .[, c(paste0('ADM', admin_level, '_CODE'), paste(data_ind, data_measure, sep='_'), 'year'), with=F] %>% 
-    setnames(paste(data_ind, data_measure, sep='_'), 'value')
-  
-  #save
-  write.csv(out, file=out_path, row.names=F)
-  
-}
 
-#helper fx to pull/prep the appropriate files from our list of SDG projection objects
-prepCasts <- function(id, type, list=sdg_files, id_dt=NA, id_var=NA) {
-  
-  #format ID var if necessary
-  if(nchar(id)==4) id <- as.character(id) #if the ID is a year, format as character
-  
-  #helper function to extract the correct object
-  extractObj <- ifelse(type!='aroc',
-                       function(x) list[[x]][[type]][[id]] %>% as.data.table,
-                       function(x) list[[x]][[type]] %>% as.data.table ) #aroc only has one object
-
-  #do the formatting and extractions
-  lapply(1:length(list), extractObj) %>% 
-    rbindlist %>% 
-    { if(id_var %>% is.na) cbind(., id_dt[id,]) else .[, (id_var) := id] } %>% 
-    return
-  
-}
 #***********************************************************************************************************************
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
@@ -198,130 +152,101 @@ iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid)
 iso3_map$geometry <- NULL
 iso3_map <- as.data.table(iso3_map) %>% unique
 locs <- merge(locs, iso3_map, by='iso3')
-
-#read LRI rates per 1000/counts
-has_lri <- file.path(lri_dir, lri_run_date, 'pred_derivatives/admin_summaries', lri_rate_path) %>% 
-  fread %>% 
-  .[, .(ADM0_CODE, ADM2_CODE, year, cause='lri', grouping='child',
-        lri_lower=lower, lri_mean=mean, lri_upper=upper)]
-
-has_lri_c <- file.path('/ihme/geospatial/mbg/lri/has_lri/output', 
-                       lri_run_date, 'pred_derivatives/admin_summaries', lri_counts_path) %>% 
-  fread %>% 
-  .[, .(ADM0_CODE, ADM2_CODE, year, cause='lri', grouping='child',
-        lri_c_lower=lower, lri_c_mean=mean, lri_c_upper=upper)]
+adm_links <- merge(adm_links, locs, by=c('ADM0_CODE'), all.x=T)
 
 #combine and save all ad2 level results
-vars <- c('_mean', '_lower', '_upper')
 dt <-
-  list.files(data.dir, pattern='ad2_tap_results', full.names = T) %>% 
-  lapply(., fread) %>% 
+  list.files(data.dir, pattern='ad2_draws.fst', full.names = T) %>% 
+  lapply(., read_fst, as.data.table=T) %>% 
   rbindlist(use.names=T, fill=T) %>% 
-  merge(has_lri, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'cause', 'grouping'), all.x=T) %>% 
-  merge(has_lri_c, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'cause', 'grouping'), all.x=T)
-
-#generate mean/CI for the attributable LRI variables
-dt[, paste0('tap_lri', vars) := lapply(vars, function(x) paste0('lri', x) %>% get * paste0('tap_paf', x) %>% get)] 
-dt[, paste0('tap_lri_c', vars) := lapply(vars, function(x) paste0('lri_c', x) %>% get * paste0('tap_paf', x) %>% get)]
+  .[, `:=` (cause='lri', grouping='child')] #TODO fix this in the descent file
 
 #for now, we are using 2017 results as if they were 2018
 #TODO model 2018
 dt <- copy(dt) %>% 
   .[year==2017] %>% 
   .[, year := 2018] %>% 
-  list(dt, .) %>% rbindlist
+  list(dt, .) %>% rbindlist 
 
-#output file
-write.csv(dt, file.path(data.dir, 'admin_2_summary.csv'), row.names = F)
- 
-#also save a version just for children
-dt[grouping=='child' & cause=='lri'] %>% 
-  write.csv(., file.path(data.dir, 'admin_2_summary_children.csv'), row.names = F)
+#cap PAFs at 0
+#TODO why are there negative PAFs??
+dt[paf<0, paf:=0]
 
-#resample into draws for each variable and then do weighted aggregations in order to produce the AD0 stats
-aggConfidenceIntervals <- function(dt, var, by_vars,
-                                   n_draws=100,
-                                   wt_var='pop',
-                                   debug=F) {
-  
-  if (debug) browser()
-  
-  message('working on ', var)
-  
-  #define variables
-  var_types <- c('lower', 'mean', 'upper')
-  id_vars <- names(dt) %>% .[!(. %like% 'pop|lower|mean|upper')]
-  ind_vars <- paste(var, var_types, sep="_")
-  draw_vars <- paste0('draw_', 1:n_draws)
-  
-  #define transformation based on var
-  logit_space <- !(var %like% 'lri|_c|_pc')
-  count_space <- var %like% '_c'
-  
-  #copy dt with relevant vars
-  out <- dt[, c(id_vars, ind_vars, wt_var), with=F] %>% 
-    copy %>% 
-    setnames(., c(ind_vars, wt_var), c(var_types, 'n'))
+#generate attributable LRI variables
+#read LRI rates per 1000/counts
+load(file.path(lri_dir, lri_run_date, lri_rate_path), verbose=T)
+lri_dt <- admin_2 %>% 
+  melt(.,
+       measure = patterns("V"),
+       variable.name = "draw",
+       value.name = 'rate') %>% 
+  .[, `:=` (cause='lri', grouping='child', pop=NULL, region=NULL)]
 
-  #resample draws using delta method
-  message('resampling')
-  out[, row_id := .I]
-  out[, se := (upper-lower)/3.92] #median N per cluster
-  
-  if(logit_space) {
-  
-    out[, logit_se := sqrt((1/(mean - mean^2))^2 * se^2)]
-    out[, logit_mean := logit(mean)]
-    out[, (draw_vars) := lapply(1:n_draws, function(x) rnorm(.N, logit_mean, logit_se))]
-    out[, (draw_vars) := lapply(.SD, inv.logit), .SDcols=draw_vars]
-    
-  } else out[, (draw_vars) := lapply(1:n_draws, function(x) msm::rtnorm(.N, mean, se, lower=0))]
-  
-  message('aggregating')
+load(file.path(lri_dir, lri_run_date, lri_counts_path), verbose=T)
+lri_dt <- admin_2 %>% 
+  melt(.,
+       measure = patterns("V"),
+       variable.name = "draw",
+       value.name = 'count') %>% 
+  merge(., lri_dt, by=c('year', 'ADM2_CODE', 'draw')) %>% 
+  .[, `:=` (cause='lri', grouping='child', pop=NULL, region=NULL)]
 
-  if (count_space) out[, (draw_vars) := lapply(.SD, sum, na.rm=T), .SDcols=draw_vars, by=by_vars]
-  else out[, (draw_vars) := lapply(.SD,  Hmisc::wtd.mean, weights=n), .SDcols=draw_vars, by=by_vars]
-  out <- unique(out, by=by_vars)
-  
-  message('summarizing')
-  out[, mean := rowMeans(.SD), .SDcols=draw_vars]
-  out[, upper := apply(.SD, 1, quantile, p=.975, na.rm=T), .SDcols=draw_vars]
-  out[, lower := apply(.SD, 1, quantile, p=.025, na.rm=T), .SDcols=draw_vars]
+dt <- merge(dt, lri_dt, by=c('ADM2_CODE', 'year', 'draw', 'grouping', 'cause'), all.x=T) 
+dt[, atr_rate := rate * paf]
+dt[, atr_count := count * paf]
 
-  out[, (draw_vars) := NULL]
-  
-  setnames(out, var_types, ind_vars)
-  setkeyv(out, id_vars)
-  
-  out[, c(id_vars, ind_vars), with=F]
-  
-  
-}
-
-ad0_results <-
-mclapply(c('dfu', 'hap_pct', 'tap_pc', 'tap_paf', 'tap_lri', 'tap_lri_c'), aggConfidenceIntervals,
-       dt=dt[grouping=='child' & cause=='lri'], by_vars=c('ADM0_CODE', 'year', 'cause', 'grouping'), mc.cores=3) %>%
-  Reduce(function(...) merge(..., all = TRUE), .)
-
-write.csv(ad0_results, file.path(data.dir, 'admin_0_summary.csv'), row.names = F)
-
-#resample into draws for each variable and then do weighted aggregations in order to produce the AD1 stats
-ad1_results <- 
-  mclapply(c('dfu', 'hap_pct', 'tap_pc', 'tap_paf', 'tap_lri', 'tap_lri_c'), aggConfidenceIntervals, 
-         dt=merge(dt[grouping=='child' & cause=='lri'], 
-                  adm_links[, .(ADM0_CODE, ADM2_CODE, ADM1_CODE)], 
-                  by=c('ADM0_CODE', 'ADM2_CODE')), 
-         by_vars=c('ADM0_CODE', 'ADM1_CODE', 'year', 'cause', 'grouping'), mc.cores=3) %>% 
-  Reduce(function(...) merge(..., all = TRUE), .)
-
-write.csv(ad1_results, file.path(data.dir, 'admin_1_summary.csv'), row.names = F)
-
-#merge sr region names/IDs
+#merge sr region names/IDs/ADM1_CODES
 dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
-dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'))
+dt <- merge(dt, adm_links[, .(ADM1_CODE, ADM2_CODE)], by='ADM2_CODE')
 
-#intermediate measures
-dt[, u5_pct := pop/pop_total]
+#for some reason its missing TTO
+#TODO update centrally
+dt[ADM0_CODE==225, `:=` (iso3='TTO',
+                         location_name='Trinidad and Tobago',
+                         super_region_id=103,
+                         super_region_name='Latin America and Caribbean',
+                         region_id=120,
+                         region_name='Andean Latin America')]
+
+#define columns to summarize
+ind_cols <- c('share', 'pm_pc', 'prev', 'paf', 'rate', 'count', 'atr_rate', 'atr_count')
+
+#define list of aggregations
+by_cols <- list('global'=c('year', 'type', 'cause', 'grouping'),
+                'super_region'=c('year', 'type', 'cause', 'grouping', 'super_region_id'),
+                'region'=c('year', 'type', 'cause', 'grouping', 'region_id'),
+                'ad0'=c('year', 'type', 'cause', 'grouping', 'ADM0_CODE'),
+                'ad1'=c('year', 'type', 'cause', 'grouping', 'ADM0_CODE', 'ADM1_CODE'),
+                'ad2'=c('year', 'type', 'cause', 'grouping', 'ADM0_CODE','ADM2_CODE'))
+
+#summarize and produce aggregations
+results <- mclapply(1:length(by_cols), 
+                    calcSummaryStats,
+                    by_list=by_cols,
+                    dt=dt, 
+                    ind_cols=ind_cols,
+                    mc.cores=6) %>% rbindlist(use.names=T, fill=T)
+
+#save all aggregations
+write.fst(results, file.path(data.dir, 'all_summary.fst'))
+
+#helper function to save each aggregation type while cleaning up any irrelevant variables
+saveResults <- function(agg, dt) {
+  
+  message('saving ', agg, ' results')
+  
+  dt[lvl==agg] %>% 
+    Filter(function(x) !all(is.na(x)), .) %>% 
+    write.csv(., paste0(data.dir, '/', agg, '_summary.csv'), row.names = F)
+  
+  return(NULL)
+  
+  
+} 
+
+lapply(by_cols %>% names, saveResults, dt=results)
+
+stop()
 
 #produce inequality metrics
 #calculate GINI/MAD at country level
@@ -334,22 +259,10 @@ dt_ineq[, max := max(dfu_mean, na.rm=T), by=.(iso3, year)]
 dt_ineq[, min := min(dfu_mean, na.rm=T), by=.(iso3, year)]
 dt_ineq[, range := max-min]
 
-#produce change metrics
-#TODO move this to be at pixel level
-#calculate rates of change
-these_cols <- c('hap_pct', 'dfu', 'tap_paf', 'tap_pc', 'tap_lri')
-these_cols <- paste0(these_cols, '_mean')
-d_cols <- paste0(these_cols, '_d')
-dr_cols <- paste0(these_cols, '_dr')
-aroc_cols <- paste0(these_cols, '_aroc')
-dt_d <- setkey(dt, ADM0_CODE, ADM2_CODE, grouping, cause) %>% 
-  .[year %in% c(start_year, end_year)] %>% 
-  .[grouping=='child' & cause=='lri'] %>%  #currently only estimating change for LRI
-  .[, (d_cols) := .SD-data.table::shift(.SD,n=1), .SDcols=these_cols, by=key(dt)] %>% 
-  .[, (dr_cols) := (.SD-data.table::shift(.SD,n=1))/data.table::shift(.SD,n=1), .SDcols=these_cols, by=key(dt)] %T>% 
-  .[, (aroc_cols) := (.SD-data.table::shift(.SD,n=1))/(end_year-start_year), .SDcols=these_cols, by=key(dt)] %T>% 
-  #also output the file for later
-  write.csv(., file.path(data.dir, 'admin_2_delta_summary.csv'), row.names = F)
+
+
+#also output the file for later
+write.csv(dt_d, file.path(data.dir, 'admin_2_delta_summary.csv'), row.names = F)
 
 #also create ad2 sf object for spatial analyses
 data <-  

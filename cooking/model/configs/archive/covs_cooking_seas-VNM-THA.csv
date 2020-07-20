@@ -12,8 +12,8 @@
 "11","ghslurbanicity","mean",TRUE,FALSE
 "12","herreronyield","vita",TRUE,FALSE
 "13","irrigation","mean",TRUE,FALSE
-"14","ldi_pc","mean",TRUE,TRUE
-"15","mswep","sum",TRUE,FALSE
-"16","nexndvi","mean",TRUE,FALSE
-"17","tcw_v6","mean_mean",TRUE,FALSE
-"18","worldpop","total",TRUE,FALSE
+"14","landcover","proportionalclass13",TRUE,FALSE
+"15","ldi_pc","mean",TRUE,TRUE
+"16","mswep","sum",TRUE,FALSE
+"17","sanitation_prop","mean",TRUE,TRUE
+"18","tcw_v6","mean_mean",TRUE,FALSE

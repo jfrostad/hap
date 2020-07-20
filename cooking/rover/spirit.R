@@ -89,7 +89,7 @@ out.dir  <- file.path('/ihme/geospatial/mbg/cooking/maps', run_date) %T>% dir.cr
 ##function lib##
 #PE functions#
 file.path(my_repo, '_lib', 'post', 'map_fx.R') %>% source
-file.path(my_repo, '_lib', 'post', 'plot_fx.R') %>% source
+file.path(my_repo, '_lib', 'diagnostics', 'plot_fx.R') %>% source
 
 #gbd fx
 gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
@@ -113,8 +113,6 @@ prepCasts <- function(id, type, list=sdg_files, id_dt=NA, id_var=NA) {
     return
   
 }
-
-
 #***********************************************************************************************************************
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
@@ -139,7 +137,7 @@ stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_sta
 adm2 <- rbind(stage1, stage2)
 
 #read in results for lri/children
-dt <- file.path(data.dir, 'admin_2_summary.csv') %>% fread
+dt <- file.path(data.dir, 'new_admin_2_summary.csv') %>% fread
 
 #merge sr region names/IDs
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
@@ -150,19 +148,7 @@ iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid)
 iso3_map$geometry <- NULL
 iso3_map <- as.data.table(iso3_map) %>% unique
 locs <- merge(locs, iso3_map, by='iso3')
-
-#merge sr region names/IDs
-dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
-dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'))
-
-#for some reason its missing TTO
-#TODO update centrally
-dt[ADM0_CODE==225, `:=` (iso3='TTO',
-                         location_name='Trinidad and Tobago',
-                         super_region_id=103,
-                         super_region_name='Latin America and Caribbean',
-                         region_id=120,
-                         region_name='Andean Latin America')]
+dt <- merge(dt, locs, by='ADM0_CODE')
 
 #read in results for lri/children
 dt_d <- file.path(data.dir, 'admin_2_delta_summary.csv') %>% fread
@@ -170,38 +156,38 @@ dt_d <- file.path(data.dir, 'admin_2_delta_summary.csv') %>% fread
 #setup the list of top countries
 #defined by population in 2018
 biggest_countries <- 
-  dt[year==max(dt$year), .(sum=sum(pop_total, na.rm=T)), by=.(iso3)] %>%
+  dt[year==max(dt$year) & lvl=='ad2', .(sum=sum(pop_total, na.rm=T)), by=.(iso3)] %>%
   .[order(sum)] %>%
   tail(10) %>%
   .[, unique(iso3)]
 
 #defined based on LRI rates/counts
 top_countries <- 
-  dt[year==min(dt$year), .(mean=weighted.mean(lri_mean, w=pop, na.rm=T)), by=.(iso3)] %>%
+  dt[year==min(dt$year), .(mean=weighted.mean(rate_mean, w=pop, na.rm=T)), by=.(iso3)] %>%
   .[order(mean)] %>%
   tail(10) %>%
   .[, unique(iso3)]
 
 top_countries_c <-
-  dt[year==min(dt$year), .(sum=sum(lri_c_mean, na.rm=T)), by=.(iso3)] %>%
+  dt[year==min(dt$year), .(sum=sum(count_mean, na.rm=T)), by=.(iso3)] %>%
   .[order(sum)] %>%
   tail(14) %>%
   .[, unique(iso3)]
 
 #top country per GBD region
 top_countries_gbdreg <- #defined based on LRI counts
-  dt[year==min(dt$year), .(sum=sum(lri_c_mean, na.rm=T)), by=.(iso3,region_name)] %>%
+  dt[year==min(dt$year), .(sum=sum(count_mean, na.rm=T)), by=.(iso3,region_name)] %>%
   .[, .SD[which.max(sum)], by=region_name]
 
 #top country per MBG region
 regs <- load_adm0_lookup_table() %>% .[,.(mbg_reg_name=reg_name, mbg_reg, iso3=toupper(iso3))] %>% unique
 dt <- merge(dt, regs, by='iso3')
 top_countries_mbgreg <- #defined based on LRI counts
-  dt[year==min(dt$year), .(sum=sum(lri_c_mean, na.rm=T)), by=.(iso3,mbg_reg)] %>%
+  dt[year==min(dt$year), .(sum=sum(count_mean, na.rm=T)), by=.(iso3,mbg_reg)] %>%
   .[, .SD[which.max(sum)], by=mbg_reg]
 
 second_countries_reg <- #defined based on LRI counts
-  dt[year==min(dt$year), .(sum=sum(lri_c_mean, na.rm=T)), by=.(iso3,mbg_reg_name)] %>% 
+  dt[year==min(dt$year), .(sum=sum(count_mean, na.rm=T)), by=.(iso3,mbg_reg_name)] %>% 
   .[!(iso3 %in% unique(top_countries_gbdreg$iso3))] %>% 
   .[, .SD[which.max(sum)], by=mbg_reg_name]
 
@@ -224,7 +210,7 @@ zoom.afr <- data.table(x1=-10, x2=50, y1=-20, y2=40)
 zoom.global <- data.table(x1=-120, x2=150, y1=-40, y2=55)
 #***********************************************************************************************************************
 
-# ---FIGURE 1-----------------------------------------------------------------------------------------------------------
+# ---EXT FIG 1-----------------------------------------------------------------------------------------------------------
 #create region colors
 reg_colors <- c('4'='#1f78b4',
                 '31'='#fb9a99',
@@ -368,7 +354,7 @@ ggsave(filename=file.path(out.dir, 'aid_vs_cfu.png'), plot=plot,
        width=12, height=8, units='in', dpi=500)
 #***********************************************************************************************************************
 
-# ---FIGURE 2-----------------------------------------------------------------------------------------------------------
+# ---FIGURE 4-----------------------------------------------------------------------------------------------------------
 #setup plot data
 plot.dt <- dt %>% 
   copy %>% 
@@ -457,11 +443,11 @@ plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay,
 ) %>% 
   grid.arrange
 
-ggsave(plot=plot, filename=file.path(out.dir, 'fig_5.png'),
+ggsave(plot=plot, filename=file.path(out.dir, 'fig_4.png'),
        width=12, height=8, units='in', dpi=900)
 #***********************************************************************************************************************
  
-# ---FIGURE 3-----------------------------------------------------------------------------------------------------------
+# ---FIGURE 2-----------------------------------------------------------------------------------------------------------
 #SDG projection probabilities
 #append the ADM2 files
 sdg_files <-
@@ -612,24 +598,21 @@ ggsave(filename=file.path(out.dir, 'sdg_district_ranges.png'), plot=plot,
        width=12, height=8, units='in', dpi=500)
 #***********************************************************************************************************************
 
-# ---FIGURE 4-----------------------------------------------------------------------------------------------------------
+# ---FIGURE 3-----------------------------------------------------------------------------------------------------------
 #histogram/density plot of LRI deaths vs tap_pc
 #setup plot data
 plot.dt <- dt %>% 
   copy %>% 
-  .[year %in% c(2000, 2017)] %>% 
-  .[year==2017, year := 2018] %>% 
-  .[grouping=='child' & cause=='lri'] %>% 
-  #.[tap_pc_mean>750, tap_pc_mean := 750] %>%  #cap at 750 ug/m3
-  na.omit(., cols=c('dfu_mean', 'pop')) %>% 
-  .[, .(iso3, ADM0_NAME, ADM2_CODE, year, pop, pop_total, hap_pct_mean, tap_pc_mean, lri_c_mean, tap_lri_c_mean,
+  .[year %in% c(2000, 2018)] %>% 
+  na.omit(., cols=c('prev_mean', 'pop')) %>% 
+  .[, .(iso3, ADM0_NAME, ADM2_CODE, year, pop, pop_total, type, share_mean, pm_pc_mean, count_mean, atr_count_mean,
         region_id, super_region_id)]
 
 #generate regular sequence
-reg_bins <- c(seq(0, 750, length.out = 399), max(plot.dt$tap_pc_mean, na.rm=T))
+reg_bins <- c(seq(0, 750, length.out = 399), max(plot.dt$pm_pc_mean, na.rm=T))
 
 #generate logarithmically spaced sequence
-log_bins <- c(exp(seq(log(.01), log(750), length.out = 399)), max(plot.dt$tap_pc_mean, na.rm=T))
+log_bins <- c(exp(seq(log(.01), log(750), length.out = 399)), max(plot.dt$pm_pc_mean, na.rm=T))
 
 #generate the plots
 pop_plot <-
@@ -639,7 +622,7 @@ pop_plot <-
                      smoother=.1)
 death_plot <-
 makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries, 
-                   wt_var='tap_lri_c_mean', 
+                   wt_var='atr_count_mean', 
                    sequence=log_bins,
                    smoother=.1)
 
@@ -660,8 +643,8 @@ plot <- arrangeGrob(grobs=list(pop_plot + theme(legend.position = 'none'),
 )
 
 #draw plot and legend/annotations
-png(paste0(out.dir, '/fig_4.png'),
-    height=8, width=12, units='in', res=1200)
+png(paste0(out.dir, '/fig_3.png'),
+    height=8, width=12, units='in', res=1600)
 grid.arrange(plot)
 grid.draw(legend)
 grid.text('a', x = unit(0.01, "npc"), y = unit(0.95, "npc"), gp = gpar(fontsize = 24, fontface = "bold"))
@@ -674,7 +657,7 @@ dev.off()
 
 #***********************************************************************************************************************
 
-# ---FIGURE 5----------------------------------------------------------------------------------------------------------
+# ---EXT FIG 2----------------------------------------------------------------------------------------------------------
 #Figure 5: Inequality over time
 dt_ineq <- dt[cause=='all' & grouping=='child', 
               .(iso3, year, ADM0_CODE, ADM2_CODE, ADM2_NAME, dfu_mean, 

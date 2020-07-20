@@ -76,7 +76,7 @@ today <- Sys.Date()
 
 # ---OPTIONS------------------------------------------------------------------------------------------------------------
 ## set arguments
-format <- T #set T if needing to reformat the cellpreds to long data.table
+format <- F #set T if needing to reformat the cellpreds to long data.table
 prep_gbd_files <- F #set T if change on GBD side requires reprep of GBD info
 
 #countries we want to process by state 
@@ -490,17 +490,16 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       
       #add on the identifying info
       sev_admin_2 <- merge(sev_admin_2, adm_links, by='ADM2_CODE')
-
-      #calculate the LRI attrib to TAP
-      # dt[, tap_lri_r := tap_paf * lri] #rate
-      # dt[, tap_lri_c := tap_paf * lri * pop] #count
+      
+      #drop all cause/groupings except child LRIs, we only use the others to calculate the SEV
+      dt <- dt[cause=='lri' & grouping=='child']
 
       #first remove any unnecessary cols
-      null_cols <- c('ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pm',
+      null_cols <- c('ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pm', 'grouping', 'cause',
                      'rr', 'rr_max', 'ID', 'age_group_id', 'sex_id')
       dt <- dt[, (null_cols) := NULL]
 
-      #helper function for aggregating columns from pixel-draws to ad0/1/2 C.I.s
+      #helper function for aggregating columns from pixel-draws to adms
       aggResults <- function(dt, by_cols, agg_cols, mbg_var, make_ci=T, make_sums=T) {
         
         agg <- copy(dt)
@@ -551,46 +550,54 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       
       #agg ad2s by grouping
       agg <- aggResults(dt, 
-                        by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'draw'), 
-                        agg_cols=c('hap_pct', 'tap_pc', 'dfu', 'hap_sev'),
+                        by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year','draw'), 
+                        agg_cols=c('hap_pct', 'tap_pc', 'dfu', 'tap_paf'),
                         mbg_var='dfu', 
-                        make_sums=F)
-      
-      #agg pafs by cause
-      agg <- aggResults(dt, 
-                        by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'draw', 'cause'), 
-                        agg_cols='tap_paf',
-                        mbg_var='dfu') %>% 
-        merge(agg, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'draw'), allow.cartesian=T)
-      
-      #since only PAFs are unique by cause, copy all other indicators into 'all' cause bracket
-      agg <- agg %>%
-        copy %>%
-        .[cause=='lri'] %>%
-        .[, cause := 'all'] %>%
-        #PAFs are not valid at this level without some kind of outcome weighting which we dont have
-        #TODO could use GBD loc-year outcome rates in order to weight?
-        .[, tap_paf := NA] %>%
-        list(agg, .) %>% rbindlist
+                        make_sums=T)
 
-      #cleanup to save space
-      rm(dt)
+      rm(dt) #cleanup to save space
       
+      #reformatting results
+      #first distinguish between pollution types in long format
+      agg <- tidyr::crossing(agg, data.table(type=c('TAP', 'AAP', 'HAP'))) %>% as.data.table
+      
+      #redefine variables based on particle type
+      setnames(agg, c('hap_pct', 'tap_pc', 'tap_paf', 'dfu'), c('share', 'pm_pc', 'paf', 'prev'))
+      
+      #define share of particulates
+      agg[type=='TAP', share := 1]
+      agg[type=='AAP', share := 1-share]
+      
+      #define mass of particulates
+      agg[, pm_pc := pm_pc * share]
+      
+      #define pafs
+      agg[, paf := paf * share]
+      
+      #assume all are exposed to ambient
+      agg[type=='AAP', prev := 1]
+      
+      #TODO
+      #save draw files for later aggregations
+      # draw_path <- paste0('draws_', unique(agg$ADM0_CODE), '_', state, '.fst')
+      # write.fst(agg, file.path(outputdir, 'tmp', draw_path)
+
       #collapse over draws to create C.I.
+      #TODO get draws of LRI to calculate here
       #if (msg) message('collapsing draws to mean/C.I.')
-      ind_cols <- c('hap_pct', 'tap_pc', 'dfu', 'hap_sev', 'tap_paf')
-      agg[, paste0(ind_cols, '_lower') := lapply(.SD, quantile, p=.025, na.rm=T), 
-          .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause')] 
-      agg[, paste0(ind_cols, '_mean') := lapply(.SD, mean, na.rm=T), 
-          .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause')] 
-      agg[, paste0(ind_cols, '_upper') := lapply(.SD, quantile, p=.975, na.rm=T), 
-          .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause')] 
-      agg <- unique(agg, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause'))
-      
+      # ind_cols <- c('share', 'pm_pc', 'prev', 'paf')
+      # agg[, paste0(ind_cols, '_lower') := lapply(.SD, quantile, p=.025, na.rm=T),
+      #     .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type')]
+      # agg[, paste0(ind_cols, '_mean') := lapply(.SD, mean, na.rm=T),
+      #     .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type')]
+      # agg[, paste0(ind_cols, '_upper') := lapply(.SD, quantile, p=.975, na.rm=T),
+      #     .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type')]
+      # agg <- unique(agg, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type'))
+
       #reorder names for legibility
-      agg <- agg[, c('ADM0_CODE', 'ADM2_CODE', 'year', 'grouping', 'cause',
-                     names(agg) %>% .[. %like% 'pop'],
-                     names(agg) %>% .[. %like% 'lower|mean|upper'] %>% sort), with=F]
+      # agg <- agg[, c('ADM0_CODE', 'ADM2_CODE', 'year', 'type',
+      #                names(agg) %>% .[. %like% 'pop'],
+      #                names(agg) %>% .[. %like% 'lower|mean|upper'] %>% sort), with=F]
 
       list('sev_cell_pred'=sev_cell_pred,
            'sev_admin_2'=sev_admin_2,
@@ -654,9 +661,9 @@ sev_cell_pred <- names(out_sev) %>% .[. %like% 'V'] %>%
 
 # finish up and save
 tic('Saving ad2')
-out_path <- file.path(outputdir, paste0(region, '_ad2_tap_results.csv'))
+out_path <- file.path(outputdir, paste0(region, '_ad2_draws.fst'))
 message('-> finished calculating TAP for ad2 level, now saving as \n...', out_path)
-write.csv(out_ad2, file = out_path, row.names = F)
+write.fst(out_ad2, path = out_path)
 toc(log = TRUE)
 
 tic('Saving SEV')

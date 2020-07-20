@@ -14,10 +14,9 @@
 "13","haqi","mean",TRUE,TRUE
 "14","herreronyield","vita",TRUE,FALSE
 "15","irrigation","mean",TRUE,FALSE
-"16","landcover","proportionalclass13",TRUE,FALSE
-"17","ldi_pc","mean",TRUE,TRUE
-"18","mswep","sum",TRUE,FALSE
-"19","nexndvi","mean",TRUE,FALSE
-"20","sanitation_prop","mean",TRUE,TRUE
-"21","tcb_v6","mean_mean",TRUE,FALSE
-"22","worldpop","total",TRUE,FALSE
+"16","ldi_pc","mean",TRUE,TRUE
+"17","mswep","sum",TRUE,FALSE
+"18","nexndvi","mean",TRUE,FALSE
+"19","sanitation_prop","mean",TRUE,TRUE
+"20","tcb_v6","mean_mean",TRUE,FALSE
+"21","worldpop","total",TRUE,FALSE

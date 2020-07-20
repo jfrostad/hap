@@ -67,8 +67,8 @@
                'seas-VNM-THA', 'VNM', 'THA',
                'mide+TKM', 'soas')
   
-  regions <- c('CHN', 'trsa-GUF')
-  regions <- 'ERI+DJI+YEM'
+  #regions <- c('CHN', 'trsa-GUF')
+  #regions <- 'ERI+DJI+YEM'
   
   ## Set repo location, indicator group, and some arguments
   user <- 'jfrostad'
