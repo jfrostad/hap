@@ -37,19 +37,33 @@ interactive <- F  %>% #manual override
   ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
   ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
 
-debug.args <- c('simulate',
-                'command',
-                'args',
-                'jfrostad',
-                "/homes/jfrostad/_code/lbd/hap",
-                'cooking',
-                'cooking_fuel_solid',
-                'config_hap_standard',
-                'cooking/model/configs/',
-                'covs_cooking_VNM',
-                'cooking/model/configs/', 
-                '2020_05_17_11_40_28',
-                'prev')
+if (interactive) {
+
+  ## Set repo location, indicator group, and some arguments
+  user <- 'jfrostad'
+  core_repo <- "/homes/jfrostad/_code/lbd/hap"
+  indicator_group <- 'cooking'
+  indicator <- 'cooking_fuel_solid'
+  holdout <- 0
+  age <- 0
+  run_date <- '2020_09_13_22_45_55'
+  measure <- 'prev'
+  reg <- 'essa'
+  config_par   <- 'hap_sp_fine'
+  cov_par <- paste(indicator_group, reg, sep='_')
+  my_repo <- "/homes/jfrostad/_code/lbd/hap"
+  
+} else {
+  
+  ## Set repo location, indicator group, and some arguments
+  user            <- commandArgs()[4]
+  core_repo       <- commandArgs()[5]
+  indicator_group <- commandArgs()[6]
+  indicator       <- commandArgs()[7]
+  config_par      <- commandArgs()[8]
+  cov_par         <- commandArgs()[10]
+
+}
 
 #if new vetting activity has occured, need to refresh the local sheet
 new_vetting <- F
@@ -57,18 +71,18 @@ new_vetting <- F
 #is this a raked model?
 raked <- T
 
-#pull args from the job submission if !interactive
-args <- ifelse(interactive %>% rep(., length(debug.args)), debug.args, commandArgs()) 
-
-## Set repo location, indicator group, and some arguments
-user            <- args[4]
-core_repo       <- args[5]
-indicator_group <- args[6]
-indicator       <- args[7]
-config_par      <- args[8]
-config_file     <- args[9]
-cov_par         <- args[10]
-cov_file        <- args[11]
+# #pull args from the job submission if !interactive
+# args <- ifelse(interactive %>% rep(., length(debug.args)), debug.args, commandArgs()) 
+# 
+# ## Set repo location, indicator group, and some arguments
+# user            <- args[4]
+# core_repo       <- args[5]
+# indicator_group <- args[6]
+# indicator       <- args[7]
+# config_par      <- args[8]
+# config_file     <- args[9]
+# cov_par         <- args[10]
+# cov_file        <- args[11]
 
 message(indicator)
 
@@ -107,18 +121,14 @@ fix_diacritics <<- function(x) {
 ## Throw a check for things that are going to be needed later
 message('Looking for things in the config that will be needed for this script to run properly')
 
-## Read config file and save all parameters in memory
-config <- set_up_config(repo            = core_repo,
-                        indicator_group = '',
-                        indicator       = '',
-                        config_name     = paste0(config_file, config_par),
-                        covs_name       = paste0(cov_file, cov_par))
-
-## Set run date(s)
-run_date <- args[12]
-
-## Set measure
-measure <- args[13]
+config <- set_up_config(repo            = my_repo,
+                        indicator_group = indicator_group,
+                        indicator       = indicator,
+                        config_name     = paste0('/model/configs/config_', config_par),
+                        covs_name       = paste0('/model/configs/covs_', cov_par),
+                        run_tests       = F,
+                        post_est_only   = T,
+)
 
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
@@ -138,7 +148,7 @@ Regions <- Regions[Regions != '']
 message(paste0(Regions, '\n'))
 
 #TODO remove when debugged
-Regions <- Regions %>% .[!(. %like% 'se_asia')]
+Regions <- Regions %>% .[!(. %like% 'essa')]
 
 ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
 holdouts <- 0
@@ -181,25 +191,27 @@ if (indicator == 'cooking_fuel_solid') {
 
 ## Aggregate data and stackers ------------------------------------------------------
 # Aggregate data to admin 0 and 1
-dat <- lapply(Regions,function(x) 
+dat <- mclapply(Regions,function(x) 
   aggregate_input_data(reg=x,
                        indicator, 
                        indicator_group, 
                        run_date,
                        modeling_shapefile_version, 
-                       build=F)
+                       build=F),
+                       mc.cores=5
   ) %>% 
   rbindlist
 
 # Aggregate stackers to admin 0 and 1
-stack <- lapply(Regions, function(x) 
+stack <- mclapply(Regions, function(x) 
   aggregate_child_stackers(reg=x,
                            indicator, 
                            indicator_group, 
                            run_date, 
                            modeling_shapefile_version,
                            pop_measure=pop_measure,
-                           build=F)
+                           build=F),
+                           mc.cores=5
   ) %>% 
   rbindlist
 
@@ -302,7 +314,7 @@ if (use_stacking_covs) {
   
   # plot stackers over time aggregated to admins
   message('Making time series plots for stackers by admin unit')
-  lapply(Regions %>% rev, function(x) 
+  mclapply(Regions %>% rev, function(x) 
     stacker_time_series_plots(reg=x,
                               dt=mbg,
                               indicator, 
@@ -311,7 +323,8 @@ if (use_stacking_covs) {
                               raked=raked,
                               vetting_colorscale=vetting_colors,
                               label='config',
-                              debug=F)
+                              debug=F),
+                              mc.cores=5
   )
   
 }

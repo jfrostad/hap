@@ -1184,7 +1184,9 @@ pull_custom_modeling_regions <- function(custom_regions){
     'dia_south_asia' = 'bgd+btn+ind+lka+npl+pak',
     'dia_mid_east' = 'afg+irn+irq+jor+pse+syr',
     'dia_essa' = 'bdi+com+ken+lso+mdg+moz+mwi+rwa+swz+syc+tza+uga+zmb+zwe',
-    'dia_oceania' = 'asm+fji+fsm+kir+mhl+slb+ton+vut+wsm'
+    'dia_oceania' = 'asm+fji+fsm+kir+mhl+slb+ton+vut+wsm',
+    'dia_s_america_n' = 'guy+col+sur+tto',
+    'dia_s_america_s' = 'bol+ecu+per+pry'
 
   )
   # Warn if there are any custom regions not in the reference list

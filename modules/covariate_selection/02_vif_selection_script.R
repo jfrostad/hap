@@ -15,64 +15,93 @@
 # Faraway's Linear Models in R, Chapter 4: Diagnostics
 # https://beckmw.wordpress.com/2013/02/05/collinearity-and-stepwise-vif-selection/
 # --------------------------------------------------------------------------------------------------
-
+#source('/homes/jfrostad/_code/lbd/hap/modules/covariate_selection/02_vif_selection_script.R') 
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Setup
 
-# load arguments from qsub
-user            <- commandArgs()[4]
-repo            <- commandArgs()[5]
-indicator_group <- commandArgs()[6]
-indicator       <- commandArgs()[7]
-config_par      <- commandArgs()[8]
-config_file     <- commandArgs()[9]
-cov_par         <- commandArgs()[10]
-cov_file        <- commandArgs()[11]
-run_date        <- commandArgs()[12]
-regions         <- commandArgs()[13]
-threshold_min   <- commandArgs()[14]
-threshold_max   <- commandArgs()[15]
-threshold_step  <- commandArgs()[16]
-individual_countries <- commandArgs()[17]
-crop_covs <- commandArgs()[18]
-cropped_covs_file <- commandArgs()[19]
+# clear memory
+rm(list=ls())
+# runtime configuration
+if (Sys.info()["sysname"] == "Linux") {
+  j_root <- "/home/j/"
+  h_root <- file.path("/ihme/homes", Sys.info()["user"])
+  
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
+  ## Load libraries and  MBG project functions.
+  .libPaths(package_lib)
+  
+  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
+  Sys.setlocale(category = "LC_ALL", locale = "C")
+  
+} else {
+  j_root <- "J:"
+  h_root <- "H:"
+}
+
+#load external packages
+pacman::p_load(assertthat, data.table, dplyr, mgsub, raster, sf, fasterize, fst, fmsb)
+
+#detect if running interactively
+interactive <- F  %>% #manual override
+  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
+  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
+
+if (interactive) {
+  
+  ## Set repo location, indicator group, and some arguments
+  user <- 'jfrostad'
+  core_repo <- "/homes/jfrostad/_code/lbd/hap/"
+  indicator_group <- 'cooking'
+  indicator <- 'cooking_fuel_solid'
+  config_par   <- 'hap_sp_fine'
+  config_file <- "cooking/model/configs/"
+  cov_par <- 'hap_standard'
+  cov_file <- "cooking/model/configs/"
+  run_date <- '2020_08_09_11_24_01'
+  measure <- 'prev'
+  reg <- 'ERI+DJI+YEM'
+  threshold_min   <- 2
+  threshold_max   <- 5
+  threshold_step  <- 1
+  individual_countries <- F
+  recrop_covs <- TRUE
+  cropped_covs_file <- ''
+
+  
+} else {
+  
+  # load arguments from qsub
+  user            <- commandArgs()[4]
+  core_repo       <- commandArgs()[5]
+  indicator_group <- commandArgs()[6]
+  indicator       <- commandArgs()[7]
+  config_par      <- commandArgs()[8]
+  config_file     <- commandArgs()[9]
+  cov_par         <- commandArgs()[10]
+  cov_file        <- commandArgs()[11]
+  run_date        <- commandArgs()[12]
+  reg             <- commandArgs()[13]
+  threshold_min   <- commandArgs()[14]
+  threshold_max   <- commandArgs()[15]
+  threshold_step  <- commandArgs()[16]
+  individual_countries <- commandArgs()[17]
+  recrop_covs <- commandArgs()[18]
+  cropped_covs_file <- commandArgs()[19]
+  
+}
+
+
 message(indicator)
 
 # set additional arguments
-core_repo <- repo
-cov_repo <- paste0(repo, '/3_modeling/vif_selected_covs/')
+cov_repo <- paste0(core_repo, '/3_modeling/vif_selected_covs/')
 age <- 0
 holdout <- 0
 threshold <-  c(seq(as.numeric(threshold_min), as.numeric(threshold_max), by = as.numeric(threshold_step)))
 
-# list regions
-if (regions == 'all') {
-  if (indicator=='cooking_fuel_solid') {
-
-    regions <- c('dia_afr_horn-ERI-DJI-YEM', "ERI+DJI+YEM",
-                 'dia_cssa',
-                 'dia_wssa',
-                 'dia_name-ESH',
-                 'dia_mcaca', 'dia_s_america-GUF',
-                 'dia_central_asia', 'dia_chn_mng',
-                 'dia_malay',
-                 'dia_essa-SWZ-ZWE-LSO', 'dia_sssa-ZAF+SWZ+ZWE+LSO', 'ZAF',
-                 'dia_se_asia-VNM-THA', 'VNM', 'THA',
-                 'dia_mid_east-AFG', 'dia_south_asia+AFG',
-                 'dia_afr_horn-ETH-SOM-SSD', 'dia_essa+ETH+SOM+SSD-SWZ-ZWE-LSO')
-
-  } else {
-    regions <- c('dia_afr_horn', 'dia_name', 'dia_sssa', 
-                 'dia_mcaca', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
-                 'dia_se_asia', 'dia_malay', 'dia_mid_east',
-                 'ZWE', 'KEN', 'NGA', 'COD', 'IND', 'PAK',
-                 'dia_essa-zwe-ken', 'dia_wssa-nga', 'dia_cssa-cod', 'dia_south_asia-ind-pak')
-  }
-}
-
 # create directories to save results in
-save_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/covariate_selection_', run_date, '/')
+save_dir <- file.path('/share/geospatial/mbg/', indicator_group, indicator, 'covariate_selection', run_date, '/')
 dir.create(save_dir)
 mbg_input_dir <- paste0(save_dir, 'mbg_inputs/')
 dir.create(mbg_input_dir)
@@ -82,14 +111,37 @@ message('Loading in required R packages and MBG functions')
 package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
-require(assertthat)
+
+
+#use your own diacritics fx, due to inscrutable error
+#note: requires mgsub pkg
+#TODO submit PR
+fix_diacritics <<- function(x) {
+  
+  require(mgsub)
+  
+  #first define replacement patterns as a named list
+  defs <-
+    list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', 
+         '??'='C', '??'='E', '??'='E','??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', 
+         '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U','??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', 
+         '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c','??'='e', '??'='e', '??'='e', 
+         '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
+         '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y', '??'='Ss')
+  
+  #then force conversion to UTF-8 and replace with non-diacritic character
+  enc2utf8(x) %>% 
+    mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
+    return
+  
+}
 
 ## Read config file and save all parameters in memory
 config <- load_config(repo            = core_repo,
                       indicator_group = '',
                       indicator       = '',
-                      config_name     = paste0(config_file, config_par),
-                      covs_name       = paste0(cov_file, cov_par))
+                      config_name     = paste0(config_file, 'config_', config_par),
+                      covs_name       = paste0(cov_file, 'covs_', cov_par))
 
 ## Create proper year list object
 if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
@@ -110,220 +162,193 @@ if (individual_countries) {
 # ------------------------------------------------------------------------------------
 # Crop covariates to data
 
-if (crop_covs == TRUE) {
+if (recrop_covs == TRUE) {
 
-  # set up blank list to store cropped covariate data
-  all_cov_data <- list()
+  # report region and indicator
+  message(paste0('\n', indicator))
+  message(reg)
   
-  # start loop over regions
-  for (region in regions) {
-    
-    
-    # --------------------------------------------------------------------------------------------------
-    # Prep MBG inputs and load data
-    
-    # report region and indicator
-    message(paste0('\n', indicator))
-    reg <- region
-    message(reg)
-    
-    # make pathaddin
-    pathaddin <- paste0('_bin',age,'_',reg,'_',holdout)
-    
-    ## some set up
-    if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
-    if (class(z_list)    == 'character') z_list    <- eval(parse(text=z_list))
-    
-    ## Load simple polygon template to model over
-    gaul_list           <- get_adm0_codes(reg, shapefile_version = modeling_shapefile_version) 
-    simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 1, tolerance = 0.4)
-    subset_shape        <- simple_polygon_list[[1]]
-    simple_polygon      <- simple_polygon_list[[2]]
-    
-    ## Load list of raster inputs (pop and simple)
-    raster_list        <- build_simple_raster_pop(subset_shape)
-    simple_raster      <- raster_list[['simple_raster']]
-    pop_raster         <- raster_list[['pop_raster']]
-    
-    df <- load_input_data(indicator   = gsub(paste0('_age',age),'',indicator),
-                          agebin      = age,
-                          removeyemen = FALSE,
-                          pathaddin   = pathaddin,
-                          years       = yearload,
-                          withtag     = as.logical(withtag),
-                          datatag     = datatag,
-                          use_share   = as.logical(use_share),
-                          yl          = year_list,
-                          region      = reg)
-    
-    ## Remove any data outside of region for ORS
-    if (indicator != 'had_diarrhea') {
-      reg_list <- fread('/share/geospatial/kewiens/custom_regions/dia_region_iso.csv')
-      reg_list[, gadm_adm0_code := get_adm0_codes(iso3, shapefile_version = modeling_shapefile_version), by = V1]
-      iso3_list <- filter(reg_list, gadm_adm0_code %in% gaul_list)
-      iso3_list <- unique(iso3_list$iso3)
-      df <- filter(df, country %in% iso3_list)
-      df <- as.data.table(df)
-    }
-    
-    # remove unecessary folder and data file
-    unlink(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/', run_date, '/'), recursive = TRUE)
-    
-    ## Some built in data checks that cause known problems later on
-    if(indicator_family=='binomial' & any(df[,get(indicator)]/df$N > 1))
-      stop('You have binomial data where k > N. Check your data before proceeding')
-    if(any(df[['weight']] %in% c(Inf,-Inf) | any(is.na(df[['weight']] ))))
-      stop('You have illegal weights (NA,Inf,-Inf). Check your data before proceeding')
-    # --------------------------------------------------------------------------------------------------
-    
-    
-    # --------------------------------------------------------------------------------------------------------------
-    # Pull covariates
-    
-    ## Define modeling space. In years only for now.
-    if(yearload=='annual') period_map <-
-      make_period_map(modeling_periods = c(min(year_list):max(year_list)))
-    if(yearload=='five-year') period_map <-
-      make_period_map(modeling_periods = seq(min(year_list),max(year_list),by=5))
-    
-    ## Make placeholders for covariates
-    cov_layers <- gbd_cov_layers <- NULL
-    
-    ## Pull all covariate bricks/layers
-    if (nchar(fixed_effects) > 0) {
-      message('Grabbing raster covariate layers')
-      
-      effects <- trim(strsplit(fixed_effects, '\\+')[[1]])
-      measures <- trim(strsplit(fixed_effects_measures, '\\+')[[1]])
-      cov_layers <- load_and_crop_covariates_annual(covs            = effects,
-                                                    measures        = measures,
-                                                    simple_polygon  = simple_polygon,
-                                                    start_year      = min(year_list),
-                                                    end_year        = max(year_list),
-                                                    interval_mo     = as.numeric(interval_mo))
-    }
-    
-    ## Pull country level gbd covariates
-    if (nchar(gbd_fixed_effects) > 0) {
-      message('Grabbing GBD covariates')
-      
-      effects <- trim(strsplit(gbd_fixed_effects, '\\+')[[1]])
-      measures <- trim(strsplit(gbd_fixed_effects_measures, '\\+')[[1]])
-      gbd_cov_layers <- load_gbd_covariates(covs     = effects,
-                                            measures = measures,
-                                            year_ids = year_list,
-                                            age_ids  = gbd_fixed_effects_age,
-                                            template = cov_layers[[1]][[1]],
-                                            simple_polygon = simple_polygon,
-                                            interval_mo = interval_mo)
-    }
+  # make pathaddin
+  pathaddin <- paste0('_bin',age,'_',reg,'_',holdout)
   
-    ## Combine all covariates
-    all_cov_layers <- c(cov_layers, gbd_cov_layers)
-    
-    ## regenerate all fixed effects equation from the cov layers
-    all_fixed_effects <- paste(names(all_cov_layers), collapse = ' + ')
-    
-    ## Make stacker-specific formulas where applicable
-    all_fixed_effects_brt <- all_fixed_effects
-    
-    ## Set Up Country Fixed Effects
-    if(use_child_country_fes == TRUE | use_inla_country_fes == TRUE) {
-      message('Setting up country fixed effects')
-      fe_gaul_list <- unique(c(gaul_convert(unique(df[, country])), gaul_list))
-      fe_template  <- cov_layers[[1]][[1]]
-      simple_polygon_list <- load_simple_polygon(gaul_list   = fe_gaul_list,
-                                                 buffer      = 0.4,
-                                                 subset_only = TRUE)
-      fe_subset_shape     <- simple_polygon_list[[1]]
-      gaul_code <- rasterize(fe_subset_shape, fe_template, field = 'GAUL_CODE')
-      gaul_code <- setNames(gaul_code,'gaul_code')
-      gaul_code <- create_categorical_raster(gaul_code)
-      
-      ## update covlayers and add country fixed effects to the
-      all_cov_layers = update_cov_layers(all_cov_layers, gaul_code)
-      all_fixed_effects_cfes = paste(all_fixed_effects,
-                                     paste(names(gaul_code)[1:length(names(gaul_code))],
-                                           collapse = ' + '), sep=' + ')
-      
-      ## update specific stacker formulas (for now we just want country effects in BRT)
-      all_fixed_effects_brt <- all_fixed_effects_cfes
-    }
-    
-    ## Add these to the fixed effects if we want them in stacking
-    if(use_child_country_fes == TRUE) {
-      gaul_fes <- paste(names(gaul_code)[2:length(names(gaul_code))], collapse = ' + ')
-      all_fixed_effects = paste(all_fixed_effects, gaul_fes, sep = ' + ')
-    }
-    
-    # get cov names
-    the_covs <- format_covariates(all_fixed_effects)
-    
-    ## copy the dataset to avoid unintended namespace conflicts
-    the_data <- copy(df)
-    
-    ## add a row id column
-    the_data[, a_rowid := seq(1:nrow(the_data))]
-    
-    ## extract covariates to the points and subset data where its missing covariate values
-    cs_covs <- extract_covariates(the_data,
-                                  all_cov_layers,
-                                  id_col              = 'a_rowid',
-                                  return_only_results = TRUE,
-                                  centre_scale        = TRUE,
-                                  period_var          = 'year',
-                                  period_map          = period_map)
-    
-    
-    ## Check for data where covariate extraction failed
-    rows_missing_covs <- nrow(the_data) - nrow(cs_covs[[1]])
-    if (rows_missing_covs > 0) {
-      pct_missing_covs <- round((rows_missing_covs/nrow(the_data))*100, 2)
-      warning(paste0(rows_missing_covs, ' out of ', nrow(the_data), ' rows of data ',
-                     '(', pct_missing_covs, '%) do not have corresponding ',
-                     'covariate values and will be dropped from child models...'))
-      if (rows_missing_covs/nrow(the_data) > 0.1) {
-        stop(paste0('Something has gone quite wrong: more than 10% of your data does not have ',
-                    'corresponding covariates.  You should investigate this before proceeding.'))
-      }
-    }
-    
-    the_data <- merge(the_data, cs_covs[[1]], by = 'a_rowid', all.x = F, all.y = F)
-    
-    ## store the centre scaling mapping
-    covs_cs_df  <-  cs_covs[[2]]
-    
-    ## this will drop rows with NA covariate values
-    the_data    <- na.omit(the_data, c(indicator, 'N', the_covs))
-    
-    ## stop if this na omit demolished the whole dataset
-    if(nrow(the_data) == 0) stop('You have an empty df, make sure one of your covariates was not NA everywhere.')
-    
-    ## make sure we're working with a data table
-    the_data <- data.table(the_data)
-    
-    ## create a data table with just covariates cropped by locations in region with data
-    cov_cols <- names(all_cov_layers)
-    cov_data <- the_data[, cov_cols, with = FALSE]
-    
-    ## save data to list
-    all_cov_data[[region]] <- cov_data
-    # --------------------------------------------------------------------------------------------------------------
-    
-  } # end loop over regions
+  ## some set up
+  if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
+  if (class(z_list)    == 'character') z_list    <- eval(parse(text=z_list))
+  
+  ## Load simple polygon template to model over
+  gaul_list           <- get_adm0_codes(reg, shapefile_version = modeling_shapefile_version) 
+  simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 1, tolerance = 0.4)
+  subset_shape        <- simple_polygon_list[[1]]
+  simple_polygon      <- simple_polygon_list[[2]]
+  
+  ## Load list of raster inputs (pop and simple)
+  raster_list        <- build_simple_raster_pop(subset_shape)
+  simple_raster      <- raster_list[['simple_raster']]
+  pop_raster         <- raster_list[['pop_raster']]
+  
+  df <- load_input_data(indicator   = gsub(paste0('_age',age),'',indicator),
+                        agebin      = age,
+                        removeyemen = FALSE,
+                        pathaddin   = pathaddin,
+                        years       = yearload,
+                        withtag     = as.logical(withtag),
+                        datatag     = datatag,
+                        use_share   = as.logical(use_share),
+                        yl          = year_list,
+                        region      = reg)
+  
+  ## Remove any data outside of region for ORS
+  if (indicator != 'had_diarrhea') {
+    reg_list <- fread('/share/geospatial/kewiens/custom_regions/dia_region_iso.csv')
+    reg_list[, gadm_adm0_code := get_adm0_codes(iso3, shapefile_version = modeling_shapefile_version), by = V1]
+    iso3_list <- filter(reg_list, gadm_adm0_code %in% gaul_list)
+    iso3_list <- unique(iso3_list$iso3)
+    df <- filter(df, country %in% iso3_list)
+    df <- as.data.table(df)
+  }
+  
+  # remove unecessary folder and data file
+  unlink(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/', run_date, '/'), recursive = TRUE)
+  
+  ## Some built in data checks that cause known problems later on
+  if(indicator_family=='binomial' & any(df[,get(indicator)]/df$N > 1))
+    stop('You have binomial data where k > N. Check your data before proceeding')
+  if(any(df[['weight']] %in% c(Inf,-Inf) | any(is.na(df[['weight']] ))))
+    stop('You have illegal weights (NA,Inf,-Inf). Check your data before proceeding')
+  # --------------------------------------------------------------------------------------------------
   
   
+  # --------------------------------------------------------------------------------------------------------------
+  # Pull covariates
+  
+  ## Define modeling space. In years only for now.
+  if(yearload=='annual') period_map <-
+    make_period_map(modeling_periods = c(min(year_list):max(year_list)))
+  if(yearload=='five-year') period_map <-
+    make_period_map(modeling_periods = seq(min(year_list),max(year_list),by=5))
+  
+  ## Make placeholders for covariates
+  cov_layers <- gbd_cov_layers <- NULL
+  
+  ## Pull all covariate bricks/layers
+  if (nrow(fixed_effects_config) > 0) {
+    message('Grabbing raster covariate layers')
+    loader <- MbgStandardCovariateLoader$new(start_year = min(year_list),
+                                             end_year = max(year_list),
+                                             interval = as.numeric(interval_mo),
+                                             covariate_config = fixed_effects_config)
+    cov_layers <- loader$get_covariates(simple_polygon)
+  }
+  
+  ## Pull country level gbd covariates
+  if (nchar(gbd_fixed_effects) > 0) {
+    message('Grabbing GBD covariates')
+    
+    effects <- trim(strsplit(gbd_fixed_effects, "\\+")[[1]])
+    measures <- trim(strsplit(gbd_fixed_effects_measures, "\\+")[[1]])
+    gbd_cov_layers <- load_gbd_covariates(covs     = effects,
+                                          measures = measures,
+                                          year_ids = year_list,
+                                          age_ids  = gbd_fixed_effects_age,
+                                          template = cov_layers[[1]][[1]],
+                                          simple_polygon = simple_polygon,
+                                          interval_mo = interval_mo)
+  }
+  ## Combine all covariates
+  all_cov_layers <- c(cov_layers, gbd_cov_layers)
+  
+  ## regenerate all fixed effects equation from the cov layers
+  all_fixed_effects <- paste(names(all_cov_layers), collapse = ' + ')
+  
+  ## Make stacker-specific formulas where applicable
+  all_fixed_effects_brt <- all_fixed_effects
+  
+  ## Set Up Country Fixed Effects
+  if(use_child_country_fes == TRUE | use_inla_country_fes == TRUE) {
+    message('Setting up country fixed effects')
+    fe_gaul_list <- unique(c(gaul_convert(unique(df[, country])), gaul_list))
+    fe_template  <- cov_layers[[1]][[1]]
+    simple_polygon_list <- load_simple_polygon(gaul_list   = fe_gaul_list,
+                                               buffer      = 0.4,
+                                               subset_only = TRUE)
+    fe_subset_shape     <- simple_polygon_list[[1]]
+    gaul_code <- rasterize(fe_subset_shape, fe_template, field = 'GAUL_CODE')
+    gaul_code <- setNames(gaul_code,'gaul_code')
+    gaul_code <- create_categorical_raster(gaul_code)
+    
+    ## update covlayers and add country fixed effects to the
+    all_cov_layers = update_cov_layers(all_cov_layers, gaul_code)
+    all_fixed_effects_cfes = paste(all_fixed_effects,
+                                   paste(names(gaul_code)[1:length(names(gaul_code))],
+                                         collapse = ' + '), sep=' + ')
+    
+    ## update specific stacker formulas (for now we just want country effects in BRT)
+    all_fixed_effects_brt <- all_fixed_effects_cfes
+  }
+  
+  ## Add these to the fixed effects if we want them in stacking
+  if(use_child_country_fes == TRUE) {
+    gaul_fes <- paste(names(gaul_code)[2:length(names(gaul_code))], collapse = ' + ')
+    all_fixed_effects = paste(all_fixed_effects, gaul_fes, sep = ' + ')
+  }
+  
+  # get cov names
+  the_covs <- format_covariates(all_fixed_effects)
+  
+  ## copy the dataset to avoid unintended namespace conflicts
+  the_data <- copy(df)
+  
+  ## add a row id column
+  the_data[, a_rowid := seq(1:nrow(the_data))]
+  
+  ## extract covariates to the points and subset data where its missing covariate values
+  cs_covs <- extract_covariates(the_data,
+                                all_cov_layers,
+                                id_col              = 'a_rowid',
+                                return_only_results = TRUE,
+                                centre_scale        = TRUE,
+                                period_var          = 'year',
+                                period_map          = period_map)
+  
+  
+  ## Check for data where covariate extraction failed
+  rows_missing_covs <- nrow(the_data) - nrow(cs_covs[[1]])
+  if (rows_missing_covs > 0) {
+    pct_missing_covs <- round((rows_missing_covs/nrow(the_data))*100, 2)
+    warning(paste0(rows_missing_covs, ' out of ', nrow(the_data), ' rows of data ',
+                   '(', pct_missing_covs, '%) do not have corresponding ',
+                   'covariate values and will be dropped from child models...'))
+    if (rows_missing_covs/nrow(the_data) > 0.1) {
+      stop(paste0('Something has gone quite wrong: more than 10% of your data does not have ',
+                  'corresponding covariates.  You should investigate this before proceeding.'))
+    }
+  }
+  
+  the_data <- merge(the_data, cs_covs[[1]], by = 'a_rowid', all.x = F, all.y = F)
+  
+  ## store the centre scaling mapping
+  covs_cs_df  <-  cs_covs[[2]]
+  
+  ## this will drop rows with NA covariate values
+  the_data    <- na.omit(the_data, c(indicator, 'N', the_covs))
+  
+  ## stop if this na omit demolished the whole dataset
+  if(nrow(the_data) == 0) stop('You have an empty df, make sure one of your covariates was not NA everywhere.')
+  
+  ## make sure we're working with a data table
+  the_data <- data.table(the_data)
+  
+  ## create a data table with just covariates cropped by locations in region with data
+  cov_cols <- names(all_cov_layers)
+  cov_data <- the_data[, cov_cols, with = FALSE]
+
   # save data (for easier loading in the future)
-  cropped_covs_file <- paste0(save_dir, 'covs_cropped_to_data_', Sys.Date(), '.RData')
-  save(all_cov_data, file = cropped_covs_file)
+  paste0(save_dir, reg, '_covs_cropped_to_data.fst') %>% 
+    write.fst(cov_data, path = .)
   # ------------------------------------------------------------------------------------
 
   
-} else {
-  
-  # load previously cropped covariate data
-  load(cropped_covs_file)
-}
+} else cov_data <- read_fst(paste0(save_dir, reg, '_covs_cropped_to_data.fst'), as.data.table=T)
 
 
 # ---------------------------------------------------------------
@@ -357,10 +382,7 @@ stepwise_vif_selection <- function(thresh,
   
   # ------------------------------------------------------------------------------------------------------------------------
   # VIF selection
-  
-  # load vif analysis package
-  library(fmsb, lib.loc = "/ihme/homes/jfrostad/_code/_lib/pkg")
-  
+
   # get initial vif value for all comparisons of variables
   vif_init<-NULL
   
@@ -437,7 +459,7 @@ stepwise_vif_selection <- function(thresh,
   d2[, included := TRUE]
   dt <- merge(d1, d2, by.x = 'cov_names', by.y = 'selected_covs', all = T)
   dt[is.na(included), included := FALSE]
-  dt <- dcast(melt(dt, id.vars = 'cov_names'), variable ~ cov_names)
+  dt <- melt(dt, id.vars = 'cov_names') %>% dcast(variable~cov_names, sum)
   dt[, variable := NULL]
   
   # add threshold, region, number of covariates selected, and run date that corresponds to data
@@ -445,9 +467,9 @@ stepwise_vif_selection <- function(thresh,
   dt[, vif_threshold := thresh]
   dt[, num_covs_selected := length(selected_covs)]
   dt[, data_run_date := run_date]
-  
+
   # bind to original data table
-  selection_results <- rbindlist(list(selection_results, dt), use.names = TRUE)
+  selection_results <- rbindlist(list(selection_results, dt), use.names = TRUE, fill=T) %>% replace(is.na(.), 0)
   # --------------------------------------------------------------------------------------
   
   
@@ -459,8 +481,8 @@ stepwise_vif_selection <- function(thresh,
   cov_config <- merge(covs, selected_covs, by = 'covariate')
   
   # save mbg input files
-  dir.create(paste0(mbg_input_dir, 'vif_', i, '/'), showWarnings = FALSE)
-  write.csv(cov_config, paste0(mbg_input_dir, 'vif_', i, '/covs_', indicator_group, '_', region, '.csv'))
+  dir.create(paste0(mbg_input_dir, 'vif_', i, '/'), showWarnings = FALSE, recursive=T)
+  write.csv(cov_config, paste0(mbg_input_dir, 'vif_', i, '/covs_', indicator_group, '_', reg, '.csv'))
   # ----------------------------------------------------------------------------------------------------------
   
   
@@ -481,12 +503,9 @@ for (i in threshold) {
   
   # report threshold
   message(paste0('\nThreshold: ', i))
-  
-  # load covariate data
-  load(cropped_covs_file)
-  
+
   # load input covariate names
-  covs <- fread(paste0(core_repo, cov_file, cov_par, '.csv'))
+  covs <- fread(paste0(core_repo, cov_file, 'covs_', cov_par, '.csv'))
   covs <- covs[include == TRUE]
   cov_names <- covs[, covariate]
   
@@ -497,18 +516,15 @@ for (i in threshold) {
                                 col_names)
   
   # run vif selection analysis
-  for (region in regions) {
-    message(paste0('\n\n', region))
-    
-    # run stepwise vif selection function
-    selection_results <- stepwise_vif_selection(thresh = i, 
-                                                covariate_data = all_cov_data[[region]],
-                                                reg = region,
-                                                trace = F)
-  }
-  
+
+  # run stepwise vif selection function
+  selection_results <- stepwise_vif_selection(thresh = i, 
+                                              covariate_data = cov_data,
+                                              reg = reg,
+                                              trace = F)
+
   # save selection results
-  write.csv(selection_results, paste0(save_dir, 'selection_results_', indicator_group, '_vif_', i, '.csv'))
+  write.csv(selection_results, paste0(save_dir, reg, '_selection_results_', indicator_group, '_vif_', i, '.csv'))
   
   # reset for next threshold
   message('\nSelection complete. Results saved.')

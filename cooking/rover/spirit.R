@@ -48,8 +48,8 @@ commondir       <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', s
 package_lib    <- sprintf('%s_code/_lib/pkg',h_root)
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
-pacman::p_load(data.table, scales, ggplot2, ggpubr, ggridges, ggrepel, gridExtra, isoband, RColorBrewer, 
-               sf, viridis, farver, reldist) 
+pacman::p_load(data.table, fst, scales, ggplot2, ggpubr, ggridges, ggrepel, gridExtra, isoband, RColorBrewer, 
+               sf, viridis, farver, reldist, ggnewscale) 
 package_list    <- package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
 
 # Use setup.R functions to load common LBD packages and mbg_central "function" scripts
@@ -62,13 +62,14 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 run_date <- '2020_05_17_11_40_28'
+run_date <- '2020_09_01_11_42_52'
 
 indicator_group <- 'cooking'
 indicator <- 'hap'
 type <- 'mean'
 raked <- T
 start_year <- 2000
-end_year <- 2017
+end_year <- 2018
 cores <- 10
 modeling_shapefile_version <- "2019_09_10"
 #***********************************************************************************************************************
@@ -83,6 +84,7 @@ hap.paths.d <- data.table(admin2=file.path(data.dir, 'admin_2_delta_summary.csv'
 
 ###Output###
 out.dir  <- file.path('/ihme/geospatial/mbg/cooking/maps', run_date) %T>% dir.create(recursive = T)
+save.dir <- file.path(j_root, 'WORK/11_geospatial/hap/figures', run_date) %T>% dir.create(recursive = T)
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -113,6 +115,11 @@ prepCasts <- function(id, type, list=sdg_files, id_dt=NA, id_var=NA) {
     return
   
 }
+
+#scale transformations
+sqrt_signed <- scales::trans_new("signed_log",
+                                 transform=function(x) sign(x)*sqrt(abs(x)),
+                                 inverse=function(x) sign(x)*(abs(x))^2)
 #***********************************************************************************************************************
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
@@ -120,12 +127,11 @@ prepCasts <- function(id, type, list=sdg_files, id_dt=NA, id_var=NA) {
 #read in the proper annotations (borders, lakes, mask)
 annotations_path <- file.path(out.dir, 'annotations.RDs')
 check <- file.exists(annotations_path)
-annotations <- ifelse(
-  check,
-  readRDS(annotations_path),
-  load_map_annotations()
-)
-if(!check) saveRDS(annotations, file=annotations_path)
+if(check) annotations <- readRDS(annotations_path)
+else {
+  annotations <- load_map_annotations()
+  saveRDS(annotations, file=annotations_path)
+}
 
 #read in link_table
 global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>% as.data.table
@@ -134,32 +140,59 @@ adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, A
 #read in shps
 stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad2_gadm.shp')
 stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad2_gadm.shp')
-adm2 <- rbind(stage1, stage2)
+stage3 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage3_ad2_gadm.shp')
+adm2 <- rbind(stage1, stage2, stage3)
 
-#read in results for lri/children
-dt <- file.path(data.dir, 'new_admin_2_summary.csv') %>% fread
+#read in results
+results <- file.path(data.dir, 'all_summary.fst') %>% read_fst(as.data.table=T) 
+dt <- results[dimension=='ad2' & term=='lvl'] %>% Filter(function(x) !all(is.na(x)), .)
+dt_d <- results[dimension=='ad2' & term%like%'change'] %>% Filter(function(x) !all(is.na(x)), .)
 
 #merge sr region names/IDs
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
   .[, .(iso3=ihme_loc_id, location_name, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
 
 #create file to crosswalk AD0 to iso3
-iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid) 
+iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid)
 iso3_map$geometry <- NULL
 iso3_map <- as.data.table(iso3_map) %>% unique
 locs <- merge(locs, iso3_map, by='iso3')
-dt <- merge(dt, locs, by='ADM0_CODE')
+
+# #merge sr region names/IDs
+dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
+dt_d <- merge(dt_d, locs, by='ADM0_CODE', all.x=T)
+
+#TODO add SDI
 
 #read in results for lri/children
-dt_d <- file.path(data.dir, 'admin_2_delta_summary.csv') %>% fread
+# dt_d <- file.path(data.dir, 'admin_2_delta_summary.csv') %>% fread
+# dt_d <- merge(dt_d, locs, by='ADM0_CODE')
 
+#read in input data and prepare it for mapping
+data <- load_map_results(indicator, indicator_group, run_date, raked, 
+                         year_list=c(2000:2018),
+                         custom_path = list('admin2'=dt),
+                         geo_levels=c('admin2'),
+                         cores=cores)
+data_d <-
+  load_map_results(indicator, indicator_group, run_date, raked, 
+                   year_list=2018,
+                   custom_path = list('admin2'=dt_d),
+                   geo_levels=c('admin2'),
+                   cores=cores)
 #setup the list of top countries
 #defined by population in 2018
 biggest_countries <- 
-  dt[year==max(dt$year) & lvl=='ad2', .(sum=sum(pop_total, na.rm=T)), by=.(iso3)] %>%
+  dt[year==max(dt$year) & dimension=='ad2', .(sum=sum(pop_total, na.rm=T)), by=.(iso3)] %>%
   .[order(sum)] %>%
   tail(10) %>%
   .[, unique(iso3)]
+
+#top country per GBD sregion
+biggest_countries_sr <- #defined based on pop
+  dt[year==min(dt$year), .(sum=sum(pop_total, na.rm=T)), by=.(iso3,region_name)] %>%
+  .[, .SD[which.max(sum)], by=region_name] %>% 
+  .[order(-sum)]
 
 #defined based on LRI rates/counts
 top_countries <- 
@@ -191,52 +224,44 @@ second_countries_reg <- #defined based on LRI counts
   .[!(iso3 %in% unique(top_countries_gbdreg$iso3))] %>% 
   .[, .SD[which.max(sum)], by=mbg_reg_name]
 
-#read in input data and prepare it for mapping
-data <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   year_list=c(2000:2018),
-                   custom_path = hap.paths,
-                   geo_levels=c('admin2'),
-                   cores=cores)
-data_d <-
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   year_list=2018,
-                   custom_path = hap.paths.d,
-                   geo_levels=c('admin2'),
-                   cores=cores)
-
 #define extent of map
 zoom.afr <- data.table(x1=-10, x2=50, y1=-20, y2=40)
 zoom.global <- data.table(x1=-120, x2=150, y1=-40, y2=55)
 #***********************************************************************************************************************
 
-# ---EXT FIG 1-----------------------------------------------------------------------------------------------------------
+# ---SUPERREGION LEGEND-------------------------------------------------------------------------------------------------
+#offical regions mapping code
+## Load simple polygon template to model over
+# gaul_list           <- get_adm0_codes('all', shapefile_version = modeling_shapefile_version)
+# simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 1, tolerance = 0.4, shapefile_version = modeling_shapefile_version)
+# subset_shape        <- simple_polygon_list[[1]]
+# simple_polygon      <- simple_polygon_list[[2]]
+# reg_map <- make_regions_map(regions = 'all', subset_shape=subset_shape)
+
 #create region colors
 reg_colors <- c('4'='#1f78b4',
-                '31'='#fb9a99',
+                '31'='#a65628',
                 '103'='#ff7f00',
                 '137'='#984ea3',
                 '158'='#e31a1c',
                 '166'='#4daf4a')
 
 #create data to make regional map color legend
-reg_data <- dt[year==max(year), .(year, ADM0_CODE, ADM1_CODE, sreg=as.factor(super_region_id))] %>% 
-  unique %>% 
-  load_map_results(year_list=max(.$year),
-                   custom_path = list('admin1'=.),
-                   geo_levels=c('admin1'),
-                   subvars = 'sreg',
-                   cores=cores)
+reg_data <- annotations$adm0 %>% 
+  merge(., locs[ADM0_CODE %in% unique(results$ADM0_CODE), .(sreg=super_region_id %>% as.factor, ADM0_CODE)], 
+        by.y='ADM0_CODE', by.x='geo_id', all.x=T)
 
-zoom <- data.table(x1=-110, x2=140, y1=-40, y2=55)
-annotations_reg <- lapply(annotations, st_crop, xmin=zoom$x1, xmax=zoom$x2, ymin=zoom$y1, ymax=zoom$y2)
+annotations_reg <- lapply(annotations, st_crop, 
+                          xmin=zoom.global$x1, xmax=zoom.global$x2, ymin=zoom.global$y1, ymax=zoom.global$y2)
 
 #make a map showing all the region colors in place
-reg_map <- ggplot() + geom_sf(data = annotations_reg$adm0, lwd=0.1, color = 'black', fill = 'gray90')
-reg_map <- reg_map + geom_sf(data = reg_data$admin1, aes(fill = sreg), lwd=0) + coord_sf(datum = NA)
+reg_map <- ggplot() + geom_sf(data = annotations_reg$adm0, lwd=0.1, color = 'black', fill = 'gray60')
+reg_map <- reg_map + geom_sf(data = reg_data, aes(fill = sreg), lwd=0) + coord_sf(datum = NA)
 reg_map <- reg_map + geom_sf(data = annotations_reg$adm0, lwd=0.1, color = 'black', fill=NA)
-reg_map <- reg_map + geom_sf(data = annotations_reg$lakes, lwd=0, color = 'gray70', fill = 'lightblue')
-reg_map <- reg_map + scale_fill_manual(values=reg_colors, guide=F)
+reg_map <- reg_map + geom_sf(data = annotations_reg$lakes, lwd=0, color = 'gray60', fill = 'lightblue')
+reg_map <- reg_map + geom_sf(data = annotations$stage3, lwd=0, color = 'gray60', fill = 'gray60')
+reg_map <- reg_map + scale_fill_manual(values=reg_colors, guide=F,
+                                       na.value = "gray60")
 reg_map <- reg_map +
   labs(x="", y="", title='') +
   theme_classic() +
@@ -244,207 +269,8 @@ reg_map <- reg_map +
         plot.title = element_text(hjust=0.5), plot.margin=unit(c(0, 0, 0, 0), "in"))
 reg_grob <- ggplotGrob(reg_map)
 
-#set up plot data
-dt_ineq <- dt %>% 
-  copy %>% 
-  .[year %in% c(2000, 2017)] %>% 
-  .[year==2017, year := 2018] %>% 
-  .[cause=='all' & grouping=='child'] 
+ggsave(filename=file.path(save.dir, 'region_legend.png'), plot=reg_map, width=12, height=6, units='in', dpi=900)
 
-dt_ineq[, mean := weighted.mean(dfu_mean, w=pop_total, na.rm=T), by=.(ADM0_CODE, year)]
-dt_ineq[, max := max(dfu_mean, na.rm=T), by=.(ADM0_CODE, year)]
-dt_ineq[, min := min(dfu_mean, na.rm=T), by=.(ADM0_CODE, year)]
-
-#reorder regions
-dt_ineq[, super_region := factor(super_region_id, levels=c(166, 158, 4, 31, 103, 137) %>% rev)]
-
-#range results
-dt_ineq <- unique(dt_ineq, by=c('ADM0_CODE', 'year'))
-dt_ineq_end <- dt_ineq[year==max(year)]
-dt_ineq_end <- dt_ineq_end[dt_ineq_end[,do.call(order, .SD), .SDcols = c('super_region', 'mean')]]
-dt_ineq_end[, country := factor(iso3, levels=unique(iso3))]
-dt_ineq_start <- dt_ineq[year==min(year)]
-dt_ineq_start[, country := factor(iso3, levels=dt_ineq_end$country)]
-dt_ineq_start[, country := forcats::fct_rev(country)]
-
-#plot absolute inequality
-plot <-
-ggplot(dt_ineq_end, aes(x=country, y=mean, ymax=max, ymin=min, color=super_region)) +
-  geom_crossbar(data=dt_ineq_start, color='gray60', size=2.2, width=0) +
-  geom_crossbar(size=2.2, width=0, position=position_nudge(x=.32)) +
-  geom_point(color='#000000', alpha=.5, shape=3, size=2.2,position=position_nudge(x=.32)) +
-  scale_color_manual(values=reg_colors, guide=F) +
-  coord_flip() +
-  theme_bw() +
-  theme(axis.title = element_blank(),
-        text = element_text(size=12),
-        axis.text.x = element_text(size=9, angle = 90, hjust = .5))
-
-plot <- plot + annotation_custom(grob=reg_grob, ymin=0, ymax=.25, xmin=73, xmax=97)
-
-ggsave(filename=file.path(out.dir, 'dfu_range.png'),
-       width=12, height=6, units='in', dpi=600)
-
-#plot inequality as dotplot
-plot <-
-  ggplot(dt_ineq_end, aes(x=country, y=mean, color=super_region, fill=super_region)) +
-  geom_segment(data=dt_ineq_start, aes(xend=country, yend=max), color='gray',
-               arrow = arrow(length = unit(0.1, "inches"), type='closed')) +
-  geom_segment(data=dt_ineq_start, aes(xend=country, yend=min), color='gray', 
-               arrow = arrow(length = unit(0.1, "inches"), type='closed')) +
-  geom_segment(aes(xend=country, yend=max), arrow.fill ='black',
-               arrow = arrow(length = unit(0.1, "inches"), type='closed')) +
-  geom_segment(aes(xend=country, yend=min), arrow.fill='black', 
-               arrow = arrow(length = unit(0.1, "inches"), type='closed')) +
-  geom_point(alpha=1, size=2.2, shape=21) + 
-  geom_point(data=dt_ineq_start, alpha=1, size=2.2, color='gray') + 
-  scale_color_manual(values=reg_colors, guide=F) +
-  scale_fill_manual(values=reg_colors, guide=F) +
-  scale_y_continuous('Dirty Fuel Use', labels = scales::percent) +
-  theme_minimal() +
-  theme(axis.title.x = element_blank(),
-        text = element_text(size=12),
-        axis.text.x = element_text(size=9, angle = 90, hjust = .5)) 
-
-plot <- plot + annotation_custom(grob=reg_grob, ymin=0, ymax=.25, xmin=2, xmax=20)
-
-ggsave(filename=file.path(out.dir, 'dfu_range_lolli.png'),
-       width=12, height=6, units='in', dpi=600)
-
-#Figure 5: Inequality over time
-#AID results
-#note that AID = gini * 2 * mean
-aid.dt <- dt[cause=='all' & grouping=='child', 
-             .(iso3, year, ADM0_CODE, ADM0_NAME, ADM2_CODE, ADM2_NAME, dfu_mean, 
-               super_region_id, super_region_name, region_id, region_name, pop_total)] %>% 
-  na.omit(cols='dfu_mean') %>% 
-  .[, mean := weighted.mean(dfu_mean, weights = pop_total, na.rm=T), by=.(ADM0_NAME, year)] %>% 
-  .[, .(mean,
-        aid=gini(dfu_mean, weights=pop_total) * 2 * mean,
-        pop=sum(pop_total, na.rm=T)), 
-    by=.(super_region_id, region_name, ADM0_NAME, year)] %>% 
-  unique(by=c('ADM0_NAME', 'year')) %>% 
-  .[order(aid),] %>% 
-  .[year==min(year), aid_start := aid] %>% 
-  .[, aid_start := min(aid_start, na.rm=T), by=.(ADM0_NAME)] %>%
-  .[, aid_d := (aid-aid_start)] %>% 
-  .[, aid_dr := aid_d/aid_start] %>% 
-  .[year==min(year), dfu_start := mean] %>% 
-  .[, dfu_start := min(dfu_start, na.rm=T), by=.(ADM0_NAME)] %>%
-  .[, dfu_d := (mean-dfu_start)] %>% 
-  .[, dfu_dr := dfu_d/dfu_start] %>% 
-  .[, super_region := factor(super_region_id, levels=c(166, 158, 4, 31, 103, 137) %>% rev)] %>% 
-  .[, cfu := (1-mean)] %>% 
-  .[, pred := loess(aid~cfu) %>% predict(.SD), by=super_region] %>% 
-  .[, resid := aid-pred] %>% 
-  .[abs(resid)>.1 & year==max(year), resid_lab := ADM0_NAME] %>% 
-  .[ADM0_NAME %like% "Honduras" & year==max(year), resid_lab := ADM0_NAME]
-
-plot <-
-  ggplot(aid.dt, aes(x=cfu, y=aid, color=super_region_id %>% as.factor, label=resid_lab)) +
-  geom_smooth(method='loess', aes(x=cfu, y=aid, color=super_region_id %>% as.factor), se=T, size=2) +
-  geom_point(data=aid.dt[year==max(year)], aes(x=cfu, y=aid, color=super_region_id %>% as.factor)) +
-  geom_text_repel(force=2, color='black') +
-  scale_color_manual(values=reg_colors, guide=F) +
-  scale_y_continuous('Average interpersonal difference') +
-  scale_x_continuous('Clean fuel use (%)', limits=c(0, 1)) +
-  theme_minimal()
-plot <- plot + annotation_custom(grob=reg_grob, ymin=.5, ymax=.65, xmin=.75, xmax=1)
-ggsave(filename=file.path(out.dir, 'aid_vs_cfu.png'), plot=plot, 
-       width=12, height=8, units='in', dpi=500)
-#***********************************************************************************************************************
-
-# ---FIGURE 4-----------------------------------------------------------------------------------------------------------
-#setup plot data
-plot.dt <- dt %>% 
-  copy %>% 
-  .[year %in% c(2000, 2017)] %>% 
-  .[year==2017, year := 2018] %>% 
-  .[cause=='lri' & grouping=='child'] %>% 
-  na.omit(., cols=c('hap_pct_mean', 'tap_paf_mean')) %>% 
-  .[iso3=='COD', location_name := 'D.R. Congo'] %>% 
-  .[, loc := factor(location_name)] %>% 
-  .[, loc := forcats::fct_rev(loc)]
-
-custom_countries <- #defined based on aesthetics - all countries in different range
-  c('COD', 'KEN', 'IND', 'MNG', 'THA') 
-
-custom_cols <- c('D.R. Congo'='firebrick4', 'Kenya'='indianred2', 'India'='darkgoldenrod', 
-                 'Mongolia'='#ff7f00', 'Thailand'='purple4')
-
-master_plot <- 
-  ggplot(plot.dt[iso3 %in% custom_countries], 
-         aes(x=1-hap_pct_mean, y=tap_paf_mean, color=loc, shape=year %>% as.factor, group=ADM2_CODE)) + 
-  annotate("rect", xmin = -.02, xmax = .5, ymin = .05, ymax = .61, fill='steelblue', alpha = .2) +
-  annotate("rect", xmin = .5, xmax = 1.02, ymin = .05, ymax = .61, fill='tomato', alpha = .2) +
-  annotate("text", x = .32, y = .60, label = "majority household sources") +
-  annotate("text", x = .66, y = .60, label = "majority ambient sources") +
-  annotate(
-    geom = "segment",
-    x = .81, 
-    xend = .85, 
-    y = .60,
-    yend = .60,
-    colour = "black",
-    arrow = arrow(length = unit(0.2, "cm"), type = "closed")
-  ) +
-  annotate(
-    geom = "segment",
-    x = .16, 
-    xend = 0.12,
-    y = .60, 
-    yend = .60,
-    colour = "black",
-    arrow = arrow(length = unit(0.2, "cm"), type = "closed")
-  ) +
-  geom_line(alpha=.1) +
-  geom_point(size=2) + 
-  geom_point(data=plot.dt[iso3 %in% custom_countries & year==2018], size=2) + #overdraw the later years
-  geom_vline(xintercept=.5, linetype="dashed") +
-  scale_colour_manual('Country', values=custom_cols) +
-  scale_shape_manual('Year', values=c(1, 16), guide=F) +
-  scale_x_continuous('', limits=c(-.02, 1.02), labels = scales::percent, breaks=c(.25, .5, .75), expand = c(0, 0)) +
-  scale_y_continuous("Percent of LRI attributable to TAP (PAF)", 
-                     limits=c(0.05,.61), labels = scales::percent, breaks=c(.2, .4, .6), expand = c(0, 0)) +
-  theme_bw(base_size = 16) +
-  theme(
-    legend.position = c(.05, .25),
-    legend.justification = c("left", "top"),
-    legend.box.just = "left",
-    legend.margin = margin(6, 6, 6, 6),
-    plot.margin = margin(12, 0, 0, 6, "pt"),
-    axis.text.y = element_text(angle = 90, hjust=.4),
-    axis.title.x = element_blank()
-  )
-
-##cloud version with top 14##
-#now make a single inset plot for each of the remaining top by region (and add Pakistan to round it out)
-inset_countries <- c(top_countries_gbdreg[, iso3]) %>% 
-  .[!(. %in% custom_countries)]
-
-inset_countries[inset_countries %like% 'ETH'] <- 'COD' #duplicate one to help guide the reader
-  
-insets <- sort(inset_countries) %>% 
-  lapply(1:length(.), makeInset, loclist=., 
-         scale_labels=T, type='cloud_contour')
-
-#arrange into master figure
-all_grobs <- copy(insets)
-all_grobs[[13]] <- master_plot
-lay <- rbind(c(13,13,13,13,1,2,3),
-             c(13,13,13,13,4,5,6),
-             c(13,13,13,13,7,8,9),
-             c(13,13,13,13,10,11,12))
-plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-                    # top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
-                    #              gp = gpar(fontsize=24)),
-                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
-                                    gp = gpar(fontsize=17))
-) %>% 
-  grid.arrange
-
-ggsave(plot=plot, filename=file.path(out.dir, 'fig_4.png'),
-       width=12, height=8, units='in', dpi=900)
 #***********************************************************************************************************************
  
 # ---FIGURE 2-----------------------------------------------------------------------------------------------------------
@@ -478,77 +304,6 @@ projs <- prepCasts(2018, type='aroc', id_var='year') %>%
   merge(., adm_links, by='ADM2_CODE') %>% 
   merge(., locs, by='ADM0_CODE')
 
-#add 18 populations for weighting at region level
-reg_projs <- merge(projs, 
-                   dt[year==max(year) & grouping=='child' & cause=='all', .(pop_total, ADM2_CODE)], 
-                   by='ADM2_CODE')
-reg_projs <- setkey(reg_projs, draw, year, region_name)[, sev := weighted.mean(sev, w=pop_total, na.rm=T),
-                                                      by=key(reg_projs)] %>% 
-  unique(., by=key(.)) 
-
-#ridgeplot of probs
-plot <-
-ggplot(reg_projs[year %in%c(2030)], aes(x = sev, y = fct_reorder(region_name, sev, .fun=mean), 
-                                             fill = 0.5 - abs(0.5 - stat(ecdf)))) +
-  stat_density_ridges(data=reg_projs[year %in%c(2018)],
-                      scale= .85,
-                      fill='gray72',
-                      alpha=.75,
-                      calc_ecdf = T) +
-  scale_fill_viridis_c(name = "Tail probability", direction = -1) +
-  stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE) +
-  geom_vline(xintercept=.05, linetype='dashed', color='gray10') +
-  #facet_wrap(~year) +
-  scale_x_continuous('Access to Clean Energy') +
-  theme_minimal() +
-  labs(x.axis = '') +
-  theme(axis.title.y=element_blank(),
-        text = element_text(size=16),
-        strip.text.x =element_text(size=20))
-ggsave(filename=file.path(out.dir, 'regional_sdg_prob_density.png'), plot=plot, 
-       width=12, height=6, units='in', dpi=500)
-
-#helper function to generate state level projections for every country
-stateProjs <- function(country, dt, pop.dt) {
-  
-  message('plotting for ', country)
-  
-  #add 18 populations for weighting at state level
-  plot.dt <- merge(dt[iso3==country], pop.dt, by='ADM2_CODE')
-  plot.dt <- setkey(plot.dt, draw, year, ADM1_NAME)[, sev := weighted.mean(sev, w=pop_total, na.rm=T), 
-                                                        by=key(plot.dt)] %>% 
-    unique(., by=key(.))
-
-  #state ridges
-  plot <-
-    ggplot(plot.dt[year==2030], aes(x = sev, y = fct_reorder(ADM1_NAME, sev, .fun=mean), 
-                                                 fill = 0.5 - abs(0.5 - stat(ecdf)))) +
-    stat_density_ridges(data=plot.dt[year==2018],
-                        scale= .85,
-                        fill='gray72',
-                        alpha=.75,
-                        calc_ecdf = T) +
-    stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE) +
-    scale_fill_viridis_c(name = "Tail probability", direction = -1) +
-    geom_vline(xintercept=.01, linetype='dashed', color='gray10') +
-    scale_x_continuous('Access to Clean Energy') +
-    theme_minimal() +
-    labs(title=country) +
-    theme(axis.title.y=element_blank())
-    
-    print(plot)
-    return(NA)
-
-}
-
-pdf(paste0(out.dir, '/sdg_projs_all_countries.pdf'),
-    height=8, width=12)
-
-lapply(unique(projs$iso3), stateProjs, dt=projs, 
-       pop.dt=dt[year==max(year) & grouping=='child' & cause=='all', .(pop_total, ADM2_CODE)])
-
-dev.off()
-
 #TODO which figure will this be
 #create plot of the divide by country
 target_threshold <- .05
@@ -556,46 +311,68 @@ prob_threshold <- .95
 
 plot.dt <- 
 probs[target==target_threshold & year==2030] %>% 
-  .[, .(fail=sum(absolute_goal_prob<=(1-prob_threshold), na.rm=T), 
-        may_fail=sum(absolute_goal_prob<.5, na.rm=T),
-        may_succeed=sum(absolute_goal_prob>.5, na.rm=T),
-        success=sum(absolute_goal_prob>=prob_threshold, na.rm=T),
-        N=.N), by=.(super_region_id, ADM0_NAME)] %>% 
-  .[, ratio := fail/success] %>% 
-  .[, plot_var := fail/success] %>% 
-  .[, may_fail := may_fail-fail] %>% 
-  .[, may_succeed := may_succeed-success] %>% 
-  .[fail!=0&success!=0] %>% 
+  merge(., dt[type=='TAP'&year==max(year), .(ADM2_CODE, pop_total)], by='ADM2_CODE') %>% 
+  .[absolute_goal_prob<=.5, status := 'may fail'] %>% 
+  .[absolute_goal_prob<=(1-prob_threshold), status := 'fail'] %>% 
+  .[absolute_goal_prob>.5, status := 'may succeed'] %>% 
+  .[absolute_goal_prob>=prob_threshold, status := 'success'] %>% 
+  .[, country_pop := sum(pop_total, na.rm=T), by=.(ADM0_NAME)] %>% 
+  .[, pop_fail := sum((absolute_goal_prob<=.5)*pop_total, na.rm=T), by=.(ADM0_NAME)] %>% 
+  .[, pop_success := sum((absolute_goal_prob>.5)*pop_total, na.rm=T), by=.(ADM0_NAME)] %>% 
+  .[, .(pop_share=sum(pop_total, na.rm=T)/country_pop,
+        pop_fail,
+        pop_success
+        ), 
+    by=.(ADM0_NAME, status, super_region_id)] %>% 
+  unique(., by=c('ADM0_NAME', 'status', 'super_region_id')) %>% 
+  .[, ratio := pop_fail/pop_success] %>% 
+  .[status%like%'fail', pop_share := pop_share*-1] %>% #create mirroring effect
   .[order(ratio)] %>% 
-  melt(id.vars=c('super_region_id', 'ADM0_NAME', 'ratio', 'N'), 
-       measure.vars=c('success', 'may_succeed', 'may_fail', 'fail')) %>% 
-  .[variable%like%'fail', value := value * -1] %>% 
-  .[, variable := factor(variable, levels=c('success', 'may_succeed', 'fail', 'may_fail'))]
-
-sqrt_signed <- scales::trans_new("signed_log",
-                                 transform=function(x) sign(x)*sqrt(abs(x)),
-                                 inverse=function(x) sign(x)*(abs(x))^2)
+  .[, status := factor(status, levels=c('success', 'may succeed', 'fail', 'may fail'))] 
 
 plot <-
 plot.dt %>%
-  ggplot(aes(x = forcats::fct_reorder(ADM0_NAME, ratio), 
-             y = value, alpha = variable, color = variable, fill=super_region_id %>% as.factor)) +
+  ggplot(aes(x = forcats::fct_reorder(ADM0_NAME, -ratio), 
+             y = pop_share, alpha = status, fill=super_region_id %>% as.factor)) +
   geom_bar(stat = "identity") +
   geom_hline(yintercept=0) +
   scale_fill_manual(values=reg_colors, guide=F) +
-  scale_color_manual(values=c('success'='navy', 'may_succeed'='gray', 'may_fail'='gray', 'fail'='red'), guide=F) +
-  scale_alpha_manual(values=c('success'=.8, 'may_succeed'=.3, 'may_fail'=.3, 'fail'=.8), guide=F) +
+  #scale_color_manual(values=c('success'='navy', 'may_succeed'='gray', 'may_fail'='gray', 'fail'='red'), guide=F) +
+  scale_alpha_manual(values=c('success'=.8, 'may succeed'=.2, 'may fail'=.2, 'fail'=.8), guide=F) +
   scale_x_discrete('') +
-  scale_y_continuous('', trans=sqrt_signed) +
-  ggtitle('SDG 7.1: Districts Projected to Fail vs. Districts Projected to Succeed', 
-          subtitle = 'Based on 95% confidence') +
-  coord_flip() +
-  theme_minimal()
+  scale_y_continuous('',
+                     breaks=c(-1, -.5, 0, .5, 1),
+                     labels=c("(100%)", "(50%)", "0%",  "50%", "100%")) +
+  theme_bw() + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust=1)
+  )
 
-plot <- plot + annotation_custom(grob=reg_grob, ymin=50, ymax=90, xmin=25, xmax=32)
+#plot <- plot + annotation_custom(grob=reg_grob, ymin=80, ymax=115, xmin=25, xmax=34)
 
-ggsave(filename=file.path(out.dir, 'sdg_district_ranges.png'), plot=plot, 
-       width=12, height=8, units='in', dpi=500)
+ggsave(filename=file.path(save.dir, 'fig_2_all.png'), plot=plot, 
+       width=12, height=8, units='in', dpi=900)
+
+plot <-
+  plot.dt[ratio!=0 & !is.infinite(ratio)] %>%
+  ggplot(aes(x = forcats::fct_reorder(ADM0_NAME, -ratio), 
+             y = pop_share, alpha = status, fill=super_region_id %>% as.factor)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept=0) +
+  scale_fill_manual(values=reg_colors, guide=F) +
+  #scale_color_manual(values=c('success'='navy', 'may_succeed'='gray', 'may_fail'='gray', 'fail'='red'), guide=F) +
+  scale_alpha_manual(values=c('success'=.8, 'may succeed'=.2, 'may fail'=.2, 'fail'=.8), guide=F) +
+  scale_x_discrete('') +
+  scale_y_continuous('',
+                     breaks=c(-1, -.5, 0, .5, 1),
+                     labels=c("(100%)", "(50%)", "0%",  "50%", "100%")) +
+  theme_bw() + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust=1)
+  )
+
+ggsave(filename=file.path(save.dir, 'fig_2.png'), plot=plot, 
+       width=12, height=8, units='in', dpi=900)
 #***********************************************************************************************************************
 
 # ---FIGURE 3-----------------------------------------------------------------------------------------------------------
@@ -605,25 +382,20 @@ plot.dt <- dt %>%
   copy %>% 
   .[year %in% c(2000, 2018)] %>% 
   na.omit(., cols=c('prev_mean', 'pop')) %>% 
-  .[, .(iso3, ADM0_NAME, ADM2_CODE, year, pop, pop_total, type, share_mean, pm_pc_mean, count_mean, atr_count_mean,
-        region_id, super_region_id)]
-
-#generate regular sequence
-reg_bins <- c(seq(0, 750, length.out = 399), max(plot.dt$pm_pc_mean, na.rm=T))
-
-#generate logarithmically spaced sequence
-log_bins <- c(exp(seq(log(.01), log(750), length.out = 399)), max(plot.dt$pm_pc_mean, na.rm=T))
+  .[, .(iso3, ADM0_NAME, ADM2_CODE, year, pop, pop_total, type, prev_mean, share_mean, pm_pc_mean, count_mean, atr_count_mean,
+        region_id, super_region_id)] %>% 
+  .[, exposed_pop := pop_total*prev_mean]
 
 #generate the plots
 pop_plot <-
-  makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries, 
-                     wt_var='pop_total', 
-                     sequence=log_bins,
+  makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
+                     wt_var='exposed_pop', 
+                     tap_cutoff = 750,
                      smoother=.1)
 death_plot <-
-makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries, 
+makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
                    wt_var='atr_count_mean', 
-                   sequence=log_bins,
+                   tap_cutoff = 750,
                    smoother=.1)
 
 #extract legend and set coordinates
@@ -634,17 +406,17 @@ legend$vp$y <- unit(.69, 'npc')
 lay <- rbind(c(1,1,1,1),
              c(2,2,2,2))
 plot <- arrangeGrob(grobs=list(pop_plot + theme(legend.position = 'none'), 
-                               death_plot + theme(legend.position = 'none')), 
-                    layout_matrix=lay, 
-                    # top=textGrob("Distribution of population (top) and attributable LRI deaths (bottom), 2018 vs 2000", 
-                    #              gp = gpar(fontsize=24)),
-                    bottom=textGrob("PM2.5 per capita", 
-                                    gp = gpar(fontsize=16))
-)
+                               death_plot + theme(legend.position = 'none',
+                                                  axis.text.x = element_blank())), 
+                    layout_matrix=lay) %>% 
+  grid.arrange
+
+ggsave(filename=file.path(save.dir, 'fig_3_bare.png'), plot=plot, width=12, height=8, units='in', dpi=1200)
+ggsave(filename=file.path(save.dir, 'fig_3_legend.png'), plot=legend, width=4, height=4, units='in', dpi=1200)
 
 #draw plot and legend/annotations
 png(paste0(out.dir, '/fig_3.png'),
-    height=8, width=12, units='in', res=1600)
+    height=8, width=12, units='in', res=2400)
 grid.arrange(plot)
 grid.draw(legend)
 grid.text('a', x = unit(0.01, "npc"), y = unit(0.95, "npc"), gp = gpar(fontsize = 24, fontface = "bold"))
@@ -655,22 +427,237 @@ grid.text('2018', x = unit(.95, "npc"), y = unit(0.76, "npc"), gp = gpar(fontsiz
 grid.text('2018', x = unit(.95, "npc"), y = unit(0.29, "npc"), gp = gpar(fontsize = 24, fontface = "bold"))
 dev.off()
 
+#make a population pyramid version
+#generate the plots
+pop_plot <-
+  makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
+                     wt_var='pop', 
+                     tap_cutoff = 750, flipped=T, normalize_years=T, density_max=0.01,
+                     smoother=.1)
+death_plot <-
+  makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
+                     wt_var='atr_count_mean', 
+                     flipped=T, normalize_years = T, density_max=0.005,
+                     tap_cutoff = 750,
+                     smoother=.1)
+
+#define layout
+lay <- rbind(c(1,1,2,2),
+             c(1,1,2,2))
+plot <- arrangeGrob(grobs=list(pop_plot + theme(legend.position = 'none', axis.text.y=element_blank()), 
+                               death_plot + theme(legend.position = 'none')), 
+                    layout_matrix=lay
+                    )
+
+g <- grid.arrange(plot)
+ggsave(filename=file.path(out.dir, 'fig_3_flipped.png'), plot=g, width=8, height=12, units='in', dpi=1200)
+
+#make a version of Figure 3 for each region
+#generate the plots
+plot.dt <- plot.dt[!(iso3 %in% biggest_countries_sr[1:6, iso3])] #remove the biggest countries
+sapply(unique(plot.dt$region_id), makeFig3Loclist, dt=plot.dt) %>% 
+  flatten2 %>% 
+    mclapply(., makeRegFigure3s, mc.cores=5)
+#***********************************************************************************************************************
+
+# ---FIGURE 4-----------------------------------------------------------------------------------------------------------
+#setup plot data using TAP values
+plot.dt <- dt %>% 
+  copy %>% 
+  .[year %in% c(start_year, end_year) & type=='TAP'] %>% 
+  na.omit(., cols=c('paf_mean'))
+
+#merge on HAP shares
+plot.dt <- dt %>% 
+  copy %>% 
+  .[year %in% c(start_year, end_year) & type=='HAP', .(year, ADM2_CODE, hap_pct_mean=share_mean)] %>% 
+  merge(., plot.dt, by=c('year', 'ADM2_CODE'))
+
+#formatting
+plot.dt %>% 
+  .[, rate_mean := rate_mean*1e3] %>%  #scale LRI rates to per 1000
+  .[iso3=='COD', location_name := 'D.R. Congo'] %>%
+  .[, loc_fct := factor(location_name)] %>% 
+  .[, loc_fct := forcats::fct_rev(loc_fct)]
+
+#drop this district, outlier without data support
+plot.dt <- plot.dt[ADM2_NAME!='Lakshadweep']
+
+#make master plots
+master_plot <- makeMasterPlot(custom_countries=c('COD', 'KEN', 'IND', 'MNG', 'THA') ,
+                              custom_cols=c('D.R. Congo'='#f781bf', 'Kenya'='#66a61e', 'India'='#a6761d', 
+                                            'Mongolia'='#e31a1c', 'Thailand'='#1f78b4'),
+                              add_rug=T, rug_limits=c(0,4))
+legend <- get_legend(master_plot)
+
+##cloud version with top 14##
+#now make a single inset plot for each of the remaining top by region (and add Pakistan to round it out)
+inset_countries <- c(top_countries_gbdreg[, iso3]) %>% 
+  .[!(. %in% custom_countries)]
+
+#duplicate one to help guide the reader
+#replaced ETH
+inset_countries[2] <- 'COD' 
+
+insets <- sort(inset_countries) %>% 
+  lapply(1:length(.), makeInset, loclist=., 
+         scale_labels=T, type='cloud_contour', contour_bw=10,
+         rug_limits=c(0,4))
+
+#arrange into master figure
+all_grobs <- copy(insets)
+all_grobs[[13]] <- master_plot
+lay <- rbind(c(13,13,13,13,1,2,3),
+             c(13,13,13,13,4,5,6),
+             c(13,13,13,13,7,8,9),
+             c(13,13,13,13,10,11,12))
+plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
+                    top=textGrob("Risk transition from 2000 to 2018",
+                                 gp = gpar(fontsize=24)),
+                    bottom=textGrob("Percent of TAP contributed by ambient sources", 
+                                    gp = gpar(fontsize=17))
+) %>% 
+  grid.arrange
+
+ggsave(plot=plot, filename=file.path(save.dir, 'fig_4.png'),
+       width=12, height=8, units='in', dpi=900)
+ggsave(plot=legend, filename=file.path(save.dir, 'fig_4_legend.png'),
+       width=4, height=8, units='in', dpi=900)
+
+#make a version of Figure 3 for each region
+#generate the plots
+sapply(unique(plot.dt$region_id), makeFig3Loclist, dt=plot.dt) %>% 
+  flatten2 %>% 
+  mclapply(., makeRegFigure4s, mc.cores=5)
+#***********************************************************************************************************************
+
+# ---EXT FIG 1----------------------------------------------------------------------------------------------------------
+#set up plot data
+dt_ineq <- dt[cause=='lri' & grouping=='under5' & type=='HAP' & year %in% c(start_year, end_year), 
+              .(iso3, year, ADM0_CODE, ADM0_NAME, ADM2_CODE, ADM2_NAME, prev_mean, 
+                super_region_id, super_region_name, region_id, region_name, pop_total)]
+
+dt_ineq[, mean := weighted.mean(prev_mean, w=pop_total, na.rm=T), by=.(ADM0_CODE, year)]
+dt_ineq[, max := max(prev_mean, na.rm=T), by=.(ADM0_CODE, year)]
+dt_ineq[, min := min(prev_mean, na.rm=T), by=.(ADM0_CODE, year)]
+
+#reorder regions
+dt_ineq[, super_region := factor(super_region_id, levels=c(166, 158, 4, 31, 103, 137) %>% rev)]
+
+#range results
+dt_ineq <- unique(dt_ineq, by=c('ADM0_CODE', 'year'))
+dt_ineq_end <- dt_ineq[year==max(year)]
+dt_ineq_end <- dt_ineq_end[dt_ineq_end[,do.call(order, .SD), .SDcols = c('super_region', 'mean')]]
+dt_ineq_end[, country := factor(iso3, levels=unique(iso3))]
+dt_ineq_start[, country := forcats::fct_rev(country)]
+dt_ineq_start <- dt_ineq[year==min(year)]
+dt_ineq_start[, country := factor(iso3, levels=dt_ineq_end$country)]
+dt_ineq_start[, country := forcats::fct_rev(country)]
+
+#combine
+dt_ineq <- list(
+  dt_ineq_start,
+  dt_ineq_end
+) %>% 
+  rbindlist
+
+#plot absolute inequality
+plot <-
+  ggplot(dt_ineq_end, aes(x=country, y=mean, ymax=max, ymin=min, fill=super_region)) +
+  geom_crossbar(data=dt_ineq_start, color=NA, fill='gray80', width=.4) +
+  geom_crossbar(color=NA, position=position_nudge(x=.4), width=.4) +
+  geom_point(data=dt_ineq_start, shape=4, color='gray40', size=2.5) +
+  geom_point(color='#000000', size=3, position=position_nudge(x=.4)) +
+  scale_fill_manual(values=reg_colors, guide=F) +
+  scale_y_continuous('Dirty Fuel Use', labels = scales::percent) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        text = element_text(size=16),
+        axis.text.x = element_text(size=7.5, angle = 45, hjust = 1))
+
+plot <- plot + annotation_custom(grob=reg_grob, ymin=0, ymax=.25, xmin=0, xmax=20)
+
+ggsave(filename=file.path(save.dir, 'ex_fig_1.png'),
+       width=12, height=6, units='in', dpi=900)
+
+#try as a dotplot too
+plot <-
+  ggplot(dt_ineq, aes(x=country, y=mean, color=super_region, fill=super_region, 
+                      shape=year %>% as.character,
+                      linetype=year %>% as.character)) +
+  geom_errorbar(aes(ymin = min, ymax = max)) +
+  geom_point(alpha=1, size=3) +   
+  scale_color_manual(values=reg_colors, guide=F) +
+  scale_fill_manual(values=reg_colors, guide=F) +
+  scale_shape_manual(values=c('2000'=21, '2018'=4), guide=F) +
+  scale_linetype_manual(values=c('2000'='dotted', '2018'='solid'), guide=F) +
+  scale_y_continuous('Dirty Fuel Use', labels = scales::percent) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        text = element_text(size=16),
+        axis.text.x = element_text(size=7, angle = 60, hjust = 1)) 
+
+plot <- plot + annotation_custom(grob=reg_grob, ymin=0, ymax=.25, xmin=0, xmax=20)
+
+ggsave(filename=file.path(save.dir, 'ex_fig_1_lolli_a.png'),
+       width=12, height=6, units='in', dpi=900)
+
+#try as a dotplot too with grey
+plot <-
+  ggplot(dt_ineq, aes(x=country, y=mean, color=super_region, fill=super_region, 
+                      shape=year %>% as.character,
+                      linetype=year %>% as.character)) +
+  geom_errorbar(aes(ymin = min, ymax = max)) +
+  geom_point(alpha=1, size=3) +   
+  scale_color_manual(values=reg_colors, guide=F) +
+  scale_fill_manual(values=reg_colors, guide=F) +
+  scale_shape_manual(values=c('2000'=21, '2018'=4), guide=F) +
+  scale_linetype_manual(values=c('2000'='dotted', '2018'='solid'), guide=F) +
+  scale_y_continuous('Dirty Fuel Use', labels = scales::percent) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        text = element_text(size=16),
+        axis.text.x = element_text(size=7, angle = 60, hjust = 1)) 
+
+plot <- plot + annotation_custom(grob=reg_grob, ymin=0, ymax=.25, xmin=0, xmax=20)
+
+ggsave(filename=file.path(save.dir, 'ex_fig_1_lolli_b.png'),
+       width=12, height=6, units='in', dpi=900)
+
+plot <-
+  ggplot(dt_ineq_end, aes(x=forcats::fct_rev(country), y=mean, ymax=max, ymin=min, color=super_region, fill=super_region)) +
+  geom_crossbar(width=.4) +
+  geom_errorbar(data=dt_ineq_start, color='gray20', linetype='dotted') +
+  geom_point(data=dt_ineq_start, shape=15, color='gray30', size=2) +
+  geom_point(shape=15, color='black', size=2, position=position_nudge(x=0)) +
+  scale_color_manual(values=reg_colors, guide=F) +
+  scale_fill_manual(values=reg_colors, guide=F) +
+  scale_y_continuous('Dirty Fuel Use', labels = scales::percent) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        text = element_text(size=16),
+        axis.text.x = element_text(size=7.5, angle = 60, hjust = 1))
+
+plot <- plot + annotation_custom(grob=reg_grob, ymin=0, ymax=.25, xmin=0, xmax=20)
+
+ggsave(filename=file.path(save.dir, 'ex_fig_1_lolli_c.png'),
+       width=12, height=6, units='in', dpi=900)
 #***********************************************************************************************************************
 
 # ---EXT FIG 2----------------------------------------------------------------------------------------------------------
 #Figure 5: Inequality over time
-dt_ineq <- dt[cause=='all' & grouping=='child', 
-              .(iso3, year, ADM0_CODE, ADM2_CODE, ADM2_NAME, dfu_mean, 
+dt_ineq <- dt[cause=='lri' & grouping=='under5' & type=='HAP', 
+              .(iso3, year, ADM0_CODE, ADM0_NAME, ADM2_CODE, ADM2_NAME, prev_mean, 
                 super_region_id, super_region_name, region_id, region_name, pop_total)]
 #AID results
 #note that AID = gini * 2 * mean
 aid.dt <-
-  na.omit(dt_ineq, cols='dfu_mean') %>% 
-  .[, mean := weighted.mean(dfu_mean, weights = pop_total, na.rm=T), by=.(iso3, year)] %>% 
+  na.omit(dt_ineq, cols='prev_mean') %>% 
+  .[, mean := weighted.mean(prev_mean, weights = pop_total, na.rm=T), by=.(iso3, year)] %>% 
   .[, .(mean,
-        aid=gini(dfu_mean, weights=pop_total) * 2 * mean,
+        aid=gini(prev_mean, weights=pop_total) * 2 * mean,
         pop=sum(pop_total, na.rm=T)), 
-    by=.(super_region_id, region_name, iso3, year)] %>% 
+    by=.(super_region_id, region_name, iso3, ADM0_NAME, year)] %>% 
   unique(by=c('iso3', 'year')) %>% 
   .[order(aid),] %>% 
   .[year==min(year), aid_start := aid] %>% 
@@ -681,46 +668,99 @@ aid.dt <-
   .[, dfu_start := min(dfu_start, na.rm=T), by=.(iso3)] %>%
   .[, dfu_d := (mean-dfu_start)] %>% 
   .[, dfu_dr := dfu_d/dfu_start] %>% 
-  .[year==max(year), label := iso3]
+  .[, pred := predict(loess(aid~(1-mean)))] %>% 
+  .[, resid := abs(aid-pred)] %>% 
+  .[year==max(year)&resid>.075, label := ADM0_NAME]
 
 plot <-
   ggplot(aid.dt, aes(x=1-mean, y=aid, color=super_region_id %>% as.factor, label=label)) +
-  geom_text_repel(force=2, color='black') +
-  geom_smooth(method='loess', aes(x=1-mean, y=aid, color=super_region_id %>% as.factor), se=T, size=2) +
-  #geom_line(data=aid.dt, aes(x=year, y=aid, color=super_region_id %>% as.factor, group=iso3, alpha=.2)) +
+  geom_smooth(method='gam', aes(x=1-mean, y=aid, color=super_region_id %>% as.factor), se=T, size=1.5) +
   geom_point(data=aid.dt[year==max(year)], aes(x=1-mean, y=aid, color=super_region_id %>% as.factor)) +
+  geom_text_repel(force=3, color='black') +
   scale_color_manual(values=reg_colors, guide=F) +
   scale_y_continuous('Average interpersonal difference') +
   scale_x_continuous('Clean fuel use (%)', limits=c(0, 1)) +
   theme_minimal()
-ggsave(filename=file.path(out.dir, 'aid_vs_cfu.png'), plot=plot, 
-       width=12, height=8, units='in', dpi=500)
-plot <-
-  ggplot(aid.dt, aes(x=dfu_d*-1, y=aid, color=super_region_id %>% as.factor, label=label)) +
-  geom_text_repel(force=2, color='black') +
-  geom_smooth(method='loess', aes(x=dfu_d*-1, y=aid, color=super_region_id %>% as.factor), se=T, size=2) +
-  #geom_line(data=aid.dt, aes(x=year, y=aid, color=super_region_id %>% as.factor, group=iso3, alpha=.2)) +
-  geom_point(data=aid.dt[year==max(year)], aes(x=dfu_d*-1, y=aid, color=super_region_id %>% as.factor)) +
-  scale_color_manual(values=reg_colors, guide=F) +
-  scale_y_continuous('Average interpersonal difference') +
-  scale_x_continuous('Uptake of clean fuel use (% change) from 2000-2018', limits=c(0, .4)) +
-  theme_minimal()
-ggsave(filename=file.path(out.dir, 'aid_vs_dfu_d.png'), plot=plot, 
+ggsave(filename=file.path(out.dir, 'aid_vs_cfu_sr.png'), plot=plot, 
        width=12, height=8, units='in', dpi=500)
 
 plot <-
-ggplot(aid.dt, aes(x=year, y=aid, color=super_region_id %>% as.factor, label=label)) +
-  #geom_text_repel(force=2, color='black') +
-  #geom_smooth(method='gam', aes(x=year, y=aid, color=super_region_id %>% as.factor, group=region_name), se=F, size=2) +
-  #geom_line(data=aid.dt, aes(x=year, y=aid, color=super_region_id %>% as.factor, group=iso3, alpha=.2)) +
-  geom_point(data=aid.dt, aes(x=year, y=aid, color=super_region_id %>% as.factor)) +
+  ggplot(aid.dt, aes(x=1-mean, y=aid, label=label)) +
+  geom_text_repel(force=2, color='black') +
+  geom_smooth(method='gam', aes(x=1-mean, y=aid), color='navy', se=F, size=1, linetype='solid') +
+  geom_point(data=aid.dt[year==max(year)], aes(x=1-mean, y=aid, color=super_region_id %>% as.factor), size=2) +
   scale_color_manual(values=reg_colors, guide=F) +
-  facet_wrap(~region_name) +
-  scale_y_continuous('Average interpersonal difference') +
-  scale_x_continuous('Year') +
-  theme_minimal()
-ggsave(filename=file.path(out.dir, 'aid_d_vs_dfu_d.png'), plot=plot, 
-       width=12, height=8, units='in', dpi=500)
+  scale_y_continuous('Average interdistrict difference') +
+  scale_x_continuous('Clean fuel use (%)', limits=c(0, 1)) +
+  theme_minimal() +
+  theme(text = element_text(size=16))
+
+plot <- plot + annotation_custom(grob=reg_grob, ymin=.5, ymax=.7, xmin=.75, xmax=1)
+
+ggsave(filename=file.path(save.dir, 'ex_fig_2.png'), plot=plot, 
+       width=12, height=8, units='in', dpi=900)
+#***********************************************************************************************************************
+
+# ---LRI CHANGE VS HAP CHANGE-------------------------------------------------------------------------------------------
+#scatter the change in LRI rates vs the change in HAP prevalence
+plot.dt <- dt_d[term=='change_rate' & type=='HAP']
+
+plot.dt <-  dt %>% 
+  copy %>% 
+  .[year %in% c(start_year) & type=='HAP', .(ADM2_CODE, rate_start=rate_mean*1e3)] %>% 
+  merge(., plot.dt, by=c('ADM2_CODE'))
+
+#custom fx to help
+makeChangeScatters <- function(reg, rug_var='rate_start', rug_limits=c(0, 5)) {
+  
+  
+  message('building limits/scale')
+  ## Enforce limits & define plot_var for simplicity
+  plot.dt$plot_var <- pmax(rug_limits[1], pmin(rug_limits[2], as.data.frame(plot.dt)[, rug_var])) 
+  start_range <- range(plot.dt$plot_var, na.rm = T)
+  
+  legend_colors <- inferno(n=6)
+  legend_color_values <- c(rug_limits[1], .25, .5, 1, 3, rug_limits[2])
+  
+  ## Create breaks
+  breaks <- pretty(rug_limits, 5)
+  if (rug_limits[1] < 0 & rug_limits[2] > 0) breaks <- sort(unique(c(0, breaks)))
+  
+  ## Create labels
+  labels <- format(breaks, nsmall = 2)
+  if (min(rug_limits) >= 0) divider <- "-" else divider <- " to "
+  if (start_range[1] < rug_limits[1]) {
+    labels[1] <- paste0(format(floor(100*start_range[1])/100, nsmall=2), divider, labels[1])
+  }
+  if (start_range[2] > rug_limits[2]) {
+    labels[length(labels)] <- paste0(labels[length(labels)], divider, format(ceiling(100*start_range[2])/100, nsmall=2))
+  }
+
+  plot <-
+  ggplot(plot.dt[region_id==reg], aes(x=rate_mean, y=prev_mean, color=plot_var)) +
+    geom_point() +
+    geom_hline(yintercept=0, linetype='dashed') +
+    geom_vline(xintercept=0, linetype='dashed') +
+    geom_abline(slope=1) +
+    facet_wrap(~ADM0_NAME) +
+    scale_x_continuous('Rate of change for LRI Rates', limits=c(-1,1)) +
+    scale_y_continuous('Rate of change for DFU%', limits=c(-1,1)) +
+    scale_color_gradientn(colors = legend_colors, values = legend_color_values,
+                          limits = range(breaks), breaks = breaks, labels = labels, 
+                          name = 'LRI deaths / 1,000 children') +
+    ggtitle(plot.dt[region_id==reg, unique(region_name)])+
+    theme_bw()
+  
+  print(plot)
+  
+}
+
+pdf(paste0(out.dir, '/hap_lri_change_scatters.pdf'),
+    height=8, width=12)
+
+lapply(unique(dt_d$region_id), makeChangeScatters)
+
+dev.off()
 #***********************************************************************************************************************
 
 # ---CREATE MAPS--------------------------------------------------------------------------------------------------------
@@ -755,6 +795,34 @@ d_values <- c(seq(-.3, -.1, length.out = 2), seq(-.1, .1, length.out = 8), seq(.
 dr_values <- c(seq(-.6, -.35, length.out = 2), seq(-.25, .25, length.out = 7), seq(.35, .6, length.out = 2)) %>%
   unique %>%
   rescale
+
+#count scale
+c_values <- c(seq(0, .05, length.out = 2), seq(.1, 5, length.out = 5),
+               seq(5, 100, length.out = 4), seq(100, 500, length.out = 2)) %>%
+  unique %>%
+  rescale
+
+#count scale for viz
+#note it must have 7 vals
+c_values <- c(seq(0, .1, length.out = 2), seq(.1, 5, length.out = 4),
+              seq(5, 250, length.out = 3)) %>%
+  unique %>%
+  rescale
+
+global <-
+  data$admin2 %>% 
+  filter(type=='TAP'&year==2018) %>% 
+  plot_map(., this_var='atr_count_mean',
+           annotations, limits=c(0, 500), title='TAP-attrib LRI counts in 2018', 
+           legend_color_values=c_values,
+           legend_title='TAP count',
+           zoom=zoom.global,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'global_tap_lri_counts.png'), plot=global, 
+       width=12, height=8, units='in', dpi=300)
+
+
 
 global <-
   plot_map(data$admin2, this_var='hap',
@@ -1129,6 +1197,78 @@ ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_pct_d.png')), plot=ct
 #***********************************************************************************************************************
 
 # ---SCRAPS-------------------------------------------------------------------------------------------------------------
+#add 18 populations for weighting at region level
+reg_projs <- merge(projs, 
+                   dt[year==max(year) & grouping=='under5' & cause=='all', .(pop_total, ADM2_CODE)], 
+                   by='ADM2_CODE')
+reg_projs <- setkey(reg_projs, draw, year, region_name)[, sev := weighted.mean(sev, w=pop_total, na.rm=T),
+                                                        by=key(reg_projs)] %>% 
+  unique(., by=key(.)) 
+
+#ridgeplot of probs
+plot <-
+  ggplot(reg_projs[year %in%c(2030)], aes(x = sev, y = fct_reorder(region_name, sev, .fun=mean), 
+                                          fill = 0.5 - abs(0.5 - stat(ecdf)))) +
+  stat_density_ridges(data=reg_projs[year %in%c(2018)],
+                      scale= .85,
+                      fill='gray72',
+                      alpha=.75,
+                      calc_ecdf = T) +
+  scale_fill_viridis_c(name = "Tail probability", direction = -1) +
+  stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE) +
+  geom_vline(xintercept=.05, linetype='dashed', color='gray10') +
+  #facet_wrap(~year) +
+  scale_x_continuous('Access to Clean Energy') +
+  theme_minimal() +
+  labs(x.axis = '') +
+  theme(axis.title.y=element_blank(),
+        text = element_text(size=16),
+        strip.text.x =element_text(size=20))
+ggsave(filename=file.path(out.dir, 'regional_sdg_prob_density.png'), plot=plot, 
+       width=12, height=6, units='in', dpi=500)
+
+#helper function to generate state level projections for every country
+stateProjs <- function(country, dt, pop.dt) {
+  
+  message('plotting for ', country)
+  
+  #add 18 populations for weighting at state level
+  plot.dt <- merge(dt[iso3==country], pop.dt, by='ADM2_CODE')
+  plot.dt <- setkey(plot.dt, draw, year, ADM1_NAME)[, sev := weighted.mean(sev, w=pop_total, na.rm=T), 
+                                                    by=key(plot.dt)] %>% 
+    unique(., by=key(.))
+  
+  #state ridges
+  plot <-
+    ggplot(plot.dt[year==2030], aes(x = sev, y = fct_reorder(ADM1_NAME, sev, .fun=mean), 
+                                    fill = 0.5 - abs(0.5 - stat(ecdf)))) +
+    stat_density_ridges(data=plot.dt[year==2018],
+                        scale= .85,
+                        fill='gray72',
+                        alpha=.75,
+                        calc_ecdf = T) +
+    stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE) +
+    scale_fill_viridis_c(name = "Tail probability", direction = -1) +
+    geom_vline(xintercept=.01, linetype='dashed', color='gray10') +
+    scale_x_continuous('Access to Clean Energy') +
+    theme_minimal() +
+    labs(title=country) +
+    theme(axis.title.y=element_blank())
+  
+  print(plot)
+  return(NA)
+  
+}
+
+pdf(paste0(out.dir, '/sdg_projs_all_countries.pdf'),
+    height=8, width=12)
+
+lapply(unique(projs$iso3), stateProjs, dt=projs, 
+       pop.dt=dt[year==max(year) & grouping=='under5' & cause=='all', .(pop_total, ADM2_CODE)])
+
+dev.off()
+
+
 # ##cloud version with top 14##
 # #now make a single inset plot for each of the remaining top by region (and add Pakistan to round it out)
 # insets <- c(top_countries_gbdreg[, iso3]) %>% 

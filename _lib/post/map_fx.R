@@ -102,13 +102,12 @@ load_map_results <- function(indicator=NA, indicator_group=NA, run_date=NA, rake
     
     message('-> admin', x, ' found and fread')
     
+    #remove ADM NAMES if already added to pred dt
+    col_names <- names(pred) %>% .[!(. %like% 'NAME')]
     
-    if (subvars %>% is.null) pred <- pred[year %in% year_list] 
-    else {
-      pred <- pred[year %in% year_list] %>% 
-        .[, c('ADM0_CODE', code_var, 'year', subvars), with = F] #subset vars if requested
-    }
-    
+    if (subvars %>% is.null) pred <- pred[year %in% year_list, (col_names), with=F] 
+    else pred <- pred[year %in% year_list, c('ADM0_CODE', code_var, 'year', subvars), with = F] #subset vars if req
+
     if (use.sf) {
       
       shp <- get_admin_shapefile(x) %>% 
@@ -170,10 +169,12 @@ load_map_results <- function(indicator=NA, indicator_group=NA, run_date=NA, rake
     message('--> converted to dt and keyed')
     
   }
+  
+  ## admin1 estimates and shape file
+  if ("admin0" %in% geo_levels) admin0 <- prep_admin_x(0)
 
   ## admin1 estimates and shape file
   if ("admin1" %in% geo_levels) admin1 <- prep_admin_x(1)
-
 
   ## admin2 estimates and shape file
   if ("admin2" %in% geo_levels) admin2 <- prep_admin_x(2)

@@ -40,12 +40,12 @@ if (interactive) {
   core_repo <- "/homes/jfrostad/_code/lbd/hap"
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_standard'
+  config_par   <- 'hap_sp_fine'
   holdout <- 0
   age <- 0
-  run_date <- '2020_05_17_11_40_28'
+  run_date <- '2020_08_07_16_06_56'
   measure <- 'prev'
-  reg <- 'ERI+DJI+YEM'
+  reg <- 'AGO'
   cov_par <- paste(indicator_group, reg, sep='_')
   my_repo <- "/homes/jfrostad/_code/lbd/hap"
   
@@ -146,8 +146,10 @@ message(pop_measure)
 message(holdout)
 ## Define raking parameters ---------------------------------------------------------------------------
 
-## If this is a HAP indicator model run set all countries to not be raked
-if (indicator %like% 'xcooking') {
+## If this is not a solid fuel indicator model run set all countries to not be raked
+if (!(indicator %like% 'solid')) {
+  
+  rake_countries <- F
 
   # Create function to pull isos for diarrhea custom regs
   get_region_isos <- function(modeling_region) {
@@ -189,25 +191,20 @@ if (indicator %like% 'xcooking') {
   # apply function
   countries_not_to_rake <- get_region_isos(reg)
   countries_not_to_subnat_rake <- get_region_isos(reg)
-  subnational_raking <- FALSE
+  rake_subnational <- FALSE
   
 } else {
   
-  #TODO decide which countries not to rake based on vetting
-  
-  subnational_raking <- TRUE
+  #rake all countries subnationally
+  rake_subnational <- TRUE
   countries_not_to_subnat_rake <- NULL
   
 }
 
-# Assume subnational raking unless otherwise speciified
-rake_subnational <- ifelse(subnational_raking, T, F)
-
 # Determine if a crosswalk is needed
 crosswalk <- ifelse(modeling_shapefile_version != raking_shapefile_version, T, F)
 
-# Force linear raking to avoid issues with logit raking
-rake_method <- 'linear' #TODO investigate
+# Using logit raking
 rake_method <- 'logit'
 
 # Print raking info
@@ -215,54 +212,55 @@ message('Metric Space                       : ', metric_space)
 message('Subnational raking                 : ', rake_subnational)
 message('Countries not to rake at all       : ', countries_not_to_rake)
 message('Countries not to rake subnationally: ', countries_not_to_subnat_rake)
-
 #***********************************************************************************************************************
 
 # ---LOAD GBD TARGETS---------------------------------------------------------------------------------------------------
 #reload estimates from the central db if they have changed
-if (new_gbd_estimates) {
+if(rake_countries) {
+  if (new_gbd_estimates) {
+    
+    source("/ihme/cc_resources/libraries/current/r/get_location_metadata.R")
+    source("/ihme/cc_resources/libraries/current/r/get_draws.R")
+    locations <- get_location_metadata(location_set_id = 35, gbd_round_id = 6, decomp_step = "step4") %>% as.data.table
+    loc_ids <- unique(locations$location_id)
+    
+    #pull the draws from 
+    #got this pull from Sarah Wozniak
+    #note that the age/sex IDs are arbitrary since this model doesnt vary over those params
+    #note, could also just pull the model from GPR, but the results are the same
+    #source("/ihme/code/st_gpr/central/stgpr/r_functions/utilities/utility.r")
+    #hap <- model_load(102800,"raked")
+    gbd <-
+    get_draws("rei_id", 87, source="exposure", status="best", year_id=1990:2019,
+              location_id=loc_ids, sex_id=2, age_group_id=11, gbd_round_id=6, decomp_step="step4",
+              num_workers=8) %>% 
+      .[parameter=='cat1'] #only want exposure, not the inverse
+    
+    #summarize
+    draw.cols <- paste0('draw_', 0:999) #i hate zero indexing
+    gbd[, lower := apply(.SD, 1, quantile, c(.025)), .SDcols=draw.cols]
+    gbd[, mean := apply(.SD, 1, mean), .SDcols=draw.cols]
+    gbd[, upper := apply(.SD, 1, quantile, c(.975)), .SDcols=draw.cols]
+    gbd[, (draw.cols) := NULL] #no longer need
+    
+    #format for MBG
+    setnames(gbd, c('location_id', 'year_id'), c('name', 'year'))
   
-  source("/ihme/cc_resources/libraries/current/r/get_location_metadata.R")
-  source("/ihme/cc_resources/libraries/current/r/get_draws.R")
-  locations <- get_location_metadata(location_set_id = 35, gbd_round_id = 6, decomp_step = "step4") %>% as.data.table
-  loc_ids <- unique(locations$location_id)
+    write.csv(gbd, 
+              file=file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
+              paste0('gbd_2019_best_', indicator, '_', measure, '.csv')),
+              row.names=F)
   
-  #pull the draws from 
-  #got this pull from Sarah Wozniak
-  #note that the age/sex IDs are arbitrary since this model doesnt vary over those params
-  #note, could also just pull the model from GPR, but the results are the same
-  #source("/ihme/code/st_gpr/central/stgpr/r_functions/utilities/utility.r")
-  #hap <- model_load(102800,"raked")
-  gbd <-
-  get_draws("rei_id", 87, source="exposure", status="best", year_id=1990:2019,
-            location_id=loc_ids, sex_id=2, age_group_id=11, gbd_round_id=6, decomp_step="step4",
-            num_workers=8) %>% 
-    .[parameter=='cat1'] #only want exposure, not the inverse
+  } else {
   
-  #summarize
-  draw.cols <- paste0('draw_', 0:999) #i hate zero indexing
-  gbd[, lower := apply(.SD, 1, quantile, c(.025)), .SDcols=draw.cols]
-  gbd[, mean := apply(.SD, 1, mean), .SDcols=draw.cols]
-  gbd[, upper := apply(.SD, 1, quantile, c(.975)), .SDcols=draw.cols]
-  gbd[, (draw.cols) := NULL] #no longer need
+    #kw_gbd <- as.data.table(read.csv(paste0(rake_to_path, 'gbd_',  measure, '.csv'), stringsAsFactors = FALSE))
+    
+    gbd <- file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
+                              paste0('gbd_2019_best_', indicator, '_', measure, '.csv')) %T>% 
+      message('reading GBD best estimates from this path\n', .) %>% 
+      fread 
   
-  #format for MBG
-  setnames(gbd, c('location_id', 'year_id'), c('name', 'year'))
-
-  write.csv(gbd, 
-            file=file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
-            paste0('gbd_2019_best_', indicator, '_', measure, '.csv')),
-            row.names=F)
-
-} else {
-
-  #kw_gbd <- as.data.table(read.csv(paste0(rake_to_path, 'gbd_',  measure, '.csv'), stringsAsFactors = FALSE))
-  
-  gbd <- file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
-                            paste0('gbd_2019_best_', indicator, '_', measure, '.csv')) %T>% 
-    message('reading GBD best estimates from this path\n', .) %>% 
-    fread 
-
+  }
 }
 
 #***********************************************************************************************************************
@@ -444,12 +442,11 @@ save_cell_pred_summary <- function(summstat, raked, ...) {
 }
 
 # Do this as lapply to not fill up memory in global env with big obs
-if (is.null(gbd)) {
+if (!exists('gbd')) {
   rake_list <- c("unraked")
 } else {
   rake_list <- c("unraked", "raked")
 }
-
 
 summ_list <- expand.grid(summstats[summstats != "p_below"], rake_list)
 
@@ -482,34 +479,35 @@ message(paste0("Done with post-estimation and aggregation for ", reg))
 
 # ---POST_ESTIMATION----------------------------------------------------------------------------------------------------
 ## Launch post-estimation (TAP calculation)
-
-# Define best LRI run_date and cluster specs
-lri_run_date = '2019_10_23_16_13_17'
-proj_arg <- 'proj_geospatial'
-use_geos_nodes <- F
-
-# set memory based on region
-if (reg %in% c('CHN', 'trsa-GUF')) { mymem <- '650G'
-} else if (reg %in% c('wssa-CPV-NGA', 'soas', 'ansa-VEN', 'ocea-MYS', 'caca-CUB')) { mymem <- '500G'
-} else mymem <- '350G'
-
-jname           <- paste('EdL', reg, indicator, sep = '_')
-
-# set up qsub
-sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
-                  '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
-                  '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(my_repo, indicator_group, 'post/3_descent.R')
-args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
-
-
-# submit qsub
-paste(sys.sub, r_shell, script, args) %>% 
-  system
-
-## All done
-message('Post-est submitted, now producing diagnostics for ', reg)
+if(indicator%like%'solid|dirty') {
+  # Define best LRI run_date and cluster specs
+  lri_run_date = '2019_10_23_16_13_17'
+  proj_arg <- 'proj_geo_nodes'
+  use_geos_nodes <- T
+  
+  # set memory based on region
+  if (reg %in% c('CHN', 'trsa-GUF', 'ansa-VEN')) { mymem <- '650G'
+  } else if (reg %in% c('wssa-CPV-NGA', 'soas', 'ocea-MYS', 'caca-CUB')) { mymem <- '500G'
+  } else mymem <- '350G'
+  
+  jname           <- paste('EdL', reg, indicator, sep = '_')
+  
+  # set up qsub
+  sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
+                    '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                    '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+  r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+  script <- file.path(my_repo, indicator_group, 'post/3_descent.R')
+  args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
+  
+  
+  # submit qsub
+  paste(sys.sub, r_shell, script, args) %>% 
+    system
+  
+  ## All done
+  message('Post-est submitted, now producing diagnostics for ', reg)
+}
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ LINEPLOT ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

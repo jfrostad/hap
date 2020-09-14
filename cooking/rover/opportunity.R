@@ -60,17 +60,22 @@ mbg_setup(package_list = package_list, repos = core_repo)
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_05_17_11_40_28'
-#run_date <- '2020_02_07_23_37_07'
-lri_run_date <- '2019_10_23_16_13_17'
+run_date <- '2020_05_17_11_40_28' #collab submission
+run_date <- '2020_09_01_11_42_52' #first submission
+lri_run_date <- '2020_06_11_11_19_26'
 var_types <- c('lower', 'mean', 'upper')
+new_gbd_estimates <- F
 
 indicator_group <- 'cooking'
-indicator <- 'hap'
+indicator <- 'cooking_fuel_solid'
+
+config_par <- 'hap_sp_fine'
+cov_par <- 'cooking_VNM'
 type <- 'mean'
 raked <- F
 start_year <- 2000
-end_year <- 2018
+end_year <- 2019
+analysis_year <- 2018
 cores <- 10
 modeling_shapefile_version <- "2019_09_10"
 #***********************************************************************************************************************
@@ -96,6 +101,10 @@ file.path(my_repo, '_lib', 'post', 'map_fx.R') %>% source
 #gbd fx
 gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
+file.path(gbd.shared.function.dir, 'get_age_metadata.R') %>% source
+file.path(gbd.shared.function.dir, 'get_draws.R') %>% source
+file.path(gbd.shared.function.dir, 'get_outputs.R') %>% source
+file.path(gbd.shared.function.dir, 'get_population.R') %>% source
 
 ##custom fx##
 #TODO move to custom fx scripts
@@ -195,6 +204,16 @@ relChange <- function(x) (x-data.table::shift(x, n=1))/data.table::shift(x,n=1)
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
 ##read in and prep datasets for analysis##
+## Read config file and save all parameters in memory
+config <- set_up_config(repo            = my_repo,
+                        indicator_group = indicator_group,
+                        indicator       = indicator,
+                        config_name     = paste0('/model/configs/config_', config_par),
+                        covs_name       = paste0('/model/configs/covs_', cov_par),
+                        run_tests       = F,
+                        post_est_only   = T,
+)
+
 #read in the proper annotations (borders, lakes, mask)
 annotations_path <- file.path(out.dir, 'annotations.RDs')
 check <- file.exists(annotations_path)
@@ -209,6 +228,13 @@ if(!check) saveRDS(annotations, file=annotations_path)
 global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>% as.data.table
 adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, ADM2_NAME, ADM2_CODE)] %>% unique
 
+#create file to crosswalk AD0 to iso3
+iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid) 
+iso3_map$geometry <- NULL
+iso3_map <- as.data.table(iso3_map) %>% unique
+locs <- merge(locs, iso3_map, by='iso3')
+adm_links <- merge(adm_links, locs, by=c('ADM0_CODE'), all.x=T)
+
 #read in shps
 stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad2_gadm.shp')
 stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad2_gadm.shp')
@@ -220,55 +246,133 @@ stages <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %
 #read in the input data
 #TODO define using the indicator name
 input_dt <- file.path(share.model.dir, "cooking_fuel_solid.csv") %>% fread
+ker_dt <- file.path(share.model.dir, "cooking_fuel_kerosene.csv") %>% fread
 
-#read in results for lri/children
-dt <- file.path(data.dir, 'new_admin_2_summary.csv') %>% fread #admin 2
-results <- file.path(data.dir, 'all_summary.fst') %>%  read_fst(as.data.table=T) #all levels
-
-#TODO resave total and remove this
-results <- list()
-results[['global']] <- file.path(data.dir, 'global_summary.csv') %>% fread #admin 2
-results[['super_region']] <- file.path(data.dir, 'super_region_summary.csv') %>% fread #admin 2
-results[['region']] <- file.path(data.dir, 'region_summary.csv') %>% fread #admin 2
-results[['ad0']] <- file.path(data.dir, 'new_admin_0_summary.csv') %>% fread #admin 2
-results[['ad1']] <- file.path(data.dir, 'new_admin_1_summary.csv') %>% fread #admin 2
-results[['ad2']] <- file.path(data.dir, 'new_admin_2_summary.csv') %>% fread #admin 2
+#read in results
+results <- file.path(data.dir, 'all_summary.fst') %>% read_fst(as.data.table=T)
+dt <- results[dimension=='ad2' & term=='lvl'] %>% Filter(function(x) !all(is.na(x)), .)
+dt_d <- results[dimension=='ad2' & term%like%'change'] %>% Filter(function(x) !all(is.na(x)), .)
 
 #merge sr region names/IDs
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
   .[, .(iso3=ihme_loc_id, location_name, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
-
-#TODO move to landing.R
-results[['ad0']] <- merge(results[['ad0']], locs, by='ADM0_CODE')
-results[['ad2']] <- merge(results[['ad2']], locs, by='ADM0_CODE')
-
-#create file to crosswalk AD0 to iso3
-iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid)
-iso3_map$geometry <- NULL
-iso3_map <- as.data.table(iso3_map) %>% unique
-locs <- merge(locs, iso3_map, by='iso3')
 
 # #merge sr region names/IDs
 # dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
 # dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'))
 
 #read in results for lri/children
-dt_d <- file.path(data.dir, 'admin_2_delta_summary.csv') %>% fread
-dt_d <- merge(dt_d, locs, by='ADM0_CODE')
+# dt_d <- file.path(data.dir, 'admin_2_delta_summary.csv') %>% fread
+# dt_d <- merge(dt_d, locs, by='ADM0_CODE')
 
 #read in input data and prepare it for mapping
-data <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
+data <- load_map_results(indicator, indicator_group, run_date, raked, 
                    year_list=c(2000:2018),
-                   custom_path = hap.paths,
+                   custom_path = list('admin2'=dt),
                    geo_levels=c('admin2'),
                    cores=cores)
 data_d <-
   load_map_results(indicator, indicator_group, run_date, raked, 
                    year_list=2018,
-                   custom_path = hap.paths.d,
+                   custom_path = list('admin2'=dt_d),
                    geo_levels=c('admin2'),
                    cores=cores)
+#define extent of map
+zoom.afr <- data.table(x1=-10, x2=50, y1=-20, y2=40)
+zoom.global <- data.table(x1=-120, x2=150, y1=-40, y2=55)
+#***********************************************************************************************************************
+
+# ---LOAD GBD RESULTS---------------------------------------------------------------------------------------------------
+#also pull the GBD2019 attributable results for comparison
+#build the connector in order to define which locs to pull
+# add connector object between ADM codes and GBD loc ids
+connector <-
+  data.table(get_gbd_locs(rake_subnational = T,
+                          reg = "all",
+                          shapefile_version = raking_shapefile_version))
+
+ad0_dt <- results[dimension=='ad0' & term=='lvl' & type=='HAP'] %>% 
+  Filter(function(x) !all(is.na(x)), .)
+
+ad1_dt <- results[dimension=='ad1' & term=='lvl' & type=='HAP'] %>% 
+  Filter(function(x) !all(is.na(x)), .)
+
+#merge the connector, using the rake levels for most detailed identifier
+#then collapse results to most detailed level
+gbd_dt <-  
+  list(
+    merge(ad1_dt, 
+          connector[rak_level==1, .(location_id, ADM0_CODE, ADM1_CODE, rak_level)], 
+          by=c('ADM0_CODE','ADM1_CODE')),
+    merge(ad0_dt, 
+          connector[rak_level==0, .(location_id, ADM0_CODE, rak_level)], 
+          by='ADM0_CODE')
+  ) %>% rbindlist(use.names=T, fill=T)
+
+#reload estimates from the central db if they have changed
+if (new_gbd_estimates) {
+
+  #cause=322(LRI)//rei=87(HAP)
+  loc_ids <- unique(gbd_dt$location_id)
+  
+  hap <- get_outputs("rei", rei_id = 87, cause_id = 322, metric_id = 1, measure_id = 1, 
+                     location_id=loc_ids,
+                     year_id = c(2000, 2010, 2019),
+                     sex_id = 3, age_group_id=1, gbd_round_id = 6, 
+                     compare_version_id = 7244, decomp_step = "step4")
+  
+  setnames(hap, c('val', 'upper', 'lower'), c('gbd_atr_count_mean', 'gbd_atr_count_upper', 'gbd_atr_count_lower'))
+  
+  lri <- get_outputs("cause", cause_id = 322, metric_id = 1, measure_id = 1, 
+                     location_id=loc_ids,
+                     year_id = c(2000, 2010, 2019),
+                     sex_id = 3, age_group_id=1, gbd_round_id = 6, 
+                     compare_version_id = 7244, decomp_step = "step5")
+
+  setnames(lri, c('val', 'upper', 'lower'), c('gbd_count_mean', 'gbd_count_upper', 'gbd_count_lower'))
+  
+  #merge
+  gbd <- merge(hap, lri, by=names(hap) %>% .[. %in% names(lri)])
+  
+  # gbd <- get_draws(
+  #   gbd_id_type=c('cause_id', 'rei_id'),
+  #   gbd_id=c(322, 87),
+  #   source='burdenator', 
+  #   decomp_step="step5",
+  #   location_id=loc_ids, 
+  #   sex_id=3, age_group_id=1,
+  #   metric_id=1, measure_id=1,
+  #   num_workers=8,
+  #   year_id=c(2000, 2010, 2018), 
+  #   gbd_round_id=6, 
+  #   status='best'
+  # )
+  # 
+  setnames(gbd, 'year_id', 'year')
+  
+  # #summarize
+  # draw.cols <- paste0('draw_', 0:999) #i hate zero indexing
+  # gbd[, lower := apply(.SD, 1, quantile, c(.025)), .SDcols=draw.cols]
+  # gbd[, mean := apply(.SD, 1, mean), .SDcols=draw.cols]
+  # gbd[, upper := apply(.SD, 1, quantile, c(.975)), .SDcols=draw.cols]
+  # gbd[, (draw.cols) := NULL] #no longer need
+  
+  write.csv(gbd, 
+            file=file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
+                           paste0('gbd_2019_best_', indicator, '_attrib_mortality.csv')),
+            row.names=F)
+  
+} else {
+
+  gbd <- file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
+                   paste0('gbd_2019_best_', indicator, '_attrib_mortality.csv')) %T>% 
+    message('reading GBD best estimates from this path\n', .) %>% 
+    fread 
+  
+}
+
+#merge ad2 results and GBD results using connector
+gbd_dt <- merge(gbd_dt, gbd, by=c('location_id', 'year'))
 #***********************************************************************************************************************
 
 # ---GENERAL METRICS----------------------------------------------------------------------------------------------------
@@ -286,13 +390,23 @@ sum(input_dt$N, na.rm=T)
 
 #number of points/polys
 table(input_dt$point)
+
+#explore kerosene data
+ker_dt <- merge(ker_dt, locs, by.x='ihme_loc_id', by.y='iso3')
+ker_dt[, ad0_kerosene := weighted.mean(cooking_fuel_kerosene, w=N), by=.(ihme_loc_id, year)]
+ggplot(ker_dt, aes(x=year, y=ad0_kerosene, color=super_region_name)) +
+  geom_hline(yintercept=.1, color='grey10', linetype='dashed') +
+  geom_point() +
+  geom_smooth() +
+  scale_color_brewer(type='qual', palette = 'Paired') +
+  facet_wrap(~ihme_loc_id) +
+  theme_minimal()
 #***********************************************************************************************************************
 
 # ---SPATIAL VARIATION--------------------------------------------------------------------------------------------------
 ##2017 patterns##
 #TODO verify that popweighting shoudl be done with u5 pop, if not switch pop vars here
 #country level
-analysis_year <- 2018
 results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) sum(pop_total*x, na.rm=T)), 
                  .SDcols=paste('prev', var_types, sep='_')] #pop exposed to dfu 
 results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) sum(pop*x, na.rm=T)), 
@@ -309,6 +423,10 @@ results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) weig
 #district level
 #counts based on threshold
 threshold <- .95
+
+#how many districts were about .95 in 2018
+dt[year==analysis_year & type=='HAP' & term=='lvl', lapply(.SD, function(x) sum(x>threshold, na.rm=T)/.N), 
+   .SDcols=paste0('prev_', var_types)]
 
 #worst superregion
 results[['ad2']][year==analysis_year & type=='HAP',
@@ -454,22 +572,33 @@ exploreRange('HND', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='H
 exploreRange('NGA', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
 
 #find the most extreme rook neighbors
-rooks <- filter(data$admin2, year==analysis_year & type=='HAP') 
-rooks <- rooks %>%  #TODO could be written more eloquently
+data_18 <- filter(data$admin2, year==analysis_year & type=='HAP') 
+rooks <- data_18 %>%  #TODO could be written more eloquently
   dplyr::select(prev_mean, ADM0_CODE, ADM0_NAME, ADM1_CODE, ADM1_NAME, ADM2_CODE, ADM2_NAME, year) %>%  
-  st_join(rooks, st_rook, suffix=c('_og', '_rook')) %>% 
-  mutate(range=dfu_og-dfu_rook) 
+  st_join(data_18, st_rook, suffix=c('_og', '_rook')) %>% 
+  mutate(range=prev_mean_og-prev_mean_rook) 
 
 summary(rooks$range)
-quantile(rooks$range, p=.97, na.rm=T)
 filter(rooks, range==max(range, na.rm=T)) #biggest contrast
-extreme_rooks <- filter(rooks, range>quantile(rooks$range, p=.99, na.rm=T)) #top 1% of contrasts
+extreme_rook_limit <- quantile(rooks$range, p=.99, na.rm=T) #top 1% of contrasts
+extreme_rooks <- filter(rooks, range > extreme_rook_limit) #which districts meet top 1% of contrasts
 as.character(extreme_rooks$ADM0_NAME_og) %>% table #which countries had the most districts with large contrast
 
-#find which countries have the highest percentage of districts with at least one extreme rook
+#find which countries have the highest percentage of their districts with at least one extreme rook
+extreme_rooks %>% 
+  as.data.table %>% 
+  .[,geometry := NULL] %>% #no longer relevant in dt format 
+  .[, extreme_count := .N, by=ADM0_NAME_og] %>% 
+  unique(., by='ADM0_NAME_og') %>% 
+  merge(., results[dimension=='ad2' & year==analysis_year & type=='HAP' & term=='lvl', .N, by=ADM0_NAME], 
+        by.x='ADM0_NAME_og', by.y='ADM0_NAME') %>% 
+  .[, pct := extreme_count/N] %>% 
+  .[order(pct)] %>% 
+  tail(n=20)
+
 distinct(extreme_rooks, ADM2_NAME_og, .keep_all = T) %>% 
   count('ADM0_NAME_og') %>% 
-  merge(., count(data_17, 'ADM0_NAME'), by.y='ADM0_NAME', by.x='ADM0_NAME_og') %>% 
+  merge(., count(data_18, 'ADM0_NAME'), by.y='ADM0_NAME', by.x='ADM0_NAME_og') %>% 
   mutate(pct=freq.x/freq.y) %>% 
   arrange(pct)
 
@@ -520,6 +649,8 @@ tabulateR(lvl='global', types='HAP', ind='share', terms=c('change', 'change_rate
 tabulateR(lvl='region', types='HAP', ind='prev', terms=c('change', 'change_rate'))
 tabulateR(lvl='ad0', types='HAP', ind='prev', terms=c('change', 'change_rate'))
 
+#ad2 results
+tabulateR(lvl='ad2', types='HAP', ind='prev', terms=c('change'))
 
 #regional change 
 dt_d[year==analysis_year & type=='HAP' & super_region_name=='Sub-Saharan Africa',
@@ -643,9 +774,10 @@ goals <- lapply(1:length(sdg_files), function(x) sdg_files[[x]]$goals) %>% rbind
 probs <- lapply(1:nrow(goals), prepCasts, type='probs', id_dt=goals) %>% 
   rbindlist %>% 
   setnames(c('target_year', 'spatial_idx'), c('year', 'ADM2_CODE')) %>% 
-  merge(., adm_links, by='ADM2_CODE')  %>% 
+  merge(., adm_links[, .(ADM2_CODE, ADM0_CODE)], by='ADM2_CODE')  %>% 
   merge(., locs, by='ADM0_CODE') %>% 
-  merge(dt[year==max(year) & grouping=='child' & cause=='all', .(pop_total, ADM2_CODE)], by='ADM2_CODE')
+  merge(., results[dimension=='ad2' & year==analysis_year & type=='HAP' & term=='lvl', pop_total, by=ADM2_CODE],
+        by='ADM2_CODE')
 
 #create a dt with all projections
 projs <- 
@@ -658,9 +790,7 @@ projs <-
 projs <- prepCasts(2018, type='aroc', id_var='year') %>% 
   melt(measure = patterns("V"), variable.name = "draw", value.name='aroc') %>% 
   merge(., projs, by=c('ADM2_CODE', 'year', 'draw'), all.y=T) %>% 
-  merge(., adm_links, by='ADM2_CODE') %>% 
-  merge(., locs, by='ADM0_CODE') %>% 
-  merge(dt[year==max(year) & grouping=='child' & cause=='all', .(pop_total, ADM2_CODE)], by='ADM2_CODE')
+  merge(., adm_links[, .(ADM2_CODE, ADM0_CODE)], by='ADM2_CODE') 
 
 #generate mean/ci
 #cols <- paste0('V', 2:51) #TODO, weird why are they numbered like this..?
@@ -679,6 +809,21 @@ projs[sev_rel_uncertainty>1, sev_rel_uncertainty := 1] #cap at 1
 #district level results
 target_threshold <- .05
 prob_threshold <- .95
+
+#how many countries will succeed
+ad0_probs <-
+probs[target==target_threshold & year==2030, 
+      .(prob=weighted.mean(absolute_goal_prob, w=pop_total), 
+        pop=sum(pop_total, na.rm=T)), by=.(super_region_id, region_id, iso3)] %>% 
+  .[, global_pop := sum(pop, na.rm=T)]
+
+ad0_probs[, .(fail=sum(prob>=prob_threshold, na.rm=T), success=sum(prob<=(1-prob_threshold), na.rm=T))]
+ad0_probs[prob>=prob_threshold, .(regs=uniqueN(region_id), pop=sum(pop, na.rm=T), global_pop=mean(global_pop))] %>% 
+  .[, pop_share := pop/global_pop] %>% print
+ad0_probs[prob<=(1-prob_threshold), .(regs=uniqueN(region_id), pop=sum(pop, na.rm=T), global_pop=mean(global_pop))] %>% 
+  .[, pop_share := pop/global_pop] %>% print
+
+#what percent of 
 
 #how many districts have met in 2018
 probs[target==target_threshold & year==2018] %>% 
@@ -748,18 +893,19 @@ probs[target==target_threshold & year==2030] %>%
 
 ##global levels/change
 #current tap_pc/tap_paf global avg
-tabulateR(lvl='global', types='TAP', ind='pm_pc') #highest TAP
-tabulateR(lvl='global', types='TAP', ind='paf', years=c(start_year, end_year)) #highest TAP PAF
-tabulateR(lvl='global', types='HAP', ind='share') #highest HAP share
+tabulateR(lvl='global', types='TAP', ind='pm_pc', terms=c('lvl', 'change', 'change_rate'))  #highest TAP
+tabulateR(lvl='global', types='TAP', ind='paf', terms=c('lvl', 'change', 'change_rate')) #highest TAP PAF
+tabulateR(lvl='global', types='HAP', ind='share', terms=c('lvl', 'change', 'change_rate')) #highest HAP share
 
 tabulateR(lvl='super_region', types='TAP', ind='pm_pc') #highest TAP
 tabulateR(lvl='super_region', types='TAP', ind='paf', years=c(start_year, end_year)) #highest TAP PAF
-tabulateR(lvl='super_region', types='HAP', ind='share') #highest HAP share
+tabulateR(lvl='super_region', types='HAP', ind='share', terms=c('lvl', 'change', 'change_rate')) #highest HAP share
 
 tabulateR(lvl='region', types='TAP', ind='pm_pc') #highest TAP
 tabulateR(lvl='region', types='TAP', ind='paf', years=c(start_year, end_year)) #highest TAP PAF
-tabulateR(lvl='region', types='HAP', ind='share') #highest HAP share
-
+tabulateR(lvl='region', types='HAP', ind='share', terms=c('lvl', 'change')) #highest HAP share
+tabulateR(lvl='region', types='AAP', ind='pm_pc', terms=c('lvl', 'change'), years=c(start_year, end_year)) %>% 
+  .[region_id==159]#change in AAP dose in South Asia
 
 #pct decreases at global level
 dt_d[type=='TAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
@@ -801,13 +947,16 @@ tabulateR(lvl='ad0', types='TAP', ind='pm_pc') #highest TAP
 tabulateR(lvl='ad0', types='TAP', ind='pm_pc', 
           filter=list(var='super_region_id', vals=166, type=F)) #highest TAP excluding SSA
 
-tabulateR(lvl='ad0', types='HAP', ind='share') #highest HAP share
 tabulateR(lvl='ad0', types='HAP', ind='share', 
           filter=list(var='super_region_id', vals=166, type=F)) #highest HAP share excluding SSA
 
 tabulateR(lvl='ad0', types='TAP', ind='pm_pc', sorted='up') #lowest TAP
 tabulateR(lvl='ad0', types='AAP', ind='share', sorted='up') #lowest AAP share
 tabulateR(lvl='ad0', types='AAP', ind='share') #highest AAP share
+
+#country level HAP:AAP ratio, what percent of countries is HAP the main contributor vs AAP
+tabulateR(lvl='ad0', types='AAP', ind='share') %>% .[share_mean>.5, .N] #highest HAP share
+tabulateR(lvl='ad0', types='AAP', ind='share', years=start_year) %>% .[share_mean>.5, .N] #highest HAP share
 
 #country pct decrease
 dt_d[type=='TAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
@@ -825,9 +974,15 @@ dt_d[type=='HAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)
 
 #pct of population that lives below WHO threshold
 threshold <- 10
-dt[year==analysis_year & tap_pc_mean < threshold & cause=='lri', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri', sum(pop, na.rm=T)] 
-dt[year==analysis_year & tap_pc_lower < threshold & cause=='lri', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri', sum(pop, na.rm=T)] 
-dt[year==analysis_year & tap_pc_upper < threshold & cause=='lri', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri', sum(pop, na.rm=T)] 
+dt[year==analysis_year & pm_pc_mean < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
+dt[year==analysis_year & pm_pc_lower < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
+dt[year==analysis_year & pm_pc_upper < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
+
+#pct of population that lives below WHO threshold interim-1
+threshold <- 35
+dt[year==analysis_year & pm_pc_mean < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
+dt[year==analysis_year & pm_pc_lower < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
+dt[year==analysis_year & pm_pc_upper < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
 
 #how many districts did hap share stagnate or increase
 threshold <- -0.01
@@ -905,33 +1060,116 @@ for (reg in unique(dt$region_name)) {
 #what was the u5 mortality rate of LRI in regions where more than half of LRI was attributed to TAP
 
 #how many children died from LRI attributable to TAP
-dt[year==analysis_year, lapply(.SD, sum, na.rm=T), .SDcols=c('tap_lri_c_lower', 'tap_lri_c_mean', 'tap_lri_c_upper')]
-dt[year==min(dt$year), lapply(.SD, sum, na.rm=T), .SDcols=c('tap_lri_c_lower', 'tap_lri_c_mean', 'tap_lri_c_upper')]
+tabulateR(lvl='global', types='TAP', ind='atr_count', years=c(analysis_year, start_year),
+          terms=c('lvl', 'change', 'change_rate')) 
+tabulateR(lvl='global', types=c('HAP', 'AAP'), ind='atr_count', years=c(analysis_year, start_year),
+          terms=c('lvl', 'change', 'change_rate')) 
 
-tabulateR(lvl='global', types='TAP', ind='atr_count') #highest TAP count
+
 tabulateR(lvl='super_region', types='TAP', ind='atr_count') #highest TAP count
 tabulateR(lvl='region', types='TAP', ind='atr_count') #highest TAP count
 tabulateR(lvl='ad0', types='TAP', ind='atr_count') #highest TAP count
 
+#how did the HAP share change
+tabulateR(lvl='global', types='HAP', ind='share', terms=c('lvl', 'change', 'change_rate')) 
 
-#in2000?
-dt[year==analysis_year & tap_paf_mean > .5, lapply(.SD, sum, na.rm=T), 
-   .SDcols=c('tap_lri_c_lower', 'tap_lri_c_mean', 'tap_lri_c_upper')] / dt[year==analysis_year, lapply(.SD, sum, na.rm=T), 
-                                                                           .SDcols=c('tap_lri_c_lower', 'tap_lri_c_mean', 'tap_lri_c_upper')]
+#how did the PAFs change
+tabulateR(lvl='global', types='TAP', ind='paf', terms=c('lvl', 'change', 'change_rate'), years=c(analysis_year, start_year))
+
+#PAFs by reg/country/district
+tabulateR(lvl='super_region', types='TAP', ind='paf') 
+tabulateR(lvl='region', types='TAP', ind='paf')
+tabulateR(lvl='ad0', types='TAP', ind='paf', sorted='up') 
+tabulateR(lvl='ad2', types='TAP', ind='paf')
+
+#How many districts are majority TAP attributable
+dt[year==analysis_year & type=='TAP' & term=='lvl', lapply(.SD, function(x) sum(x>.5, na.rm=T)/.N), 
+   .SDcols=paste0('paf_', var_types)]
+
+#proportion of total deaths from HAP
+#TODO this needs to be calculated from draws
+tabulateR(lvl='global', types='HAP', ind='atr_count', years=c(analysis_year, start_year)) %>%
+  .[, c(3:5)] %>%
+  .[] / (tabulateR(lvl='global', types='TAP', ind='atr_count', years=c(analysis_year, start_year)) %>% .[, c(3:5)])
+
+# tabulateR(lvl='ad0', types='AAP', ind='atr_count', years=c(analysis_year, start_year)) %>%
+#   .[ADM0_NAME %in% c('Nigeria', 'India'), c(3:5)] %>%
+#   .[] / (tabulateR(lvl='ad0', types='TAP', ind='atr_count', years=c(analysis_year, start_year)) %>%
+#            .[ADM0_NAME %in% c('Nigeria', 'India'), c(3:5)])
 
 #how many children died in districts where more than half of LRI was attributed to TAP or HAP
-dt[year==analysis_year & tap_paf_mean > .5, lapply(.SD, sum, na.rm=T), .SDcols=c('lri_c_lower', 'lri_c_mean', 'lri_c_upper')]
-dt[year==analysis_year, lapply(.SD, sum, na.rm=T), .SDcols=c('lri_c_lower', 'lri_c_mean', 'lri_c_upper')]
-dt[year==analysis_year & (tap_paf_mean*hap_pct_mean) > .5, sum(lri_c_mean, na.rm=T)]
+# dt[year==analysis_year & tap_paf_mean > .5, lapply(.SD, sum, na.rm=T), .SDcols=c('lri_c_lower', 'lri_c_mean', 'lri_c_upper')]
+# dt[year==analysis_year, lapply(.SD, sum, na.rm=T), .SDcols=c('lri_c_lower', 'lri_c_mean', 'lri_c_upper')]
+# dt[year==analysis_year & (tap_paf_mean*hap_pct_mean) > .5, sum(lri_c_mean, na.rm=T)]
 
 #change in HAP share of deaths
-dt[year==analysis_year & cause=='lri' & grouping=='child', lapply(.SD, weighted.mean, w=tap_lri_c_mean, na.rm=T), .SDcols=c('hap_pct_mean')]
-dt[year==min(dt$year) & cause=='lri' & grouping=='child', lapply(.SD, weighted.mean, w=tap_lri_c_mean, na.rm=T), .SDcols=c('hap_pct_mean')]
+# dt[year==analysis_year & cause=='lri' & grouping=='child', lapply(.SD, weighted.mean, w=tap_lri_c_mean, na.rm=T), .SDcols=c('hap_pct_mean')]
 
-dt[year==analysis_year & cause=='lri' & grouping=='child', lapply(.SD, weighted.mean, w=tap_lri_c_mean, na.rm=T), 
-   .SDcols=c('hap_pct_mean'), by=iso3] 
-dt[year==min(dt$year) & cause=='lri' & grouping=='child', lapply(.SD, weighted.mean, w=tap_lri_c_mean, na.rm=T), 
-   .SDcols=c('hap_pct_mean'), by=iso3]
+#***********************************************************************************************************************
+
+# ---GBD COMPARISON-----------------------------------------------------------------------------------------------------
+#merge locs
+gbd_dt <- merge(gbd_dt, locs, by='location_name')
+
+#TODO bug in phillipines
+gbd_dt <- gbd_dt[rate_mean!=0]
+
+#compare our burden results to GBD's in order to assess the impact of exposure misclassification in GBD
+compare_vars <- lapply(var_types, function(x) paste0(c('count_', 'atr_count_'), x)) %>% unlist
+gbd_dt[, paste0('diff_', compare_vars) := lapply(compare_vars, function(x) get(paste0('gbd_', x)) - get(x))]
+gbd_dt[, paste0('diff_rate_', compare_vars) := lapply(compare_vars, 
+                                                  function(x) (get(paste0('gbd_', x)) - get(x))/get(x))]
+#some kind of bug in s america
+#gbd_dt <- gbd_dt[!(diff_rate_count_mean < .1 & diff_rate_count_mean > -.1), table(ADM0_NAME)]
+
+#simple regression comparison
+lm(diff_rate_atr_count_mean~year %>% as.factor+diff_rate_count_mean, data=gbd_dt)
+
+#scatter
+gbd_dt[abs(diff_atr_count_mean)>750, loc_label := location_name]
+ggplot(gbd_dt, aes(x=gbd_atr_count_mean, y=atr_count_mean, color=super_region_name, label=loc_label)) + 
+  geom_point() + 
+  geom_text_repel() +
+  facet_wrap(~year) + 
+  geom_abline(slope=1) +
+  theme_minimal() + 
+  scale_y_sqrt(limits=c(0, 50000)) + 
+  scale_x_sqrt(limits=c(0, 50000))
+
+
+#map the comparisons
+comparison <- load_map_results(indicator, indicator_group, run_date, raked, 
+                               year_list=c(2000:2019),
+                               custom_path = list('admin1'=gbd_dt[rak_level==1],
+                                                  'admin0'=gbd_dt[rak_level==0]),
+                               geo_levels=c('admin1', 'admin0'),
+                               cores=cores)
+
+#plot the state comparisons
+state <-
+  comparison$admin1 %>% 
+  filter(year==2019) %>% 
+  plot_map(., this_var='diff_mean',
+           annotations, limits=c(-6700, 3300), title='LBD counts - GBD counts', 
+           legend_title='Difference in counts',
+           zoom=zoom.global,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'state_hap_lri_counts_compare.png'), plot=state, 
+       width=12, height=8, units='in', dpi=300)
+
+#plot the country comparisons
+ctry <-
+  comparison$admin0 %>% 
+  filter(year==2019) %>% 
+  plot_map(., this_var='diff_mean',
+           annotations, limits=c(-4100, 3000), title='LBD counts - GBD counts', 
+           legend_title='Difference in counts',
+           zoom=zoom.global,
+           debug=F)
+
+ggsave(filename=file.path(out.dir, 'ctry_hap_lri_counts_compare.png'), plot=ctry, 
+       width=12, height=8, units='in', dpi=300)
 #***********************************************************************************************************************
  
 # ---SCRAPS-------------------------------------------------------------------------------------------------------------

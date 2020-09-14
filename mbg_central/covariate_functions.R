@@ -534,7 +534,9 @@ load_gbd_covariates = function(covs, measures, year_ids, age_ids,
                          shapefile_version = shapefile_version, ## should be most up-to-date modified GAUL
                                                                 ## to match GBD2016_analysis_final.rds
                                                                 ## world shapefile
-                         collapse_age_sex  = TRUE)
+                         collapse_age_sex  = TRUE,
+                         gbd_round_id=6,
+                         decomp_step='iterative')
 
 
     if (nrow(gbd) != nrow(unique(gbd[, list(name, year)]))) stop(paste0(name, "is not unique by location-year"))

@@ -4,10 +4,9 @@
 #####################################################################
 # source('/homes/jfrostad/_code/lbd/hap/cooking/model/3_orbit.R') 
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~ SETUP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## Setup -------------------------------------------------------------------------
+#***********************************************************************************************************************
+
+# ---SETUP-------------------------------------------------------------------------------------------------------------
 
 ## clear environment
 rm(list=ls())
@@ -31,7 +30,7 @@ if (Sys.info()["sysname"] == "Linux") {
 
 #load external packages
 #TODO request adds to lbd singularity
-pacman::p_load(assertthat, ccaPP, fasterize, fst, mgsub, randtoolbox, magrittr)
+pacman::p_load(assertthat, ccaPP, fasterize, fst, mgsub, randtoolbox, magrittr, mgcViz)
 
 #detect if running interactively
 interactive <- F  %>% #manual override
@@ -45,7 +44,7 @@ if (interactive) {
   ## set arguments
   reg                      <- 'noaf-ESH'
   age                      <- 0
-  run_date                 <- "2020_05_17_11_40_28"
+  run_date                 <- "2020_08_20_22_14_35"
   test                     <- 0
   holdout                  <- 0
   indicator                <- 'cooking_fuel_solid'
@@ -89,8 +88,8 @@ if (interactive) {
   }
   
   ## Override skip options
-  skiptoinla <- F
-  skipinla <- F
+  skiptoinla <- T
+  skipinla <- T
   
 } else {
   
@@ -132,7 +131,8 @@ for(arg in c('reg','age','run_date','test','holdout',
 
 # print out session info so we have it on record
 sessionInfo()
-
+#***********************************************************************************************************************
+ 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
 ## Load MBG packages
 package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
@@ -190,16 +190,15 @@ record_git_status(core_repo = core_repo, check_core_repo = TRUE)
 ## cores to use
 cores_to_use <- ifelse(Sys.getenv("OMP_NUM_THREADS")=='', 6, Sys.getenv("OMP_NUM_THREADS"))
 message('Running calculations with, ', cores_to_use, ' cores.')
+#***********************************************************************************************************************
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~ Prep MBG inputs/Load Data ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ---PREP DATA----------------------------------------------------------------------------------------------------------
 PID <- Sys.getpid()
 tic("Entire script") # Start master timer
 
 ## Set seed for reproducibility
-message('Setting seed 98112 for reproducibility')
-set.seed(98112)
+message('Setting seed for reproducibility')
+set.seed(98118)
 
 ## skip a large chunk if requested in config
 if (as.logical(skiptoinla) == FALSE) {
@@ -327,9 +326,9 @@ if (as.logical(skiptoinla) == FALSE) {
   if(indicator_family=='binomial') hist(df[, get(indicator)]/df$N) else hist(df[, get(indicator)])
   dev.off()
   
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~ Pull Covariates ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#***********************************************************************************************************************
+
+# ---PREP COVS----------------------------------------------------------------------------------------------------------
   
   ## Define modeling space. In years only for now.
   if(yearload=='annual') period_map <- make_period_map(modeling_periods = c(min(year_list):max(year_list)))
@@ -406,9 +405,9 @@ if (as.logical(skiptoinla) == FALSE) {
   }
   
   
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~ Stacking ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#***********************************************************************************************************************
+
+# ---STACK--------------------------------------------------------------------------------------------------------------
   
   tic("Stacking - all") ## Start stacking master timer
   
@@ -454,7 +453,7 @@ if (as.logical(skiptoinla) == FALSE) {
   # plot covariates as a simple diagnostic here
   pdf(sprintf('%s/raw_covariates_%s.pdf',outputdir,pathaddin), height=12, width=12)
   for(covname in names(all_cov_layers)){
-    plot(all_cov_layers[[covname]],main=covname,maxpixel=1e6)
+    plot(all_cov_layers[[covname]],main=covname,maxpixel=1e8)
   }
   dev.off()
   
@@ -510,7 +509,7 @@ if (as.logical(skiptoinla) == FALSE) {
                                           centre_scale_df  = covs_cs_df)
 
     ## plot stackers
-    pdf(paste0(outputdir, 'stacker_rasters', pathaddin, '.pdf'))
+    pdf(paste0(outputdir, "/stackers/", 'stacker_rasters', pathaddin, '.pdf'))
     for(i in 1:length(stacked_rasters))
       plot(stacked_rasters[[i]],main=names(stacked_rasters[[i]]),maxpixel=ncell(stacked_rasters[[i]]))
     dev.off()
@@ -518,9 +517,9 @@ if (as.logical(skiptoinla) == FALSE) {
     message('Stacking is complete')
   }
   
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~ Final Pre-MBG Processing ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#***********************************************************************************************************************
+
+# ---PREP FOR MBG--------------------------------------------------------------------------------------------------------
   
   ## set the fixed effects to use in INLA based on config args
   #TODO this control flow could be more legible
@@ -694,11 +693,9 @@ if (as.logical(stackers_in_transform_space) & indicator_family == 'binomial' & a
   
 }
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~ Run MBG ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#***********************************************************************************************************************
 
-
+# ---RUN MBG------------------------------------------------------------------------------------------------------------
 tic("MBG - all") ## Start MBG master timer
 
 ## for stacking, overwrite the columns matching the model_names so that we can trick inla into being our stacker
@@ -859,6 +856,10 @@ if(!as.logical(skipinla)) {
 
 toc(log = T) ## End MBG - model fit timer
 
+#***********************************************************************************************************************
+
+# ---PREDICT MBG--------------------------------------------------------------------------------------------------------
+
 tic("MBG - predict model") ## Start MBG - model predict timer
 
 ## Run predict_mbg on chunks of 50 samples (to avoid memory issues)
@@ -906,131 +907,63 @@ pm <- lapply(chunks, function(samp) {
 
 
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~ Finish up ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#***********************************************************************************************************************
 
-# if z dimension has more than one level, then save each z as a different indicator
-if(length(z_list) > 1){
-  
-  # reorder pm list, right now its z within each chunk. rbind all z's together
-  for(z in z_list) # z_list must be integers starting with 1
-    if(length(chunks) > 1)
-      for(ch in 2:length(chunks))
-        pm[[1]][[z]] <- cbind(pm[[1]][[z]], pm[[ch]][[z]])
-      pm <- pm[[1]] # pm is now a list of cell_preds by z
-      
-      toc(log = T) # Stop MBG - model predict timer
-      
-      # loop over z and save as an indicator each one
-      orig_indic  <- indicator
-      orig_paddin <- pathaddin
-      orig_outdir <- outputdir
-      
-      message('Wrapping up')
-      
-      for(z in z_list) {
-        cptmp <- pm[[z]]
-        
-        indicator <- sprintf('%s_%s%i',orig_indic,zcol,z)  # new indicator name
-        pathaddin <- paste0('_bin',z,'_',reg,'_',holdout) # new pathaddin
-        outputdir <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/',indicator_group,indicator,run_date) # new outputdir
-        dir.create(outputdir)
-        message(sprintf('New indicator: %s',indicator))
-        
-        # make a mean raster
-        library(matrixStats)
-        mean_ras  <- insertRaster(simple_raster,matrix(rowMeans(cptmp),ncol = max(period_map$period)))
-        sd_ras    <- insertRaster(simple_raster,matrix(  rowSds(cptmp),ncol = max(period_map$period)))
-        
-        # save z specific objects
-        writeRaster(
-          mean_ras,
-          file      = paste0(outputdir, '/', indicator,'_prediction_eb',pathaddin),
-          overwrite = TRUE
-        )
-        
-        save(
-          cptmp,
-          file     = paste0(outputdir, '/', indicator,'_cell_draws_eb',pathaddin,'.RData'),
-          compress = TRUE
-        )
-        
-        pdf(paste0(outputdir,'mean_raster', pathaddin, '.pdf'))
-        plot(mean_ras,main='mean',maxpixel=1e6)
-        plot(sd_ras,main='sd',maxpixel=1e6)
-        dev.off()
-        
-        rm(cptmp)
-      }
-      
-      indicator <- orig_indic
-      pathaddin <- orig_paddin
-      outputdir <- orig_outdir
-      
-      # save training data
-      write.csv(
-        df,
-        file = (paste0(outputdir, '/', indicator,'_trainingdata',pathaddin,'.csv')),
-        row.names = FALSE
-      )
-      
-      message('done saving indicator-specific outputs by z')
-      
-}  else { # if no z colums (most peoples cases)
-  
-  
-  ## Make cell preds and a mean, ci raster, and cfb variability raster
-  cell_pred <- do.call(cbind, pm)
-  mean_ras  <- insertRaster(simple_raster,matrix(rowMeans(cell_pred),ncol = max(period_map$period)))
-  cirange_ras  <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, cirange),ncol = max(period_map$period)))
-  lower_ras <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, lower),ncol = max(period_map$period)))
-  upper_ras <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, upper),ncol = max(period_map$period)))
-  cfb_ras <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, cfb),ncol = max(period_map$period)))
-  toc(log = T) # Stop MBG - model predict timer
-  
-  message('Wrapping up')
-  save_mbg_preds(config     = config,
-                 time_stamp = time_stamp,
-                 run_date   = run_date,
-                 mean_ras   = mean_ras,
-                 sd_ras     = NULL,
-                 res_fit    = model_fit,
-                 cell_pred  = cell_pred,
-                 df         = df,
-                 pathaddin  = pathaddin)
-  
-  # save lower
-  writeRaster(
-    lower_ras,
-    file = paste0(outputdir, '/', indicator,'_lower_eb', pathaddin),
-    overwrite = TRUE
-  )
-  #save upper
-  writeRaster(
-    upper_ras,
-    file = paste0(outputdir, '/', indicator,'_upper_eb', pathaddin),
-    overwrite = TRUE
-  )
-  
-  # plot the mean, cirange, and cfb variability rasters in a pdf
-  dir.create(paste0(outputdir,'results_maps/'))
-  pdf(paste0(outputdir,'results_maps/summary_rastersXX', pathaddin, '.pdf'))
-  plot(mean_ras, main=paste0('mean.', names(mean_ras)), maxpixel=ncell(mean_ras))
-  plot(lower_ras, main=paste0('lower.', names(lower_ras)), maxpixel=ncell(lower_ras))
-  plot(upper_ras, main=paste0('upper.', names(upper_ras)), maxpixel=ncell(upper_ras))
-  plot(cirange_ras, main=paste0('ci.', names(cirange_ras)), maxpixel=ncell(cirange_ras))
-  plot(cfb_ras, main=paste0('cfb.', names(cfb_ras)), maxpixel=ncell(cfb_ras))
-  dev.off()
-  
-  # plot the mean rasters as png
-  png(paste0(outputdir,'results_maps/mean_rasterXX', pathaddin, '.png'), 1800, 1200)
-  print(spplot(mean_ras, main=list(label=paste0(toupper(indicator), ': mean'),cex=2)))
-  dev.off()
-  
-}
+# ---FINISH-------------------------------------------------------------------------------------------------------------
+## Make cell preds and a mean, ci raster, and cfb variability raster
+cell_pred <- do.call(cbind, pm)
+mean_ras  <- insertRaster(simple_raster,matrix(rowMeans(cell_pred),ncol = max(period_map$period)))
+cirange_ras  <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, cirange),ncol = max(period_map$period)))
+lower_ras <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, lower),ncol = max(period_map$period)))
+upper_ras <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, upper),ncol = max(period_map$period)))
+cfb_ras <- insertRaster(simple_raster,matrix(apply(cell_pred, 1, cfb),ncol = max(period_map$period)))
+toc(log = T) # Stop MBG - model predict timer
+
+message('Wrapping up')
+message('saving preds')
+save_mbg_preds(config     = config,
+               time_stamp = time_stamp,
+               run_date   = run_date,
+               mean_ras   = mean_ras,
+               sd_ras     = NULL,
+               res_fit    = model_fit,
+               cell_pred  = cell_pred,
+               df         = df,
+               pathaddin  = pathaddin)
+
+# save lower
+message('writing upper/lower')
+writeRaster(
+  lower_ras,
+  file = paste0(outputdir, '/', indicator,'_lower_eb', pathaddin),
+  overwrite = TRUE
+)
+#save upper
+writeRaster(
+  upper_ras,
+  file = paste0(outputdir, '/', indicator,'_upper_eb', pathaddin),
+  overwrite = TRUE
+)
+
+# plot the mean, cirange, and cfb variability rasters in a pdf
+message('plotting summmary rasters')
+dir.create(paste0(outputdir,'results_maps/'))
+pdf(paste0(outputdir,'results_maps/summary_rastersXX', pathaddin, '.pdf'))
+plot(mean_ras, main=paste0('mean.', names(mean_ras)), maxpixel=ncell(mean_ras))
+plot(lower_ras, main=paste0('lower.', names(lower_ras)), maxpixel=ncell(lower_ras))
+plot(upper_ras, main=paste0('upper.', names(upper_ras)), maxpixel=ncell(upper_ras))
+plot(cirange_ras, main=paste0('ci.', names(cirange_ras)), maxpixel=ncell(cirange_ras))
+plot(cfb_ras, main=paste0('cfb.', names(cfb_ras)), maxpixel=ncell(cfb_ras))
+dev.off()
+
+# plot the mean rasters as png
+message('plotting mean')
+png(paste0(outputdir,'results_maps/mean_rasterXX', pathaddin, '.png'), 1800, 1200)
+print(spplot(mean_ras, main=list(label=paste0(toupper(indicator), ': mean'),cex=2)))
+dev.off()
 
 ## timer stuff
+message('final mbg exit steps')
 toc(log = T) # End master timer
 
 ## Format timer
@@ -1058,9 +991,9 @@ write(NULL, file = paste0(outputdir, "/fin_", pathaddin))
 ## Write CSV
 write.csv(df_timer,file = output_file, row.names = FALSE)
 
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ AGGREGATE ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#***********************************************************************************************************************
+
+# ---LAUNCH_AGG---------------------------------------------------------------------------------------------------------
 #save necessary objects
 # rake_transform <- 'logit' #TODO move to config
 # prep_postest(indicator = indicator,
@@ -1068,30 +1001,32 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 #              run_date = run_date,
 #              save_objs = c("core_repo", "gbd", "year_list", "summstats", "rake_transform", "config"))
 
+#dont launch aggregation if we are modelling kerosene
+if(indicator%in%c('cooking_fuel_solid', 'cooking_fuel_dirty')) {
 
-# set specific arguments
-measure         <- 'prev'
-jname           <- paste('eDL', reg, indicator, sep = '_')
-
-# set memory by region
-individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
-mymem <- 200
-if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
-} else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
-} else mymem <- '350G'
-
-# set up qsub
-sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
-                  '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
-                  '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
-script <- file.path(my_repo, indicator_group, 'post/2_entry.R')
-args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
-                    
-
-# submit qsub
-paste(sys.sub, r_shell, script, args) %>% 
-  system
+  # set specific arguments
+  measure         <- 'prev'
+  jname           <- paste('eDL', reg, indicator, sep = '_')
+  
+  # set memory by region
+  individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
+  if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
+  } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+  } else mymem <- '200G'
+  
+  # set up qsub
+  sys.sub <- paste0('qsub -e ', outputdir, '/errors -o ', outputdir, '/output ', 
+                    '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
+                    '-l fthread=2 -l h_rt=00:24:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+  r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+  script <- file.path(my_repo, indicator_group, 'post/2_entry.R')
+  args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
+                      
+  # submit qsub
+  paste(sys.sub, r_shell, script, args) %>% 
+    system
+  
+}
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ FIN ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

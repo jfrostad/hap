@@ -62,6 +62,7 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
 run_date <- '2020_05_17_11_40_28'
+run_date <- '2020_09_01_11_42_52'
 lri_run_date <- '2020_06_11_11_19_26'
 shapefile <- "2019_09_10"
 
@@ -112,8 +113,9 @@ file.path(my_repo, '_lib', 'post', 'landing_gear.R') %>% source
 #gbd fx
 gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
-
-
+file.path(gbd.shared.function.dir, 'get_age_metadata.R') %>% source
+file.path(gbd.shared.function.dir, 'get_draws.R') %>% source
+file.path(gbd.shared.function.dir, 'get_population.R') %>% source
 #***********************************************************************************************************************
 
 # ---PREP DATA----------------------------------------------------------------------------------------------------------
@@ -145,7 +147,7 @@ stages <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %
 
 #read in gbd location info
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
-  .[, .(iso3=ihme_loc_id, location_name, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
+  .[, .(iso3=ihme_loc_id, location_name, super_region_id, super_region_name, region_id, region_name, location_id)] #subset to relevant columns
 
 #create file to crosswalk AD0 to iso3
 iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid) 
@@ -159,14 +161,7 @@ dt <-
   list.files(data.dir, pattern='ad2_draws.fst', full.names = T) %>% 
   lapply(., read_fst, as.data.table=T) %>% 
   rbindlist(use.names=T, fill=T) %>% 
-  .[, `:=` (cause='lri', grouping='child')] #TODO fix this in the descent file
-
-#for now, we are using 2017 results as if they were 2018
-#TODO model 2018
-dt <- copy(dt) %>% 
-  .[year==2017] %>% 
-  .[, year := 2018] %>% 
-  list(dt, .) %>% rbindlist 
+  .[, `:=` (cause='lri', grouping='under5')] #TODO fix this in the descent file
 
 #cap PAFs at 0
 #TODO why are there negative PAFs??
@@ -180,7 +175,7 @@ lri_dt <- admin_2 %>%
        measure = patterns("V"),
        variable.name = "draw",
        value.name = 'rate') %>% 
-  .[, `:=` (cause='lri', grouping='child', pop=NULL, region=NULL)]
+  .[, `:=` (cause='lri', grouping='under5', pop=NULL, region=NULL)]
 
 load(file.path(lri_dir, lri_run_date, lri_counts_path), verbose=T)
 lri_dt <- admin_2 %>% 
@@ -189,9 +184,60 @@ lri_dt <- admin_2 %>%
        variable.name = "draw",
        value.name = 'count') %>% 
   merge(., lri_dt, by=c('year', 'ADM2_CODE', 'draw')) %>% 
-  .[, `:=` (cause='lri', grouping='child', pop=NULL, region=NULL)]
+  .[, `:=` (cause='lri', grouping='under5', pop=NULL, region=NULL)]
 
+#pull the draws from codcorrect for BRA/CHN
+locations <- get_location_metadata(location_set_id = 35, gbd_round_id = 6, decomp_step = "step4") %>% as.data.table
+loc_ids <- locations[ihme_loc_id %like% 'BRA|CHN' & most_detailed==1, location_id]
+gbd <-
+  get_draws("cause_id", 322, 
+            source="codcorrect", version=135, year_id=1990:2018,
+            location_id=loc_ids, sex_id=3, age_group_id=1, gbd_round_id=6, decomp_step="step5",
+            metric_id=c(1,3), measure_id=1,
+            num_workers=8) %>% 
+  melt(.,
+       measure = patterns("draw_"),
+       variable.name = "draw",
+       value.name = 'state_count') %>% 
+  .[, `:=` (cause='lri', grouping='under5', pop=NULL, region=NULL)] %>% 
+  .[, draw := gsub('draw_', 'V', draw)]
+
+#calculate rates
+pop_df <- get_population(decomp_step="iterative", gbd_round_id=6,
+                         location_id=loc_ids,
+                         year_id=1990:2018,
+                         age_group_id=1,
+                         sex_id=3)
+gbd <- merge(gbd, pop_df[, .(location_id, year_id, population)], by=c('location_id', 'year_id'))
+gbd[, rate := state_count / population]
+
+# add connector object between ADM codes and GBD loc ids
+gbd <- merge(gbd, 
+             data.table(get_gbd_locs(rake_subnational = T,
+                                     reg = "BRA+CHN",
+                                     shapefile_version = raking_shapefile_version)), 
+             by='location_id')
+gbd <- merge(gbd, adm_links[iso3%in%c('BRA','CHN'), .(ADM1_CODE, ADM2_CODE)], by='ADM1_CODE', allow.cartesian=T)
+setnames(gbd, 'year_id', 'year')
+
+#merge LRI results to HAP results
 dt <- merge(dt, lri_dt, by=c('ADM2_CODE', 'year', 'draw', 'grouping', 'cause'), all.x=T) 
+dt[count==0, rate := 0] #TODO why do 0 count ad2s have NaN rates
+
+#impute BRA/CHN LRI figures from GBD, since LBD has no data and does not produce estimates
+na_dt <- dt[is.na(rate) | is.na(count)] #BRA/CHN
+na_dt[, c('rate', 'count') := NULL]
+na_dt <- merge(na_dt, gbd, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'draw', 'grouping', 'cause'), all.x=T) 
+na_dt[, pop_share := pop/sum(pop, na.rm=T), by=.(year, ADM1_CODE, draw, type)] #calc dist share of state pop
+na_dt[, count := population * pop_share * rate] #use share of children in ad2 to assign count by GBD u5 pop for ad1
+
+#combine imputations
+dt <- list(
+  na_dt[, names(dt), with=F], #imputed BRA/CHN
+  dt[!(is.na(rate) | is.na(count))] #all others
+) %>% rbindlist(use.names=T)
+
+#calculate attrib. using paf and LRI figures
 dt[, atr_rate := rate * paf]
 dt[, atr_count := count * paf]
 
@@ -235,7 +281,7 @@ saveResults <- function(agg, dt) {
   
   message('saving ', agg, ' results')
   
-  dt[lvl==agg] %>% 
+  dt[dimension==agg] %>% 
     Filter(function(x) !all(is.na(x)), .) %>% 
     write.csv(., paste0(data.dir, '/', agg, '_summary.csv'), row.names = F)
   
@@ -248,6 +294,10 @@ lapply(by_cols %>% names, saveResults, dt=results)
 
 stop()
 
+#subset to ad2 for figures
+dt <- results[dimension=='ad2' & term=='lvl'] %>% Filter(function(x) !all(is.na(x)), .)
+dt_d <- results[dimension=='ad2' & term%like%'change'] %>% Filter(function(x) !all(is.na(x)), .)
+
 #produce inequality metrics
 #calculate GINI/MAD at country level
 dt_ineq <- dt[year %in% c(start_year, end_year), .(iso3, year, ADM0_CODE, ADM2_CODE, ADM2_NAME, dfu_mean, 
@@ -258,8 +308,6 @@ dt_ineq[, mean := mean(dfu_mean, na.rm=T), by=.(iso3, year)]
 dt_ineq[, max := max(dfu_mean, na.rm=T), by=.(iso3, year)]
 dt_ineq[, min := min(dfu_mean, na.rm=T), by=.(iso3, year)]
 dt_ineq[, range := max-min]
-
-
 
 #also output the file for later
 write.csv(dt_d, file.path(data.dir, 'admin_2_delta_summary.csv'), row.names = F)
@@ -337,6 +385,11 @@ projs <- unique(projs, by=key(projs)) %>%
 #calculate relative uncertainty of SEV
 projs[, sev_rel_uncertainty := (sev_upper-sev_lower)/2/sev_mean]
 projs[sev_rel_uncertainty>1, sev_rel_uncertainty := 1] #cap at 1
+
+#TODO fix in descent
+#impute mean for somalia
+projs[ADM0_CODE==203, sev_mean := zoo::na.aggregate(sev_mean), by=.(year)]
+projs[ADM0_CODE==203, sev_rel_uncertainty := zoo::na.aggregate(sev_rel_uncertainty), by=.(year)]
 
 #make sf datasets for plotting
 threshold <- .01
@@ -555,38 +608,38 @@ ggsave(filename=file.path(out.dir, 'sdg_7_probs_01_agg.png'), plot=global,
 # ---SAVE MAPPING INPUTS------------------------------------------------------------------------------------------------
 #output files for Kim to produce key figures
 ##Figure 1: Selected AD2 Results for 2018##
-#A: DFU levels
+#A: SFU levels
 saveMappingInput(
-  dt, 
-  map_ind='dfu',
-  data_ind='dfu',
+  dt[type=='HAP'], 
+  map_ind='sfu',
+  data_ind='prev',
   map_measure='mean',
   data_measure='mean'
 )
 
 #B: TAP PC levels
 saveMappingInput(
-  dt_d, 
+  dt[type=='TAP'], 
   map_ind='tap_pc',
-  data_ind='tap_pc',
+  data_ind='pm_pc',
   map_measure='mean',
   data_measure='mean'
 )
 
 #C: HAP PCT levels
 saveMappingInput(
-  dt_d, 
+  dt[type=='HAP'],  
   map_ind='hap_pct',
-  data_ind='hap_pct',
+  data_ind='share',
   map_measure='mean',
   data_measure='mean'
 )
 
 #D: Attributable LRI rates
 saveMappingInput(
-  dt, 
-  map_ind='tap_lri',
-  data_ind='tap_lri',
+  dt[type=='TAP'], 
+  map_ind='tap_lri_rate',
+  data_ind='atr_rate',
   map_measure='mean',
   data_measure='mean'
 )
@@ -594,29 +647,29 @@ saveMappingInput(
 ##Figure 2: Selected AD2 Trends 2000-2018##
 #A: DFU levels
 saveMappingInput(
-  dt_d, 
-  map_ind='dfu',
-  data_ind='dfu',
+  dt_d[type=='HAP'&term=='change_rate'], 
+  map_ind='sfu',
+  data_ind='prev',
   map_measure='change_rate',
-  data_measure='mean_dr'
+  data_measure='mean'
 )
 
 #B: Change rate for TAP_PC 2000-2018
 saveMappingInput(
-  dt_d, 
+  dt_d[type=='TAP'&term=='change_rate'], 
   map_ind='tap_pc',
-  data_ind='tap_pc',
+  data_ind='pm_pc',
   map_measure='change_rate',
-  data_measure='mean_dr'
+  data_measure='mean'
 )
 
 #C: Change rate for attributable LRI 2000-2018
 saveMappingInput(
-  dt_d, 
-  map_ind='tap_lri',
-  data_ind='tap_lri',
+  dt_d[type=='TAP'&term=='change_rate'], 
+  map_ind='tap_lri_rate',
+  data_ind='atr_rate',
   map_measure='change_rate',
-  data_measure='mean_dr'
+  data_measure='mean'
 )
 
 #D: SEV in 2018

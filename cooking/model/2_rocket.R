@@ -11,17 +11,83 @@
 ## Clear environment
 rm(list=ls())
 
-## Set repo location, indicator group, and some arguments
-user            <- commandArgs()[4]
-core_repo       <- commandArgs()[5]
-indicator_group <- commandArgs()[6]
-indicator       <- commandArgs()[7]
-config_par      <- commandArgs()[8]
-cov_par         <- commandArgs()[9]
-Regions         <- commandArgs()[10]
-parallel_script <- commandArgs()[11]
-message(indicator)
+# runtime configuration
+if (Sys.info()["sysname"] == "Linux") {
+  j_root <- "/home/j/"
+  h_root <- file.path("/ihme/homes", Sys.info()["user"])
+  
+  package_lib    <- file.path(h_root, '_code/_lib/pkg')
+  ## Load libraries and  MBG project functions.
+  .libPaths(package_lib)
+  
+  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
+  Sys.setlocale(category = "LC_ALL", locale = "C")
+  
+} else {
+  j_root <- "J:"
+  h_root <- "H:"
+}
 
+#load external packages
+#TODO request adds to lbd singularity
+pacman::p_load(assertthat, magrittr)
+
+#detect if running interactively
+interactive <- F  %>% #manual override
+  ifelse(., T, !length(commandArgs())>2) %>%  #check length of arguments being passed in
+  ifelse(., T, !(is.na(Sys.getenv("RSTUDIO", unset = NA)))) #check if IDE
+
+## if running interactively, set arguments
+if (interactive) {
+  warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
+
+  ## Set repo location, indicator group, and some arguments
+  user <- 'jfrostad'
+  core_repo <- "/homes/jfrostad/_code/lbd/hap"
+  indicator_group <- 'cooking'
+  indicator <- 'cooking_fuel_solid'
+  reg <- 'MNG'
+  
+  config_par   <- 'hap_sp_fine'
+  cov_par <- paste(indicator_group, reg, sep='_')
+
+  parallel_script <- file.path('model/3_orbit')
+  plot_covariates <- T
+  covariate_plotting_only <- F
+  use_geos_nodes <- T
+  proj_arg <- ifelse(use_geos_nodes, 'proj_geo_nodes', 'proj_geospatial_dia')
+  run_date <- '2020_09_13_22_24_27'
+  my_repo <- core_repo
+
+  
+} else {
+
+  ## Set repo location, indicator group, and some arguments
+  user            <- commandArgs()[4]
+  core_repo       <- commandArgs()[5]
+  indicator_group <- commandArgs()[6]
+  indicator       <- commandArgs()[7]
+  config_par      <- commandArgs()[8]
+  cov_par         <- commandArgs()[9]
+  reg         <- commandArgs()[10]
+  parallel_script <- commandArgs()[11]
+  
+  ## Set some covariate options
+  plot_covariates <- commandArgs()[12]
+  covariate_plotting_only <- commandArgs()[13]
+  
+  ## Set to prod or geos nodes
+  proj_arg <- commandArgs()[14]
+  use_geos_nodes <- commandArgs()[15]
+  
+  ## Set run date
+  run_date <- commandArgs()[16]
+  
+  ## Define personal repo
+  my_repo <- commandArgs()[17]
+
+}
+  
 ## Singularity version
 sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
 # which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg')
@@ -35,42 +101,40 @@ which_sing <- file.path(sing_dir, 'lbd_full_20200128.simg')
 package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
   mbg_setup(package_list = package_list, repos = core_repo)
-
-## Set some covariate options
-plot_covariates <- commandArgs()[12]
-covariate_plotting_only <- commandArgs()[13]
-
-## Set to prod or geos nodes
-proj_arg <- commandArgs()[14]
-message(proj_arg)
-use_geos_nodes <- commandArgs()[15]
-
-## Set run date
-run_date <- commandArgs()[16]
-
-## Define personal repo
-my_repo <- commandArgs()[17]
+  
+#TODO submit PR
+fix_diacritics <<- function(x) {
+  
+  require(mgsub)
+  
+  #first define replacement patterns as a named list
+  defs <-
+    list('??'='S', '??'='s', '??'='Z', '??'='z', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', '??'='A', 
+         '??'='C', '??'='E', '??'='E','??'='E', '??'='E', '??'='I', '??'='I', '??'='I', '??'='I', '??'='N', '??'='O', 
+         '??'='O', '??'='O', '??'='O', '??'='O', '??'='O', '??'='U','??'='U', '??'='U', '??'='U', '??'='Y', '??'='B', 
+         '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='a', '??'='c','??'='e', '??'='e', '??'='e', 
+         '??'='e', '??'='i', '??'='i', '??'='i', '??'='i', '??'='o', '??'='n', '??'='o', '??'='o', '??'='o', '??'='o',
+         '??'='o', '??'='o', '??'='u', '??'='u', '??'='u', '??'='y', '??'='y', '??'='b', '??'='y', '??'='Ss')
+  
+  #then force conversion to UTF-8 and replace with non-diacritic character
+  enc2utf8(x) %>% 
+    mgsub(., pattern=enc2utf8(names(defs)), replacement = defs) %>% 
+    return
+  
+}
 
 ## Throw a check for things that are going to be needed later
 message('Looking for things in the config that will be needed for this script to run properly')
-
-## Read config file and save all parameters in memory
-# config <- load_config(repo            = my_repo,
-#                       indicator_group = indicator_group,
-#                       indicator       = indicator,
-#                       config_name     = paste0('/model/configs/config_', config_par),
-#                       covs_name       = paste0('/model/configs/covs_', cov_par))
-
 config <- set_up_config(repo            = my_repo,
                         indicator_group = indicator_group,
                         indicator       = indicator,
                         config_name     = paste0('/model/configs/config_', config_par),
                         covs_name       = paste0('/model/configs/covs_', cov_par)
-)
+                        )
 
 ## Create output folder with the run_date
 outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
-dir.create(outputdir, recursive=T)
+  dir.create(outputdir, recursive=T)
 
 ## save config type
 file.create(paste0(outputdir, '/000_', config_par, '.note'))
@@ -85,7 +149,7 @@ if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
 check_config()
 
 ## If running individual countries make sure all country FEs and REs off
-individual_countries <- ifelse(nchar(Regions) == 3, TRUE, FALSE)
+individual_countries <- ifelse(nchar(reg) == 3, TRUE, FALSE)
 if (individual_countries) {
   use_child_country_fes <- FALSE
   use_inla_country_fes  <- FALSE
@@ -93,65 +157,19 @@ if (individual_countries) {
 }
 
 ## If not running a model with India make sure all subnational REs off
-if (Regions != 'dia_south_asia' & Regions != 'IND') {
+if (reg != 'dia_south_asia' & reg != 'IND') {
   use_subnat_res <- FALSE
 }
-
-# ## Set BRT parameters from optimizer sheet
-# if (stacked_fixed_effects %like% 'gbm') {
-#   
-#   gbm_params <- paste0(core_repo, indicator_group, '/model/configs/gbm_params.csv') %>% 
-#     fread(stringsAsFactors=F)
-#   gbm_tc <- gbm_params[indi == indicator & region == Regions, gbm_tc]
-#   gbm_lr <- gbm_params[indi == indicator & region == Regions, gbm_lr]
-#   gbm_bf <- gbm_params[indi == indicator & region == Regions, gbm_bf]
-#   gbm_nminobs <- gbm_params[indi == indicator & region == Regions, gbm_nminobs]
-#   gbm_ntrees <- gbm_params[indi == indicator & region == Regions, gbm_ntrees]
-#   gbm_cv <- gbm_params[indi == indicator & region == Regions, gbm_cv]
-#   
-# } else {
-#   
-#   gbm_cv <- NA
-#   gbm_tc <- NA
-#   gbm_bf <- NA
-#   
-# }
-
-# ## Set xgboost options
-# if (any(grepl('xgboost', stacked_fixed_effects))) {
-#   
-#   xg_grid_search <- T #set TRUE to search the default grid, FALSE for adaptive random search
-#   xg_ensemble <- T #set TRUE in order to build/return an xgboost ensemble using caretensemble
-#   xg_second_best <- F #set TRUE if you want to return/use the top 2 xgb models instead of the ensemble
-#   
-# }
-
-# ## Record model parameters in google sheet ORZ Model Tracker
-# library('googlesheets')
-# model_params <- c(indicator_group, indicator, run_date, outputdir,
-#                   covariate_plotting_only, individual_countries, Regions,
-#                   config_par, cov_par, fixed_effects, gbd_fixed_effects,
-#                   stacked_fixed_effects, use_inla_country_fes, use_nid_res, gam_knots, gbm_cv, gbm_bf, gbm_tc,
-#                   mesh_t_knots, rho_prior, theta_prior, nugget_prior, ctry_re_prior, ctry_re_sum0,
-#                   spde_integrate0, makeholdouts, use_s2_mesh, modeling_shapefile_version, parallel_script)
-# load(paste0(core_repo, '/ors/3_modeling/gs_authorization_token.RData'))
-# gs_auth(token = ttt)
-# orz_tracker <- gs_title('ORZ model tracker')
-# gs_add_row(orz_tracker, ws = 'Sheet1', input = model_params)
-# rm(orz_tracker)
-
 
 ## Make holdouts -------------------------------------------------------------------------
 
 if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
   message('Making holdouts')
   
-  set.seed(98112)
+  set.seed(98118)
   
   # load the full input data
   df <- load_input_data(indicator   = indicator,
-                        simple      = NULL,
-                        removeyemen = FALSE,
                         years       = yearload,
                         yl          = year_list,
                         withtag     = as.logical(withtag),
@@ -159,7 +177,7 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
                         use_share   = as.logical(use_share))
   
   # add in location information
-  df <- merge_with_ihme_loc(df, re = Regions, shapefile_version = modeling_shapefile_version)
+  df <- merge_with_ihme_loc(df, re = reg, shapefile_version = modeling_shapefile_version)
   
   # remove data for countries outside of region
   df <- df[!is.na(region)]
@@ -168,10 +186,8 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
   if (holdout_strategy == 'nids') {
     
     # make sure we have enough nids to do holdouts
-    if (length(unique(df$nid)) < 5) {
-      n_ho_folds <- length(unique(df$nid))
-    }
-    
+    if (length(unique(df$nid)) < 5) n_ho_folds <- length(unique(df$nid))
+
     # make a list of dfs for each region, with 5 nid folds identified in each
     stratum_ho <-   make_folds(data       = df,
                                n_folds    = as.numeric(n_ho_folds),
@@ -183,14 +199,14 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
                                save.file = paste0('/share/geospatial/mbg/',
                                                   indicator_group, '/',
                                                   indicator, '/output/',
-                                                  run_date, '/stratum_', Regions, '.rds'))
+                                                  run_date, '/stratum_', reg, '.rds'))
   } 
   
   # make holdouts based on admin 1, if selected
   if (holdout_strategy == 'admin') {
     
     # Load simple polygon template by region
-    gaul_list           <- get_adm0_codes(Regions, shapefile_version = modeling_shapefile_version)
+    gaul_list           <- get_adm0_codes(reg, shapefile_version = modeling_shapefile_version)
     simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 1, tolerance = 0.4, shapefile_version = modeling_shapefile_version)
     subset_shape        <- simple_polygon_list[[1]]
     
@@ -228,7 +244,7 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
                              save.file = paste0('/share/geospatial/mbg/',
                                                 indicator_group, '/',
                                                 indicator, '/output/',
-                                                run_date, '/stratum_', Regions, '.rds'))
+                                                run_date, '/stratum_', reg, '.rds'))
   } 
   
 }
@@ -236,7 +252,7 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
 ## Launch parallel script -------------------------------------------------------------------------
 
 ## Make loopvars aka strata grid (format = regions, ages, holdouts)
-if(as.logical(makeholdouts)) loopvars <- expand.grid(Regions, 0, 0:as.numeric(n_ho_folds)) else loopvars <- expand.grid(Regions, 0, 0)
+if(as.logical(makeholdouts)) loopvars <- expand.grid(reg, 0, 0:as.numeric(n_ho_folds)) else loopvars <- expand.grid(reg, 0, 0)
 
 ## loop over them, save images and submit qsubs
 for(i in 1:nrow(loopvars)){

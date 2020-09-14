@@ -3,12 +3,12 @@
 "2","aridity","mean",TRUE,FALSE
 "3","crutsdtr","mean",TRUE,FALSE
 "4","crutsfrs","sum",TRUE,FALSE
-"5","crutspet","mean",TRUE,FALSE
-"6","deforestation","years_since_loss",TRUE,FALSE
-"7","distriverslakes","mean",TRUE,FALSE
-"8","dmspntl","mean",TRUE,FALSE
-"9","elevation","mean",TRUE,FALSE
-"10","esalandcover","class190",TRUE,FALSE
+"5","depratio","youngage",TRUE,FALSE
+"6","distriverslakes","mean",TRUE,FALSE
+"7","dmspntl","mean",TRUE,FALSE
+"8","elevation","mean",TRUE,FALSE
+"9","esalandcover","class190",TRUE,FALSE
+"10","escroplandarea","mean",TRUE,FALSE
 "11","evi_v6","mean_mean",TRUE,FALSE
 "12","fertility","mean",TRUE,FALSE
 "13","ghslurbanicity","mean",TRUE,FALSE
@@ -18,5 +18,5 @@
 "17","landcover","proportionalclass13",TRUE,FALSE
 "18","mswep","sum",TRUE,FALSE
 "19","satpm25","mean",TRUE,FALSE
-"20","tcb_v6","mean_mean",TRUE,FALSE
+"20","tcw_v6","mean_mean",TRUE,FALSE
 "21","worldpop","total",TRUE,FALSE

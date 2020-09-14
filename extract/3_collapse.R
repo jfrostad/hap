@@ -44,7 +44,7 @@ run_collapse <- T #set to TRUE if you have new data and want to recollapse
 run_resample <- T #set to TRUE if you have new data and want to rerun polygon resampling
 save_diagnostic <- F #set to TRUE to save the problematic survey diagnostic
 new_vetting <- F #set to TRUE to refresh the vetting diagnostic
-redownload <- F
+redownload <- T
 #***********************************************************************************************************************
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
@@ -329,7 +329,7 @@ cooking <- cooking[!(nid %in% excluded_nids)] #remove any excluded datapoints
 # ---RESAMPLE-----------------------------------------------------------------------------------------------------------
 #prep for resampling
 vars <- names(cooking) %>% .[. %like% 'cooking']
-vars <- c('cooking_fuel_solid', 'cooking_fuel_dirty')
+vars <- c('cooking_fuel_solid', 'cooking_fuel_dirty', 'cooking_fuel_kerosene')
 
 #convert to count space
 cooking[, (vars) := lapply(.SD, function(x, count.var) {x*count.var}, count.var=N), .SDcols=vars]

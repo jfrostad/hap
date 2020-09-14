@@ -18,10 +18,11 @@ tcb_v6,mean_mean,TRUE,FALSE
 worldpop,total,TRUE,FALSE
 haqi,mean,TRUE,TRUE
 ldi_pc,mean,TRUE,TRUE
-sanitation_prop,mean,TRUE,TRUE
 lst_avg_v6,mean_mean,TRUE,FALSE
 escroplandarea,mean,TRUE,FALSE
-evi,median,TRUE,FALSE
+evi_v6,mean_mean,TRUE,FALSE
 mswep,sum,TRUE,FALSE
-nexndvi,mean,TRUE,FALSE
 tcw_v6,mean_mean,TRUE,FALSE
+satpm25,mean,TRUE,FALSE
+deforestation,years_since_loss,TRUE,FALSE
+esalandcover,class190,TRUE,FALSE

@@ -25,7 +25,7 @@
   mbg_setup(package_list = package_list, repos = core_repo)
   
   # set cluster arguments
-  use_geos_nodes  <- T
+  use_geos_nodes  <- F
   proj_arg        <- ifelse(use_geos_nodes, 'proj_geo_nodes', 'proj_geospatial')
   proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
   
@@ -37,8 +37,8 @@
   covariate_plotting_only <- FALSE
   
   # indicate whether to use old run date
-  use_old_run_date <- TRUE
-  old_run_date_input <- '2020_05_17_11_40_28'
+  use_old_run_date <- T
+  old_run_date_input <- '2020_09_01_11_42_52'
   
   # set run date
   if (use_old_run_date == FALSE) {
@@ -64,17 +64,17 @@
                'stan-TKM',
                'CHN', 'MNG',
                'ocea-MYS',
-               'seas-VNM-THA', 'VNM', 'THA',
+               'seas',
                'mide+TKM', 'soas')
   
-  #regions <- c('CHN', 'trsa-GUF')
-  #regions <- 'ERI+DJI+YEM'
+  regions <- c('ansa-VEN')
+  #regions <- c('AGO', 'ERI+DJI+YEM', 'NGA', 'sssa-ZAF')
   
   ## Set repo location, indicator group, and some arguments
   user <- 'jfrostad'
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_standard'
+  config_par   <- 'hap_sp_fine'
   holdout <- 0
   age <- 0
   measure <- 'prev'
@@ -85,8 +85,8 @@ if(!skip_entry) {
   for (reg in regions) {
   
     # set memory based on region
-    if (reg %in% c('dia_chn_mng', 'dia_s_america-GUY', 'dia_s_america-BRA')) { mymem <- '900G'
-    } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
+    if (reg %in% c('trsa-GUF')) { mymem <- '750G'
+    } else if (reg %in% c('wssa-CPV-NGA', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
     } else if (reg %in% c('seas-VNM-THA', 'VNM', 'THA', "ERI+DJI+YEM", 'sssa-ZAF')) { mymem <- '200G'
     } else mymem <- '350G'
   
@@ -99,7 +99,8 @@ if(!skip_entry) {
         # set up qsub
         sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ',
                           '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
-                          '-l fthread=1 -l h_rt=16:00:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+                          '-l fthread=1 -l h_rt=', ifelse(use_geos_nodes, '16:00:00:00', '3:00:00:00'),
+                          ' -v sing_image=default -N ', jname, ' -l archive=TRUE ')
         r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
         script <- file.path(my_repo, indicator_group, 'post/2_entry.R')
         args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
@@ -116,10 +117,10 @@ if(!skip_entry) {
   for (reg in regions) {
   
     # set memory based on region
-    if (reg %in% c('CHN', 'trsa-GUF')) { mymem <- '750G'
-    } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ansa-VEN', 'ocea-MYS')) { mymem <- '500G'
-    } else if (reg %in% c('seas-VNM-THA', 'VNM', 'THA', "ERI+DJI+YEM", 'sssa-ZAF')) { mymem <- '200G'
-    } else mymem <- '350G'
+    if (reg %in% c('CHN', 'trsa-GUF', 'ansa-VEN')) { mymem <- '750G'
+    } else if (reg %in% c('wssa-CPV-NGA', 'trsa-GUF', 'CHN', 'soas', 'ocea-MYS')) { mymem <- '500G'
+    } else if (reg %in% c('seas-VNM-THA', 'VNM', 'THA', "ERI+DJI+YEM", 'sssa-ZAF')) { mymem <- '100G'
+    } else mymem <- '300G'
   
       #name job
       jname           <- paste('EdL', reg, indicator, sep = '_')
@@ -130,7 +131,8 @@ if(!skip_entry) {
       # set up qsub
       sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ',
                         '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
-                        '-l fthread=1 -l h_rt=16:00:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+                        '-l fthread=1 -l h_rt=', ifelse(use_geos_nodes, '16:00:00:00', '3:00:00:00'),
+                        ' -v sing_image=default -N ', jname, ' -l archive=TRUE ')
       r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
       script <- file.path(my_repo, indicator_group, 'post/3_descent.R')
       args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)

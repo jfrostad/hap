@@ -1712,6 +1712,7 @@ calculate_fractional_rfs <- function(overs = overs,
     #define logit raking specific settings
     zero_heuristic <- T
     approx_0_1 <- T
+    iterate <- T
     
     cell_pred <- cell_pred[, (overs) := lapply(.SD, function(x) x / pop_raked), .SDcols=overs]
     

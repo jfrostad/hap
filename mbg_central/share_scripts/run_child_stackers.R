@@ -13,6 +13,9 @@
 # the number of cores. The only value that is known to work generally on all
 # stackers is 1, or serial operation.
 
+#create directory to store any stacker outputs
+file.path(outputdir, "stackers") %>% dir.create
+
 #Fit a gam model
 if ('gam' %in% child_model_names) {
   tic("Stacking - GAM")
@@ -22,13 +25,22 @@ if ('gam' %in% child_model_names) {
                              covariates        = all_fixed_effects,
                              additional_terms  = NULL,
                              weight_column     = 'weight',
-                             bam               = FALSE,
-                             spline_args       = list(bs = 'ts', k = 3),
+                             bam               = TRUE,
+                             spline_args       = list(bs = gam_basis, k = gam_knots %>% as.integer),
                              auto_model_select = TRUE,
                              indicator         = indicator,
                              indicator_family  = indicator_family,
                              cores             = 'auto')
   toc(log = T)
+  
+  #save gam obj and visualizations
+  saveRDS(gam$gam, paste0(outputdir, "stackers/", reg, '_gam_obj.RDS'))
+  b <- getViz(gam$gam)
+  
+  pdf(file=paste0(outputdir, "stackers/", reg, '_gam_plot.pdf'))
+    print(plot(b, allTerms = T), pages=1)
+  dev.off()
+         
 }
 
 #Fit a GBM/BRT model

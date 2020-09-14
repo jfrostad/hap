@@ -516,9 +516,8 @@ fit_xgboost_child_model <- function(df,
   
   if (debug) browser()
 
-  # Create stacking directory to save results
+  # Define stacking directory to save results
   stack_dir <- paste0(outputdir, "stackers/")
-  dir.create(stack_dir, showWarnings = F)
 
   # Create model formula
   df <- as.data.table(df)

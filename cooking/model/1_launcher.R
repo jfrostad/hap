@@ -35,8 +35,8 @@ plot_covariates <- TRUE
 covariate_plotting_only <- FALSE
 
 # indicate whether to use old run date
-use_old_run_date <- T
-old_run_date_input <- '2020_05_17_11_40_28'
+use_old_run_date <- F
+old_run_date_input <- '2020_09_01_11_42_52'
 
 # set run date
 if (use_old_run_date == FALSE) {
@@ -48,7 +48,6 @@ if (use_old_run_date == FALSE) {
 # set config and covariate files
 config_par   <- 'hap_sp_fine'
 covar_par      <- 'region_specific'
-#covar_par      <- 'ort_standard' #use to select single covariate set for all regions
 
 # set whether running for individual countries
 individual_countries <- FALSE
@@ -63,11 +62,7 @@ regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_sssa',
              'dia_mcaca', 'dia_s_america-GUF', 'dia_central_asia', 'dia_chn_mng', 
              'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
 
-# africa only
-#regions <- c('dia_essa', 'dia_wssa', 'dia_cssa', 'dia_sssa', 'dia_afr_horn')
-
 # custom country-specifics
-
 regions <- c('essa-ERI-DJI-YEM', "ERI+DJI+YEM",
              #'dia_afr_horn-ERI-DJI-YEM',
              'sssa-ZAF', 'ZAF',
@@ -82,13 +77,11 @@ regions <- c('essa-ERI-DJI-YEM', "ERI+DJI+YEM",
              'stan-TKM',
              'CHN', 'MNG',
              'ocea-MYS',
-             'seas-VNM-THA', 'VNM', 'THA',
+             'seas',
              'mide+TKM', 'soas')
-
-# regions <- c('CHN', 'trsa-GUF', 'soas')
-# regions <- c('soas', 'CHN', 'trsa-GUF')
-
-regions <- 'ERI+DJI+YEM'
+#regions <- c('THA', 'caca-CUB', 'ZAF', 'stan-TKM', 'ocea-MYS', 'seas-VNM-THA')
+#regions <- c('ansa-VEN', 'ocea-MYS', 'noaf-ESH', 'caca-CUB', 'soas')
+#regions <- c('essa')
 
 # list indicators
 indics <- 'cooking_fuel_solid'
@@ -120,7 +113,8 @@ for (i in indics) {
     # set up qsub
     sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
                       '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
-                      '-l fthread=1 -l h_rt=00:02:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
+                      '-l fthread=1 -l h_rt=', ifelse(use_geos_nodes, '16:00:00:00', '3:00:00:00'),
+                      ' -v sing_image=default -N ', jname, ' -l archive=TRUE ')
     r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
     script <- file.path('/homes', user, '_code/lbd/hap', indicator_group, 'model/2_rocket.R')
     args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, parallel_script,

@@ -50,8 +50,10 @@ aggregate_input_data <- function(reg,
     file_dir <- paste0('/home/j/WORK/11_geospatial/admin_shapefiles/', modeling_shapefile_version, '/')
     a0_shp <- readRDS(paste0(file_dir,'lbd_standard_admin_0.rds'))
     a1_shp <- readRDS(paste0(file_dir,'lbd_standard_admin_1.rds'))
-    pop_ras <- paste0('/home/j/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/',
-              'total/1y/',
+    pop_ras <- file.path('/home/j/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/',
+              'total',
+              pop_release,
+              '1y',
               'worldpop_total_1y_2010_00_00.tif') %>% raster
     
     # Read in lookup table
@@ -212,20 +214,11 @@ aggregate_child_stackers <- function(reg,
     # ----------------------------------------------------------------------------------------
     # Add in population
 
-    # Pull worldpop estimates from covariate database
-    pop <- load_and_crop_covariates_annual(covs = 'worldpop',
-                                           measures = pop_measure,
-                                           simple_polygon = simple_polygon,
-                                           start_year  = min(year_list),
-                                           end_year    = max(year_list),
-                                           interval_mo = 12,
-                                           agebin=1)
-    
-    # Convert to data table
-    pop <- raster_to_dt(pop$worldpop)
-    
+    pop <- load_populations_cov(reg, pop_measure=pop_measure, measure = 'count', simple_polygon, 
+                                simple_raster, year_list, interval_mo=12, pixel_id = pixel_id)
+
     # Add to stacker results
-    covdt <- cbind(covdt, pop)
+    covdt <- merge(covdt, pop, by=c('pixel_id', 'year'))
     # ----------------------------------------------------------------------------------------
     
     
@@ -255,7 +248,7 @@ aggregate_child_stackers <- function(reg,
     # -------------------------------------------------------------------
     # Aggregate
     # Get population for calculating weighted average
-    stackers[, pop := value*area_fraction]
+    stackers[, pop := pop*area_fraction]
     
     # Weighted mean by admin 0
     a0_stackers <- stackers[, lapply(.SD, weighted.mean, w = pop, na.rm = T),

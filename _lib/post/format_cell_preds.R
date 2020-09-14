@@ -132,7 +132,8 @@ link_cell_pred <- function(ind_gp,
       .[, .(pixel_id, year, #id.vars
             male=a1549m, 
             female=a1549f, 
-            child=a0514t+a0004t)] %>% 
+            child=a0514t,
+            under5=a0004t)] %>% 
       melt(id.vars=c('pixel_id', 'year'), value.name='pop', variable.name='grouping')
     
   } else {
@@ -204,8 +205,8 @@ link_cell_pred <- function(ind_gp,
     if(!(is.null(skip_cols))) cell_pred <- as.matric(cell_pred[, (skip_cols+1):ncol(cell_pred)])
     
     # Verify alignment  
-    # Noting that if we are working with HAP populations, the covdt will be 3x longer (3 groupings)
-    if(nrow(cell_pred)!=nrow(covdt)/ifelse(pop_measure=='hap', 3, 1)) stop('Dims mismatch...cell pred!=simple raster!!')
+    # Noting that if we are working with HAP populations, the covdt will be 4x longer (4 groupings)
+    if(nrow(cell_pred)!=nrow(covdt)/ifelse(pop_measure=='hap', 4, 1)) stop('Dims mismatch...cell pred!=simple raster!!')
     
     # Enforce max # of draws
     message('...subsetting to #', max_n, ' draws!')
@@ -230,7 +231,7 @@ link_cell_pred <- function(ind_gp,
     )
     
     #make sure it behaved
-    stopifnot(any(!(cell_pred[,pixel_id] != rep.int(covdt[,pixel_id], 18))))
+    stopifnot(any(!(cell_pred[,pixel_id] != rep.int(covdt[,pixel_id], length(year_start:year_end)))))
     
     return(cell_pred)
     
@@ -252,22 +253,22 @@ link_cell_pred <- function(ind_gp,
   if (!is.null(covs)) {
     
     message('adding requested covariates, ', covs)
-    
-    #load the covariates as a raster
-    cell_pred <- load_and_crop_covariates_annual(covs = covs,
-                                                 measures = cov_measures,
-                                                 simple_polygon = simple_polygon,
-                                                 start_year  = min(year_list),
-                                                 end_year    = max(year_list),
-                                                 interval_mo = 12,
-                                                 agebin = 1) %>% 
+
+    message('Grabbing raster covariate layers')
+    loader <- MbgStandardCovariateLoader$new(start_year = min(year_list),
+                                             end_year = max(year_list),
+                                             interval = 12,
+                                             covariate_config = covs)
+
+    cell_pred <- loader$get_covariates(simple_polygon) %>% 
       #convert to DT and combine
       lapply(., raster_to_dt, simple_polygon, simple_raster, year_list, interval_mo=12, pixel_id = pixel_id) %>% 
       Reduce(function(...) merge(..., all = TRUE), .) %>% 
       #force names, auto-extracting from raster can be variable depending on the upload name of the cell pred obj
-      setnames(., c(covs, 'pixel_id', 'year')) %>% 
+      setnames(., c(covs$covariate %>% unique, 'pixel_id', 'year')) %>% 
       #merge to the input rasters DT
       merge(cell_pred, ., by=c('pixel_id', 'year'), all.x=T) #TODO is it possible to have missing covariate values?
+
     
   }
   

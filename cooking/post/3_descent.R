@@ -42,13 +42,13 @@ if (interactive) {
   core_repo <- "/homes/jfrostad/_code/lbd/hap"
   indicator_group <- 'cooking'
   indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_standard'
+  config_par   <- 'hap_sp_fine'
   holdout <- 0
   age <- 0
-  run_date <- '2020_05_17_11_40_28'
+  run_date <- '2020_09_01_11_42_52'
   measure <- 'prev'
   #region <- 'soas'
-  region <- 'ERI+DJI+YEM'
+  region <- 'essa-ERI-DJI-YEM'
   cov_par <- paste(indicator_group, region, sep='_')
   my_repo <- "/homes/jfrostad/_code/lbd/hap"
   
@@ -76,7 +76,7 @@ today <- Sys.Date()
 
 # ---OPTIONS------------------------------------------------------------------------------------------------------------
 ## set arguments
-format <- F #set T if needing to reformat the cellpreds to long data.table
+reformat <- F #set T if needing to reformat the cellpreds to long data.table
 prep_gbd_files <- F #set T if change on GBD side requires reprep of GBD info
 
 #countries we want to process by state 
@@ -99,8 +99,16 @@ super_big_countries <- c(44, 33) #run these states singlecore
 #mbg options
 rk                       <- (indicator=='cooking_fuel_solid')
 suffix                   <- '_eb_bin0_0'
-covs                     <- c('ihmepm25')
-cov_measures             <- c('mean')
+draw_number              <- 50 #TODO run with 250 for final run
+
+#covariates to pull
+covs <- data.table(
+  covariate = c("ihmepm25"),
+  measure = c("median"),
+  gbd = c(FALSE),
+  include = c(TRUE),
+  release = c("2019_11_05")
+)
 
 #TODO pass from 2_entry.R?
 # config_par   <- 'hap_standard'
@@ -154,35 +162,23 @@ fix_diacritics <<- function(x) {
   
 }
 
-#custom function for melting long on draws and then saving a country level fst file
-meltAndSave <- function(country, type, dt, debug=F) {
+#custom function for saving country level fst file
+saveCountry <- function(country, type, dt, debug=F) {
   
   if (debug) browser()
   
   out.path <- sprintf('%s/%s_%s.fst', paste0(outputdir, '/tmp'), country, type)
   
   #write fst file for country if data available for this indicator
-  if (dt[ADM0_CODE==country, .N]>0)  {
-    
-    message('melting adm0=', country, ' dt long on draw')
-    #reshape long draws and key on the pixel ID/draw/year
-    out <- melt(dt[ADM0_CODE==country],
-                measure = patterns("V"),
-                variable.name = "draw",
-                value.name = type) %>% 
-      #toconvert draw col to int instead of V1-250 as a factor
-      #.[, draw := substring(as.character(draw), 2) %>% as.integer] %>% #TODO probably can be done in the reshape?
-      setkey(., pixel_id, draw, year) %>% 
-      write.fst(., path = out.path) #write file in fst format
-    
-    message('saved as \n', out.path)
-    
-  } else message('no ', type, ' data present for #', country)
+  if (dt[ADM0_CODE==country, .N]>0) write.fst(dt[ADM0_CODE==country], path = out.path) #write file in fst format
+  else message('no ', type, ' data present for #', country)
   
   return(NULL)
   
 }
 
+#custom fucntion for verifying files all exist
+checkTmpFiles <- function(x){ sapply(x, function(i) paste0(outputdir, '/tmp/', i, '_sfu.fst') %>% file.exists) %>% all}
 #***********************************************************************************************************************
 
 # ---MBG PREP-----------------------------------------------------------------------------------------------------------
@@ -259,7 +255,14 @@ if(prep_gbd_files) {
     .[nchar(iso3)<4] %>% #TODO, for now do not use subnationals as they do not merge to adm0 codes
     .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
   
+  #duplicate children to make specific u5 category
+  gbd.hap.pm <- list(
+    gbd.hap.pm,
+    copy(gbd.hap.pm[grouping=='child']) %>% .[,grouping := 'under5']
+  ) %>% rbindlist
+  
   #choose ages to merge for RRs
+  gbd.hap.pm[grouping=='under5', `:=` (age_group_id=2, sex_id=1)]
   gbd.hap.pm[grouping=='child', `:=` (age_group_id=2, sex_id=1)]
   gbd.hap.pm[grouping=='female', `:=` (age_group_id=10, sex_id=2)]
   gbd.hap.pm[grouping=='male', `:=` (age_group_id=10, sex_id=1)]
@@ -353,21 +356,25 @@ countries <- pull_custom_modeling_regions(region) %>% unlist %>% str_split(., pa
 
 # ---FORMAT PREDS-------------------------------------------------------------------------------------------------------
 #format cell preds into long DTs
-if(format) {
+if(!reformat & adm0s %>% checkTmpFiles) {
   
+  message('skipping format stage as results are preformatted')
+    
+} else {
+
   ## create the long data.tables and format them for the TAP calculations
   tic('Make table(s) for HAP')
-
+  
   hap.dt <- link_cell_pred(ind_gp = indicator_group,
                            ind = indicator,
                            rd = run_date,
                            reg = region,
                            measure = measure,
-                           pop_measure = 'hap', #men/women/children
+                           pop_measure = 'hap', #men/women/children/under5
                            covs = covs,
-                           n_draws = 50, #reduce the # of draws to speed up processing
-                           year_start = 2000,
-                           year_end = 2017,
+                           n_draws = draw_number, #reduce the # of draws to speed up processing
+                           year_start = year_list %>% min,
+                           year_end = year_list %>% max,
                            rk = rk,
                            shapefile_version = modeling_shapefile_version,
                            coastal_fix = T,
@@ -375,12 +382,11 @@ if(format) {
   toc(log = TRUE)
   
   tic('Saving results at country level with .fst')
-  lapply(adm0s, meltAndSave, type='dfu', dt=hap.dt)
+  lapply(adm0s, saveCountry, type='sfu', dt=hap.dt)
   rm(hap.dt) #save memory
   toc(log=TRUE)
-    
-} else message('skipping format stage as results are preformatted')
-
+  
+}
 #***********************************************************************************************************************
 
 # ---TAP/RISK CALC------------------------------------------------------------------------------------------------------
@@ -394,7 +400,7 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
   if(debug) browser()
   
   #makes sure file exists
-  country_file <- sprintf('%s/tmp/%s_dfu.fst', dir, country)
+  country_file <- sprintf('%s/tmp/%s_sfu.fst', dir, country)
            
   if (country_file %>% file.exists) {
     
@@ -428,16 +434,24 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
 
       #subset to working adm1
       dt <- country_dt[ADM1_CODE %in% state]
+      
+      #reshape long draws and key on the pixel ID/draw/year
+      if (msg) message('-melting long')
+      dt <- melt(dt,
+                 measure = patterns("V"),
+                 variable.name = "draw",
+                 value.name = 'sfu') %>% 
+        setkey(., pixel_id, draw, year)
 
       #merge on the HAP excess PM2.5 values for each ad0
-      #note that this expands the dt to have man/woman/child values for each pixel
+      #note that this expands the dt to have man/woman/child/under5 values for each pixel
       if (msg) message('-merging PM2.5 data')
       dt <- merge(dt, hap_data$pm, by=c('ADM0_CODE', 'year', 'grouping'), all.x=T, allow.cartesian=T)
       
       #calculate the TAP PM2.5/capita values
       if (msg) message('-calculating TAP PM2.5/capita')
       dt[, aap_pm := pop * ihmepm25]
-      dt[, hap_pm := pop * dfu * hap_excess_pm25]
+      dt[, hap_pm := pop * sfu * hap_excess_pm25]
       dt[, tap_pm := (aap_pm + hap_pm)]
       dt[, tap_pc := tap_pm / pop]
       dt[pop==0, tap_pc := 0] #must assume no exposure in zero population cells
@@ -492,10 +506,10 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       sev_admin_2 <- merge(sev_admin_2, adm_links, by='ADM2_CODE')
       
       #drop all cause/groupings except child LRIs, we only use the others to calculate the SEV
-      dt <- dt[cause=='lri' & grouping=='child']
+      dt <- dt[cause=='lri' & grouping=='under5']
 
       #first remove any unnecessary cols
-      null_cols <- c('ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pm', 'grouping', 'cause',
+      null_cols <- c('ihmepm25', 'hap_excess_pm25', 'aap_pm', 'hap_pm', 'tap_pm',
                      'rr', 'rr_max', 'ID', 'age_group_id', 'sex_id')
       dt <- dt[, (null_cols) := NULL]
 
@@ -551,8 +565,8 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       #agg ad2s by grouping
       agg <- aggResults(dt, 
                         by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year','draw'), 
-                        agg_cols=c('hap_pct', 'tap_pc', 'dfu', 'tap_paf'),
-                        mbg_var='dfu', 
+                        agg_cols=c('hap_pct', 'tap_pc', 'sfu', 'tap_paf'),
+                        mbg_var='sfu', 
                         make_sums=T)
 
       rm(dt) #cleanup to save space
@@ -562,7 +576,7 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       agg <- tidyr::crossing(agg, data.table(type=c('TAP', 'AAP', 'HAP'))) %>% as.data.table
       
       #redefine variables based on particle type
-      setnames(agg, c('hap_pct', 'tap_pc', 'tap_paf', 'dfu'), c('share', 'pm_pc', 'paf', 'prev'))
+      setnames(agg, c('hap_pct', 'tap_pc', 'tap_paf', 'sfu'), c('share', 'pm_pc', 'paf', 'prev'))
       
       #define share of particulates
       agg[type=='TAP', share := 1]
@@ -576,28 +590,7 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       
       #assume all are exposed to ambient
       agg[type=='AAP', prev := 1]
-      
-      #TODO
-      #save draw files for later aggregations
-      # draw_path <- paste0('draws_', unique(agg$ADM0_CODE), '_', state, '.fst')
-      # write.fst(agg, file.path(outputdir, 'tmp', draw_path)
 
-      #collapse over draws to create C.I.
-      #TODO get draws of LRI to calculate here
-      #if (msg) message('collapsing draws to mean/C.I.')
-      # ind_cols <- c('share', 'pm_pc', 'prev', 'paf')
-      # agg[, paste0(ind_cols, '_lower') := lapply(.SD, quantile, p=.025, na.rm=T),
-      #     .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type')]
-      # agg[, paste0(ind_cols, '_mean') := lapply(.SD, mean, na.rm=T),
-      #     .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type')]
-      # agg[, paste0(ind_cols, '_upper') := lapply(.SD, quantile, p=.975, na.rm=T),
-      #     .SDcols=ind_cols, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type')]
-      # agg <- unique(agg, by=c('ADM0_CODE', 'ADM2_CODE', 'year', 'type'))
-
-      #reorder names for legibility
-      # agg <- agg[, c('ADM0_CODE', 'ADM2_CODE', 'year', 'type',
-      #                names(agg) %>% .[. %like% 'pop'],
-      #                names(agg) %>% .[. %like% 'lower|mean|upper'] %>% sort), with=F]
 
       list('sev_cell_pred'=sev_cell_pred,
            'sev_admin_2'=sev_admin_2,
@@ -613,7 +606,7 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
 
     #run all states in country
     out_states <- mclapply(1:length(states), stateLoop, state_list=states, mc.cores=country_cores)
-    
+
     #combine results
     admin_2 <- lapply(out_states, function(x) x[['admin_2']]) %>% rbindlist
     sev_cell_pred <- lapply(out_states, function(x) x[['sev_cell_pred']]) %>% rbindlist
