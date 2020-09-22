@@ -46,7 +46,7 @@ if (interactive) {
   indicator <- 'cooking_fuel_solid'
   holdout <- 0
   age <- 0
-  run_date <- '2020_09_13_22_45_55'
+  run_date <- '2020_09_01_11_42_52'
   measure <- 'prev'
   reg <- 'essa'
   config_par   <- 'hap_sp_fine'
@@ -148,7 +148,7 @@ Regions <- Regions[Regions != '']
 message(paste0(Regions, '\n'))
 
 #TODO remove when debugged
-Regions <- Regions %>% .[!(. %like% 'essa')]
+#Regions <- Regions %>% .[!(. %like% 'essa')]
 
 ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
 holdouts <- 0

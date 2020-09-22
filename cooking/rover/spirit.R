@@ -127,8 +127,9 @@ sqrt_signed <- scales::trans_new("signed_log",
 #read in the proper annotations (borders, lakes, mask)
 annotations_path <- file.path(out.dir, 'annotations.RDs')
 check <- file.exists(annotations_path)
-if(check) annotations <- readRDS(annotations_path)
-else {
+if(check) {
+  annotations <- readRDS(annotations_path)
+} else {
   annotations <- load_map_annotations()
   saveRDS(annotations, file=annotations_path)
 }
@@ -140,8 +141,8 @@ adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, A
 #read in shps
 stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad2_gadm.shp')
 stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad2_gadm.shp')
-stage3 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage3_ad2_gadm.shp')
-adm2 <- rbind(stage1, stage2, stage3)
+#stage3 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage3_ad2_gadm.shp')
+adm2 <- rbind(stage1, stage2)
 
 #read in results
 results <- file.path(data.dir, 'all_summary.fst') %>% read_fst(as.data.table=T) 
@@ -427,36 +428,50 @@ grid.text('2018', x = unit(.95, "npc"), y = unit(0.76, "npc"), gp = gpar(fontsiz
 grid.text('2018', x = unit(.95, "npc"), y = unit(0.29, "npc"), gp = gpar(fontsize = 24, fontface = "bold"))
 dev.off()
 
-#make a population pyramid version
-#generate the plots
+#also run a version that is not area-scaled to year to provide accurate probabilities for quintiles
 pop_plot <-
   makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
-                     wt_var='pop', 
-                     tap_cutoff = 750, flipped=T, normalize_years=T, density_max=0.01,
-                     smoother=.1)
+                     wt_var='exposed_pop', 
+                     tap_cutoff = 750,
+                     smoother=.1,
+                     normalize_years = F)
 death_plot <-
   makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
                      wt_var='atr_count_mean', 
-                     flipped=T, normalize_years = T, density_max=0.005,
                      tap_cutoff = 750,
-                     smoother=.1)
+                     smoother=.1,
+                     normalize_years = F)
 
-#define layout
-lay <- rbind(c(1,1,2,2),
-             c(1,1,2,2))
-plot <- arrangeGrob(grobs=list(pop_plot + theme(legend.position = 'none', axis.text.y=element_blank()), 
-                               death_plot + theme(legend.position = 'none')), 
-                    layout_matrix=lay
-                    )
-
-g <- grid.arrange(plot)
-ggsave(filename=file.path(out.dir, 'fig_3_flipped.png'), plot=g, width=8, height=12, units='in', dpi=1200)
-
+# #make a population pyramid version
+# #generate the plots
+# pop_plot <-
+#   makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
+#                      wt_var='pop', 
+#                      tap_cutoff = 750, flipped=T, normalize_years=T, density_max=0.01,
+#                      smoother=.1)
+# death_plot <-
+#   makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
+#                      wt_var='atr_count_mean', 
+#                      flipped=T, normalize_years = T, density_max=0.005,
+#                      tap_cutoff = 750,
+#                      smoother=.1)
+# 
+# #define layout
+# lay <- rbind(c(1,1,2,2),
+#              c(1,1,2,2))
+# plot <- arrangeGrob(grobs=list(pop_plot + theme(legend.position = 'none', axis.text.y=element_blank()), 
+#                                death_plot + theme(legend.position = 'none')), 
+#                     layout_matrix=lay
+#                     )
+# 
+# g <- grid.arrange(plot)
+# ggsave(filename=file.path(out.dir, 'fig_3_flipped.png'), plot=g, width=8, height=12, units='in', dpi=1200)
+# 
 #make a version of Figure 3 for each region
 #generate the plots
 plot.dt <- plot.dt[!(iso3 %in% biggest_countries_sr[1:6, iso3])] #remove the biggest countries
-sapply(unique(plot.dt$region_id), makeFig3Loclist, dt=plot.dt) %>% 
-  flatten2 %>% 
+sapply(unique(plot.dt$region_id), makeFig3Loclist, dt=plot.dt) %>%
+  flatten2 %>%
     mclapply(., makeRegFigure3s, mc.cores=5)
 #***********************************************************************************************************************
 
@@ -493,7 +508,7 @@ legend <- get_legend(master_plot)
 ##cloud version with top 14##
 #now make a single inset plot for each of the remaining top by region (and add Pakistan to round it out)
 inset_countries <- c(top_countries_gbdreg[, iso3]) %>% 
-  .[!(. %in% custom_countries)]
+  .[!(. %in% c('COD', 'KEN', 'IND', 'MNG', 'THA'))]
 
 #duplicate one to help guide the reader
 #replaced ETH
@@ -512,8 +527,6 @@ lay <- rbind(c(13,13,13,13,1,2,3),
              c(13,13,13,13,7,8,9),
              c(13,13,13,13,10,11,12))
 plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-                    top=textGrob("Risk transition from 2000 to 2018",
-                                 gp = gpar(fontsize=24)),
                     bottom=textGrob("Percent of TAP contributed by ambient sources", 
                                     gp = gpar(fontsize=17))
 ) %>% 
@@ -524,7 +537,7 @@ ggsave(plot=plot, filename=file.path(save.dir, 'fig_4.png'),
 ggsave(plot=legend, filename=file.path(save.dir, 'fig_4_legend.png'),
        width=4, height=8, units='in', dpi=900)
 
-#make a version of Figure 3 for each region
+#make a version of Figure 4 for each region
 #generate the plots
 sapply(unique(plot.dt$region_id), makeFig3Loclist, dt=plot.dt) %>% 
   flatten2 %>% 
@@ -664,10 +677,10 @@ aid.dt <-
   .[, aid_start := min(aid_start, na.rm=T), by=.(iso3)] %>%
   .[, aid_d := (aid-aid_start)] %>% 
   .[, aid_dr := aid_d/aid_start] %>% 
-  .[year==min(year), dfu_start := mean] %>% 
-  .[, dfu_start := min(dfu_start, na.rm=T), by=.(iso3)] %>%
-  .[, dfu_d := (mean-dfu_start)] %>% 
-  .[, dfu_dr := dfu_d/dfu_start] %>% 
+  .[year==min(year), sfu_start := mean] %>% 
+  .[, sfu_start := min(sfu_start, na.rm=T), by=.(iso3)] %>%
+  .[, dfu_d := (mean-sfu_start)] %>% 
+  .[, dfu_dr := dfu_d/sfu_start] %>% 
   .[, pred := predict(loess(aid~(1-mean)))] %>% 
   .[, resid := abs(aid-pred)] %>% 
   .[year==max(year)&resid>.075, label := ADM0_NAME]
@@ -744,7 +757,7 @@ makeChangeScatters <- function(reg, rug_var='rate_start', rug_limits=c(0, 5)) {
     geom_abline(slope=1) +
     facet_wrap(~ADM0_NAME) +
     scale_x_continuous('Rate of change for LRI Rates', limits=c(-1,1)) +
-    scale_y_continuous('Rate of change for DFU%', limits=c(-1,1)) +
+    scale_y_continuous('Rate of change for SFU%', limits=c(-1,1)) +
     scale_color_gradientn(colors = legend_colors, values = legend_color_values,
                           limits = range(breaks), breaks = breaks, labels = labels, 
                           name = 'LRI deaths / 1,000 children') +
@@ -1003,197 +1016,6 @@ ctry.dfu <-
 ggsave(filename=file.path(out.dir, paste0(ctry.name, '_dfu.png')), plot=ctry.dfu, 
        width=6, height=6, units='in', dpi=600)
 
-#pct scale
-ctry_pct_values <- c(seq(0, .6, length.out = 2), seq(.6, .9, length.out = 8), seq(.9, 1, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-ctry.pct <- 
-  plot_map(ctry_data, this_var='hap_pct',
-           annotations, limits=c(0, 1), title='HAP/TAP in 2017', 
-           # legend_colors=colors, legend_color_values=ctry_pct_values,
-           # legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-           legend_title='HAP/TAP', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_pct.png')), plot=ctry.pct, 
-       width=6, height=6, units='in', dpi=600)
-
-#pm25 scale
-ctry_pct_values <- c(seq(0, .6, length.out = 2), seq(.6, .9, length.out = 8), seq(.9, 1, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-ctry.tap <- 
-  plot_map(ctry_data, this_var='tap_pc',
-           annotations, limits=c(0, 500), title='Annual per-capita TAP dose in 2017', 
-           # legend_colors=colors, legend_color_values=ctry_pct_values,
-           # legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-           legend_title='PM2.5 ug/m3', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_pc.png')), plot=ctry.tap, 
-       width=6, height=6, units='in', dpi=300)
-
-#paf scale
-ctry_paf_values <- c(seq(.2, .45, length.out = 2), seq(.45, .55, length.out = 8), seq(.5, .6, length.out = 2)) %>%
-  unique %>%
-  rescale
-  
-ctry.paf <- 
-  plot_map(ctry_data, this_var='tap_paf',
-           annotations, limits=c(0, .75), title='PAF of LRI Attributable to TAP in 2017', 
-           legend_colors=colors, legend_color_values=ctry_paf_values,
-           legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
-           legend_title='TAP PAF', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_paf.png')), plot=ctry.paf, 
-       width=6, height=6, units='in', dpi=600)
-
-#attributable LRI rates
-ctry_lri_values <- c(seq(0, 1, length.out = 2), seq(1, 5, length.out = 8), seq(5, 10, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-ctry.lri <- 
-  plot_map(ctry_data, this_var='tap_lri',
-           annotations, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
-           legend_colors=colors, legend_color_values=ctry_lri_values,
-           legend_breaks=seq(0, 10, 2), legend_labels=seq(0, 10, 2),
-           legend_title='TAP LRI Rate', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri.png')), plot=ctry.lri, 
-       width=6, height=6, units='in', dpi=600)
-
-ctry.lri <- 
-  plot_map(ctry_data, this_var='tap_lri',
-           annotations, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
-           legend_title='TAP LRI Rate', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri_default.png')), plot=ctry.lri, 
-       width=6, height=6, units='in', dpi=600)
-
-ctry.lri <- 
-  plot_map(ctry_data, this_var='tap_lri',
-           annotations, limits=c(0, 10), title='Rate/1000 of LRI Attributable to TAP in 2017', 
-           legend_colors=colors, legend_color_values=ctry_lri_values,
-           legend_breaks=seq(0, 10, 2), legend_labels=seq(0, 10, 2),
-           legend_title='TAP LRI Rate', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_lri.png')), plot=ctry.lri, 
-       width=6, height=6, units='in', dpi=600)
-
-ctry.lri <- 
-  plot_map(ctry_data, this_var='hap_lri',
-           annotations, limits=c(0, 9), title='Rate/1000 of LRI Attributable to HAP in 2017', 
-           legend_colors=colors, legend_color_values=ctry_lri_values,
-           legend_breaks=seq(0, 9, 2), legend_labels=seq(0, 9, 2),
-           legend_title='HAP LRI Rate', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_lri.png')), plot=ctry.lri, 
-       width=6, height=6, units='in', dpi=600)
-
-ctry.lri <- 
-  plot_map(ctry_data, this_var='aap_lri',
-           annotations, limits=c(0, 9), title='Rate/1000 of LRI Attributable to AAP in 2017', 
-           legend_colors=colors, legend_color_values=ctry_lri_values,
-           legend_breaks=seq(0, 9, 2), legend_labels=seq(0, 9, 2),
-           legend_title='AAP LRI Rate', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_aap_lri.png')), plot=ctry.lri, 
-       width=6, height=6, units='in', dpi=600)
-
-ctry_lri_values <- c(seq(0, .25, length.out = 2), seq(.25, 1.25, length.out = 8), seq(1.5, 3, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-ctry.lri <- 
-  plot_map(ctry_data, this_var='aap_lri',
-           annotations, limits=c(0, 3), title='Rate/1000 of LRI Attributable to AAP in 2017', 
-           legend_colors=colors, legend_color_values=ctry_lri_values,
-           legend_breaks=seq(0, 3, .5), legend_labels=seq(0, 3, .5),
-           legend_title='AAP LRI Rate', legend_flip=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_aap_lri_newscale.png')), plot=ctry.lri, 
-       width=6, height=6, units='in', dpi=600)
-
-#plot changes
-ctry_d <- data_d$admin2 %>% 
-  copy %>% 
-  filter(NAME_0==ctry.name & year==2017)
-
-ctry_d_values <- c(seq(-.1, -.05, length.out = 2), seq(-.05, 0, length.out = 8), seq(0, .05, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-ctry.d.map <- 
-  plot_map(ctry_d, this_var='tap_paf_d',
-           annotations, limits=c(-.1, .05), title='TAP PAF, Change from 2000-2017', 
-           legend_colors=d_colors, legend_color_values=ctry_d_values,
-           legend_breaks=seq(-.1, .05, .025), legend_labels=seq(-.1, .05,.025),
-           legend_title='Change in PAF of TAP', legend_flip=T,
-           pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_paf_d.png')), plot=ctry.d.map, 
-       width=6, height=6, units='in', dpi=100)
-
-
-ctry_d_values <- c(seq(-.5, -.1, length.out = 8), seq(-.1, 0, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-ctry.d.map <- 
-  plot_map(ctry_d, this_var='hap_pct_d',
-           annotations, limits=c(-.5, 0), title='HAP Share, Change from 2000-2017', 
-           legend_colors=d_colors, legend_color_values=ctry_d_values,
-           legend_breaks=seq(-.5, 0, .1), legend_labels=seq(-.5, 0,.1),
-           legend_title='Change in HAP/TAP', legend_flip=T,
-           pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-           zoom=ctry.zoom,
-           debug=F)
-
-ggsave(filename=file.path(out.dir, paste0(ctry.name, '_hap_pct_d.png')), plot=ctry.d.map, 
-       width=6, height=6, units='in', dpi=100)
-
-# ctry.dt <- data_2017$tap_paf$admin2 %>% copy
-# ctry.map <- 
-#   plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations, limits=c(0, .75), title='2017', 
-#            legend_colors=colors, legend_color_values=paf_values,
-#            legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
-#            legend_title='tap PAF', custom_scale=T,
-#            pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#            zoom=ctry.zoom,
-#            debug=F)
-# 
-# ggsave(filename=file.path(out.dir, paste0(ctry.name, '_tap_paf.png')), plot=ctry.map, 
-#        width=6, height=6, units='in', dpi=100)
-# 
-# plot_map(ctry.dt[ctry.dt$NAME_0 %like% ctry.name,], annotations, limits=c(0, 1), title='2017', 
-#          legend_colors=colors, legend_color_values=color_values,
-#          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#          legend_title='hap/tap', custom_scale=T,
-#          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#          zoom=ctry.zoom,
-#          debug=F)
-
 #***********************************************************************************************************************
 
 # ---SCRAPS-------------------------------------------------------------------------------------------------------------
@@ -1267,542 +1089,3 @@ lapply(unique(projs$iso3), stateProjs, dt=projs,
        pop.dt=dt[year==max(year) & grouping=='under5' & cause=='all', .(pop_total, ADM2_CODE)])
 
 dev.off()
-
-
-# ##cloud version with top 14##
-# #now make a single inset plot for each of the remaining top by region (and add Pakistan to round it out)
-# insets <- c(top_countries_gbdreg[, iso3]) %>% 
-#   .[!(. %in% custom_countries)] %>% 
-#   sort %>% 
-#   lapply(1:length(.), makeInset, loclist=., scale_labels=T, type='cloud_alpha')
-# 
-# #arrange into master figure
-# all_grobs <- copy(insets)
-# all_grobs[[13]] <- master_plot
-# lay <- rbind(c(13,13,13,13,1,2,3),
-#              c(13,13,13,13,4,5,6),
-#              c(13,13,13,13,7,8,9),
-#              c(13,13,13,13,10,11,12))
-# plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-#                     top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
-#                                  gp = gpar(fontsize=24)),
-#                     bottom=textGrob("Percent of TAP contributed by ambient sources", 
-#                                     gp = gpar(fontsize=17))
-# ) %>% 
-#   grid.arrange
-# 
-# ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud_alpha.png'),
-#        width=12, height=8, units='in', dpi=900)
-# 
-# #make for all countries
-# makeFigure2 <- function(country) {
-#   
-#   message('plotting ', country)
-#   
-#   plot <- 
-#     ggplot(plot.dt[iso3 %in% country], 
-#            aes(x=hap_pct, y=tap_paf, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
-#     geom_point() + 
-#     geom_line(alpha=.1) +
-#     geom_vline(xintercept=.5) +
-#     scale_color_brewer('Country', palette='Dark2') +
-#     scale_shape_manual('Year', values=c(1, 16)) +
-#     scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
-#     scale_y_continuous("Population Attributable Fraction of LRI to TAP", limits=c(0,1)) +
-#     ggtitle(country) +
-#     coord_flip() +
-#     theme_bw(base_size = 16) +
-#     theme(
-#       legend.position = c(.10, .90),
-#       legend.justification = c("right", "top"),
-#       legend.box.just = "right",
-#       legend.margin = margin(6, 6, 6, 6)
-#     )
-#   
-#   print(plot)
-#   
-#   return(NULL)
-#   
-# }
-# 
-# pdf(paste0(out.dir, '/presub_figure_2_all_countries.pdf'),
-#     height=8, width=12)
-# 
-# lapply(unique(plot.dt$iso3), makeFigure2)
-# 
-# dev.off()
-# 
-# tic('plotting 2017')
-# gg_2017 <- list(
-#   'hap_pct'=plot_map(data_2017$hap_pct$admin2, annotations, limits=c(0, 1), title='2017', 
-#                      legend_colors=colors, legend_color_values=color_values,
-#                      legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#                      legend_title='hap/tap', custom_scale=T,
-#                      pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                      zoom=zoom.global,
-#                      debug=F),
-#   # 'tap_pc'=plot_map(data_2017$tap_pc$admin2, annotations, limits=c(0, 1), title='2017', 
-#   #          legend_colors=colors, legend_color_values=color_values,
-#   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-#   #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#   #          zoom=zoom.global,
-#   #          debug=F),
-#   'dfu'=plot_map(data_2017$dfu$admin2, annotations, limits=c(0, 1), title='2017', 
-#                  legend_colors=colors, legend_color_values=color_values,
-#                  legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#                  legend_title='dfu %', custom_scale=T,
-#                  pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                  zoom=zoom.global,
-#                  debug=F),
-#   'tap_paf'=plot_map(data_2017$tap_paf$admin2, annotations, limits=c(0, .75), title='2017', 
-#                      legend_colors=colors, legend_color_values=paf_values,
-#                      legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
-#                      legend_title='tap PAF', custom_scale=T,
-#                      pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                      zoom=zoom.global,
-#                      debug=F)
-# )
-# toc()
-# 
-# tic('plotting 2000')
-# gg_2000 <- list(
-#   'hap_pct'=plot_map(data_2000$hap_pct$admin2, annotations, limits=c(0, 1), title='2000', 
-#                      legend_colors=colors, legend_color_values=color_values,
-#                      legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#                      legend_title='hap/tap', custom_scale=T,
-#                      pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                      zoom=zoom.global,
-#                      debug=F),
-#   # 'tap_pc'=plot_map(data_2000$tap_pc$admin2, annotations, limits=c(0, 1), title='2000', 
-#   #          legend_colors=colors, legend_color_values=color_values,
-#   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-#   #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#   #          zoom=zoom.global,
-#   #          debug=F),
-#   'dfu'=plot_map(data_2000$dfu$admin2, annotations, limits=c(0, 1), title='2000', 
-#                  legend_colors=colors, legend_color_values=color_values,
-#                  legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#                  legend_title='dfu %', custom_scale=T,
-#                  pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                  zoom=zoom.global,
-#                  debug=F),
-#   'tap_paf'=plot_map(data_2000$tap_paf$admin2, annotations, limits=c(0, .75), title='2000', 
-#                      legend_colors=colors, legend_color_values=paf_values,
-#                      legend_breaks=seq(0, .75, .1), legend_labels=seq(0, .75, .1),
-#                      legend_title='tap PAF', custom_scale=T,
-#                      pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                      zoom=zoom.global,
-#                      debug=F)
-# )
-# toc()
-# 
-# tic('plotting 2000-2017 change')
-# gg_d <- list(
-#   'hap_pct_d'=plot_map(data_d$hap_pct_d$admin2, annotations, limits=c(-.2, .2), title='change from 2000-2017', 
-#                        legend_colors=d_colors, legend_color_values=d_values,
-#                        legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
-#                        legend_title='hap/tap', custom_scale=T,
-#                        pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                        zoom=zoom.global,
-#                        debug=F),
-#   # 'tap_pc'=plot_map(data_2017$tap_pc$admin2, annotations, limits=c(0, 1), title='2017', 
-#   #          legend_colors=colors, legend_color_values=color_values,
-#   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-#   #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#   #          zoom=zoom.global,
-#   #          debug=F),
-#   'dfu_d'=plot_map(data_d$dfu_d$admin2, annotations, limits=c(-.2, .2), title='change from 2000-2017', 
-#                    legend_colors=d_colors, legend_color_values=d_values,
-#                    legend_breaks=seq(-.2, .2, .025), legend_labels=seq(-.2, .2, .025),
-#                    legend_title='dfu %', custom_scale=T,
-#                    pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                    zoom=zoom.global,
-#                    debug=F)
-#   # 'tap_paf'=plot_map(data_2017$tap_paf$admin2, annotations, limits=c(0, 1), title='change from 2000-2017', 
-#   #                    legend_colors=colors, legend_color_values=paf_values,
-#   #                    legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#   #                    legend_title='tap PAF', custom_scale=T,
-#   #                    pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#   #                    zoom=zoom.global,
-#   #                    debug=F)
-# )
-# toc()
-# 
-# tic('plotting 2000-2017 change rate')
-# gg_dr <- list(
-#   'hap_pct_dr'=plot_map(data_d$hap_pct_dr$admin2, annotations, limits=c(-1, 1), title='change rate from 2000-2017', 
-#                         legend_colors=d_colors, legend_color_values=dr_values,
-#                         legend_breaks=seq(-1, 1, .2), legend_labels=seq(-1, 1, .2),
-#                         legend_title='hap/tap', custom_scale=T,
-#                         pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                         zoom=zoom.global,
-#                         debug=F),
-#   # 'tap_pc'=plot_map(data_2017$tap_pc$admin2, annotations, limits=c(0, 1), title='2017', 
-#   #          legend_colors=colors, legend_color_values=color_values,
-#   #          legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#   #          legend_title='tap PM2.5 per capita', custom_scale=T,
-#   #          pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#   #          zoom=zoom.global,
-#   #          debug=F),
-#   'dfu_dr'=plot_map(data_d$dfu_dr$admin2, annotations, limits=c(-1, 1), title='change rate from 2000-2017', 
-#                     legend_colors=d_colors, legend_color_values=dr_values,
-#                     legend_breaks=seq(-1, 1, .2), legend_labels=seq(-1, 1, .2),
-#                     legend_title='dfu %', custom_scale=T,
-#                     pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#                     zoom=zoom.global,
-#                     debug=F)
-#   # 'tap_paf'=plot_map(data_2017$tap_paf$admin2, annotations, limits=c(0, 1), title='change from 2000-2017', 
-#   #                    legend_colors=colors, legend_color_values=paf_values,
-#   #                    legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-#   #                    legend_title='tap PAF', custom_scale=T,
-#   #                    pop_mask=F, lake_mask=T, stage3_mask=T, borders=T,
-#   #                    zoom=zoom.global,
-#   #                    debug=F)
-# )
-# toc()
-# 
-# tic('ggsaving 2017')
-# ggsave(filename=file.path(out.dir, 'hap_pct_2017.png'), plot=gg_2017$hap_pct, 
-#        width=10, height=6, units='in', dpi=200)
-# 
-# ggsave(filename=file.path(out.dir, 'dfu_2017.png'), plot=gg_2017$dfu, 
-#        width=10, height=6, units='in', dpi=200)
-# 
-# ggsave(filename=file.path(out.dir, 'tap_paf_2017.png'), plot=gg_2017$tap_paf, 
-#        width=10, height=6, units='in', dpi=200)
-# toc()
-# 
-# tic('ggsaving 2000')
-# ggsave(filename=file.path(out.dir, 'hap_pct_2000.png'), plot=gg_2000$hap_pct, 
-#        width=10, height=6, units='in', dpi=600)
-# 
-# ggsave(filename=file.path(out.dir, 'dfu_2000.png'), plot=gg_2000$dfu, 
-#        width=10, height=6, units='in', dpi=600)
-# 
-# ggsave(filename=file.path(out.dir, 'tap_paf_2000.png'), plot=gg_2000$tap_paf, 
-#        width=10, height=6, units='in', dpi=600)
-# toc()
-# 
-# tic('ggsaving change')
-# ggsave(filename=file.path(out.dir, 'hap_pct_d.png'), plot=gg_d$hap_pct_d, 
-#        width=10, height=6, units='in', dpi=600)
-# 
-# ggsave(filename=file.path(out.dir, 'dfu_d.png'), plot=gg_d$dfu_d, 
-#        width=10, height=6, units='in', dpi=600)
-# 
-# # ggsave(filename=file.path(out.dir, 'tap_paf_d.png'), plot=gg_2000$tap_paf, 
-# #        width=10, height=6, units='in', dpi=600)
-# toc()
-# 
-# tic('ggsaving change rate')
-# ggsave(filename=file.path(out.dir, 'hap_pct_dr.png'), plot=gg_d$hap_pct_dr, 
-#        width=10, height=6, units='in', dpi=600)
-# 
-# ggsave(filename=file.path(out.dir, 'dfu_dr.png'), plot=gg_d$dfu_dr, 
-#        width=10, height=6, units='in', dpi=600)
-# 
-# # ggsave(filename=file.path(out.dir, 'tap_paf_d.png'), plot=gg_2000$tap_paf, 
-# #        width=10, height=6, units='in', dpi=600)
-# toc()
-# 
-# # tic('bmp saving')
-# # png(filename=file.path(out.dir, 'testreg_nosf.bmp'), 
-# #     units='px', width=2700, height=1500)
-# # print(gg)
-# # dev.off()
-# # toc()
-# 
-# toc()
-# 
-# plot <- 
-#   ggplot(plot.dt[iso3 %in% custom_countries], 
-#          aes(x=hap_pct, y=tap_paf*lri*1e3, color=iso3, shape=year %>% as.factor, group=ADM2_CODE)) + 
-#   geom_point() + 
-#   geom_line(alpha=.1) +
-#   geom_vline(xintercept=.5) +
-#   scale_color_brewer('Country', palette='Dark2') +
-#   scale_shape_manual('Year', values=c(1, 16)) +
-#   scale_x_continuous("HAP / TAP Share", limits=c(0, 1)) +
-#   scale_y_continuous("Rate/1000 of LRI Attributable to TAP", limits=c(0,4)) +
-#   coord_flip() +
-#   theme_bw(base_size = 16) +
-#   theme(
-#     legend.position = c(.90, .30),
-#     legend.justification = c("right", "top"),
-#     legend.box.just = "right",
-#     legend.margin = margin(6, 6, 6, 6)
-#   )
-# 
-# ggsave(filename=file.path(out.dir, 'presub_figure_2a.png'),
-#        width=16, height=8, units='in', dpi=900)
-# 
-# master_plot_flip <- 
-#   ggplot(plot.dt[iso3 %in% custom_countries], 
-#          aes(x=tap_paf, y=1-hap_pct, color=location_name, shape=year %>% as.factor, group=ADM2_CODE)) + 
-#   geom_point() + 
-#   geom_line(alpha=.1) +
-#   geom_hline(yintercept=.5, linetype="dashed") +
-#   #scale_color_brewer('Country', palette='Dark2') +
-#   scale_colour_manual('Country', values=custom_cols) +
-#   scale_shape_manual('Year', values=c(1, 16)) +
-#   scale_y_continuous("HAP / TAP Share", limits=c(0, 1), expand = c(0, 0)) +
-#   scale_x_continuous("Population Attributable Fraction of LRI", limits=c(.2,.6), expand = c(0, 0)) +
-#   annotate("rect", xmin = .5, xmax = 1, ymin = .2, ymax = .6, fill='lightsalmon2', alpha = .2) +
-#   annotate("rect", xmin = 0, xmax = .5, ymin = .2, ymax = .6, fill='lightgoldenrod2', alpha = .2) +
-#   coord_flip() +
-#   theme_bw(base_size = 16) +
-#   theme(
-#     #legend.position = c(.84, .69),
-#     legend.position = c(.82, .41),
-#     legend.justification = c("left", "top"),
-#     legend.box.just = "right",
-#     legend.margin = margin(6, 6, 6, 6)
-#   )
-# 
-# ggsave(filename=file.path(out.dir, 'presub_figure_2b.png'),
-#        width=12, height=8, units='in', dpi=900)
-# 
-# #with vertical layout
-# lay <- rbind(c(1,2,3,4),
-#              c(9,9,9,5),
-#              c(9,9,9,6),
-#              c(9,9,9,7),
-#              c(9,9,9,8))
-# plot <- grid.arrange(grobs=insets, layout_matrix=lay)
-# plot <- grid.arrange(arrangeGrob(grobs=insets, layout_matrix=lay, 
-#                                  bottom=textGrob("Percent of TAP contributed by ambient sources")))
-# ggsave(plot=plot, filename=file.path(out.dir, 'presub_figure_2_master.png'),
-#        width=12, height=8, units='in', dpi=900)
-# 
-# #now make a single inset plot for each of the remaining top 10 countries
-# insets <- top_countries_c[5:14] %>% 
-#   .[!(. %in% custom_countries)] %>% 
-#   sort %>% 
-#   lapply(., makeInset, scale_labels=T)
-# 
-# ##scatter version##
-# #arrange into master figure
-# all_grobs <- copy(insets)
-# all_grobs[[9]] <- master_plot
-# lay <- rbind(c(9,9,9,9,1,2),
-#              c(9,9,9,9,3,4),
-#              c(9,9,9,9,5,6),
-#              c(9,9,9,9,7,8))
-# plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-#                     top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
-#                                  gp = gpar(fontsize=24)),
-#                     bottom=textGrob("Percent of TAP contributed by ambient sources", 
-#                                     gp = gpar(fontsize=17))
-# ) %>% 
-#   grid.arrange
-# 
-# ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2.png'),
-#        width=12, height=8, units='in', dpi=900)
-# 
-# ##cloud version##
-# #now make a single inset plot for each of the remaining top 10 countries
-# insets <- top_countries_c[5:14] %>% 
-#   .[!(. %in% custom_countries)] %>% 
-#   sort %>% 
-#   lapply(., makeInset, scale_labels=T, type='cloud')
-# 
-# #arrange into master figure
-# all_grobs <- copy(insets)
-# all_grobs[[9]] <- master_plot
-# lay <- rbind(c(9,9,9,9,1,2),
-#              c(9,9,9,9,3,4),
-#              c(9,9,9,9,5,6),
-#              c(9,9,9,9,7,8))
-# plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-#                     top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
-#                                  gp = gpar(fontsize=24)),
-#                     bottom=textGrob("Percent of TAP contributed by ambient sources", 
-#                                     gp = gpar(fontsize=17))
-# ) %>% 
-#   grid.arrange
-# 
-# ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud.png'),
-#        width=12, height=8, units='in', dpi=900)
-# 
-# ##cloud version with top 14##
-# #now make a single inset plot for each of the remaining top 14 countries
-# insets <- top_countries_c %>% 
-#   .[!(. %in% custom_countries)] %>% 
-#   sort %>% 
-#   lapply(., makeInset, scale_labels=T, type='cloud')
-# 
-# #arrange into master figure
-# all_grobs <- copy(insets)
-# all_grobs[[13]] <- master_plot
-# lay <- rbind(c(13,13,13,13,1,2,3),
-#              c(13,13,13,13,4,5,6),
-#              c(13,13,13,13,7,8,9),
-#              c(13,13,13,13,10,11,12))
-# plot <- arrangeGrob(grobs=all_grobs, layout_matrix=lay, 
-#                     top=textGrob("Epidemiological transition of air pollution from 2000 to 2018", 
-#                                  gp = gpar(fontsize=24)),
-#                     bottom=textGrob("Percent of TAP contributed by ambient sources", 
-#                                     gp = gpar(fontsize=17))
-# ) %>% 
-#   grid.arrange
-# 
-# ggsave(plot=plot, filename=file.path(out.dir, 'presub_fig2_cloud_14.png'),
-#        width=12, height=8, units='in', dpi=900)
-# 
-# ggplot(plot.dt[year==2018 & !is.na(country)], aes(x = tap_pc, 
-#                                                   y = country,
-#                                                   fill = grouping %>% 
-#                                                     as.factor)) +
-#   geom_density_ridges(aes(height=..density..,  # Notice the additional
-#                           weight=pop),     # aes mappings
-#                       scale= 1.5,
-#                       stat="density") +
-#   geom_density_ridges(aes(height=..density..,  # Notice the additional
-#                           weight=pop),     # aes mappings
-#                       scale= 1.5,
-#                       stat="density") +
-#   #scale_fill_manual(values=reg_colors, guide=F) +
-#   scale_x_sqrt('TAP in PM2.5/person', limits=c(0, 750)) +
-#   #facet_grid(~grouping) +
-#   theme_ridges() +
-#   labs(title = '') +
-#   theme(axis.title.y=element_blank())
-# 
-# ggplot(dt[year==2017], aes(x=tap_pc, y=lri_c)) +
-#   geom_density(stat='identity', aes(weight=pop), n=400) +
-#   scale_fill_viridis_c() +
-#   scale_x_sqrt(limits=c(0,750)) +
-#   theme_minimal()
-# 
-# ggplot(data=plot.dt[year==2018 & iso3 %in% custom_countries], aes(x=pm,  y=log(pop), color=iso3 %>% as.factor)) +
-#   #geom_ribbon() + 
-#   facet_wrap(~grouping) +
-#   geom_line() +
-#   #geom_density(stat = "identity") +
-#   scale_color_brewer(palette='Dark2') +
-#   scale_x_continuous(limits=c(0, 750)) +
-#   #scale_y_continuous(limits=c(0, 10)) +
-#   #coord_trans(y='sqrt') +
-#   ggtitle('2018') +
-#   theme_minimal()
-# 
-# ggplot(data=plot.dt[year==2000 & !is.na(super_region_id)], aes(x=pm,  y=n, fill=hap_share)) +
-#   #geom_ribbon() + 
-#   facet_wrap(~super_region_name) +
-#   geom_bar(stat = "identity") +
-#   scale_fill_viridis(option='viridis') +
-#   scale_x_continuous(limits=c(0, 750)) +
-#   scale_y_continuous(limits=c(0, 20000)) +
-#   coord_trans(y='sqrt') +
-#   ggtitle('2000') +
-#   theme_minimal()
-# 
-# ggplot(data=plot.dt[year==2018 & !is.na(super_region_id)], aes(x=pm,  y=n, fill=hap_share)) +
-#   #geom_ribbon() + 
-#   facet_wrap(~super_region_name) +
-#   geom_bar(stat = "identity") +
-#   scale_fill_viridis(option='viridis') +
-#   scale_x_continuous(limits=c(0, 750)) +
-#   scale_y_continuous(limits=c(0, 20000)) +
-#   coord_trans(y='sqrt') +
-#   ggtitle('2018') +
-#   theme_minimal()
-# 
-# # ggplot(data=plot.dt[year==2018], aes(tap_pc,  y = ..count.., weight = lri_c, fill=hap_pct>.5)) +
-# #   geom_density(binwidth = 5, position = "stack", alpha=.2) + 
-# #   theme_bw()
-# 
-
-# #prep data for ridgeplot
-# plot.dt[iso3 %in% figure_2_countries, country := ADM0_NAME]
-# plot.dt[country %>% is.na, country := super_region_name]
-# plot.dt[, mean := weighted.mean(tap_pc_mean, pop), by=region_name]
-# plot.dt <- plot.dt[plot.dt[,do.call(order, .SD), .SDcols = c('super_region_id', 'mean')]]
-# plot.dt[, reg_fac := factor(region_name, levels=unique(region_name))]
-# 
-# type.plot.dt <- list (
-#   plot.dt %>% copy %>% .[, type:= 'Total'],
-#   plot.dt %>% copy %>% .[,tap_pc_mean := tap_pc_mean * hap_pct_mean] %>% .[, type:= 'Household'],
-#   plot.dt %>% copy %>% .[,tap_pc_mean := tap_pc_mean * (1-hap_pct_mean)] %>% .[, type:= 'Ambient']
-# ) %>% rbindlist
-# 
-# type.plot.dt[, wt := pop/sum(pop, na.rm=T), by=.(year, reg_fac, type)]
-# 
-# plot.dt.wt <- copy(type.plot.dt)
-# plot.dt.wt[, wt := round(pop/1e3, 0)]
-# plot.dt.wt <- plot.dt.wt[rep(seq(.N), wt), !"wt"] #expand rows to create weights
-# 
-# 
-# #type ridgeplot
-# plot <-
-#   ggplot(plot.dt.wt[year==2018 & !is.na(iso3)], aes(x = tap_pc_mean, 
-#                                                     y = reg_fac,
-#                                                     fill = super_region_id %>% as.factor)) +
-#   geom_density_ridges(data=plot.dt.wt[year==2000 & !is.na(region_name)], 
-#                       scale= .95,
-#                       fill='gray72',
-#                       alpha=.75) +
-#   geom_density_ridges(scale= .95,
-#                       alpha=.75) +
-#   geom_vline(xintercept=10, linetype='dashed', color='gray10') +
-#   facet_grid(~type) +
-#   scale_fill_manual(values=reg_colors, guide=F) +
-#   scale_x_sqrt('TAP in PM2.5/person', limits=c(0, 750)) +
-#   theme_minimal() +
-#   labs(title = '') +
-#   theme(axis.title.y=element_blank(),
-#         text = element_text(size=16))
-# ggsave(filename=file.path(out.dir, 'tap_distributions.png'), plot=plot, 
-#        width=12, height=8, units='in', dpi=500)
-# 
-# #single density plot
-# plot <-
-#   ggplot() +
-#   geom_density(data=plot.dt.wt[year==2018 & !is.na(iso3) & type=='Total' & iso3!='IND|IDN|NGA'],
-#                aes(x = tap_pc_mean, y = ..density..), 
-#                position = "stack", n=400, fill='gray', alpha=.3) +
-#   geom_density(data=plot.dt.wt[year==2018 & !is.na(iso3) & type=='Total' & iso3=='IND'],
-#                aes(x = tap_pc_mean, y = ..density..), 
-#                position = "stack", n=400, fill='red', alpha=.3) +
-#   geom_density(data=plot.dt.wt[year==2018 & !is.na(iso3) & type=='Total' & iso3=='IDN'],
-#                aes(x = tap_pc_mean, y = ..density..), 
-#                position = "stack", n=400, fill='blue', alpha=.3) +
-#   geom_density(data=plot.dt.wt[year==2018 & !is.na(iso3) & type=='Total' & iso3=='NGA'],
-#                aes(x = tap_pc_mean, y = ..density..), 
-#                position = "stack", n=400, fill='green', alpha=.3) +
-#   geom_vline(xintercept=10, linetype='dashed', color='gray10') +
-#   scale_x_sqrt('TAP in PM2.5/person', limits=c(0, 500)) +
-#   #scale_fill_manual(values=reg_colors, guide=F) +
-#   theme_minimal() +
-#   labs(title = '') +
-#   theme(axis.title.y=element_blank(),
-#         text = element_text(size=16))
-
-# #add 18 populations for weighting at country level for lusophonic countries
-# lus_projs <- merge(projs[iso3%in%c('AGO', 'BRA', 'GNB', 'MOZ', 'TLS')], 
-#                    dt[year==max(year) & grouping=='child' & cause=='all', .(pop_total, ADM2_CODE)], 
-#                    by='ADM2_CODE')
-# lus_projs <- setkey(lus_projs, draw, year, ADM1_NAME)[, sev := weighted.mean(sev, w=pop_total, na.rm=T), 
-#                                                       by=key(lus_projs)] %>% 
-#   unique(., by=key(.))
-# 
-# #ridgeplot of probs for Brazil
-# plot <-
-#   ggplot(lus_projs[year==2030], aes(x = sev, y = fct_reorder(ADM0_NAME, sev, .fun=mean), 
-#                                     fill = 0.5 - abs(0.5 - stat(ecdf)))) +
-#   stat_density_ridges(data=lus_projs[year==2018],
-#                       scale= .85,
-#                       fill='gray72',
-#                       alpha=.75,
-#                       calc_ecdf = T) +
-#   stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE) +
-#   scale_fill_viridis_c(name = "Tail probability", direction = -1) +
-#   geom_vline(xintercept=.01, linetype='dashed', color='gray10') +
-#   scale_x_continuous('Access to Clean Energy') +
-#   theme_minimal() +
-#   theme(axis.title=element_blank())
-# ggsave(filename=file.path(out.dir, 'lus_sdg_prob_density.png'), plot=plot, 
-#        width=12, height=6, units='in', dpi=500)

@@ -43,9 +43,9 @@ if (interactive) {
   config_par   <- 'hap_sp_fine'
   holdout <- 0
   age <- 0
-  run_date <- '2020_08_07_16_06_56'
+  run_date <- '2020_09_01_11_42_52'
   measure <- 'prev'
-  reg <- 'AGO'
+  reg <- 'CHN'
   cov_par <- paste(indicator_group, reg, sep='_')
   my_repo <- "/homes/jfrostad/_code/lbd/hap"
   

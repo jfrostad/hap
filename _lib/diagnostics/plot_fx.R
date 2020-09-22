@@ -312,9 +312,9 @@ makeTapDensityPlot <- function(
   #generate sums
   dt[, sum_var := get(wt_var)]
   dt[, sum := sum(sum_var, na.rm=T), by=.(year)]
-  #split tap by share & collapse to bin/types
-  dt[, bin_sum := sum(sum_var*share_mean, na.rm=T), by=.(loc, year, type, tap_bin_id)]
-
+  # collapse to bin/types
+  dt[, bin_sum := sum(sum_var, na.rm=T), by=.(loc, year, type, tap_bin_id)]
+  
   #collapse
   bin.dt <- unique(dt, by=c('loc', 'type', 'year', 'tap_bin')) %>% .[(order(type, year, tap_bin_id))]
   
@@ -341,7 +341,7 @@ makeTapDensityPlot <- function(
   #calculate cumulative density across sample
   stats <- copy(bin.dt) %>% setkey(., mid, year)
   stats[, sum := sum(prob, na.rm=T), by=key(stats)]
-  stats <- stats %>% .[, .(sum, mid, year)] %>% unique(., by=key(.))
+  stats <- stats[, .(sum, mid, year)] %>% unique(., by=key(.))
   stats[, cum := cumsum(sum), by = year]
   
   #define stats to print

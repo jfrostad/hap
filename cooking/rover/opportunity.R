@@ -101,6 +101,7 @@ file.path(my_repo, '_lib', 'post', 'map_fx.R') %>% source
 #gbd fx
 gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
+file.path(gbd.shared.function.dir, 'get_covariate_estimates.R') %>% source
 file.path(gbd.shared.function.dir, 'get_age_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_draws.R') %>% source
 file.path(gbd.shared.function.dir, 'get_outputs.R') %>% source
@@ -138,9 +139,9 @@ exploreRange <- function(explore_country, shp, dt, var, types=var_types, stub=NU
   out <- dt %>% 
     copy %>% 
     setnames(., new_vars, c('var_lower', 'var_mean', 'var_upper')) %>% 
-    .[iso3==explore_country & !is.na(var_mean), .(var_lower, var_mean, var_upper, ADM2_NAME)] %>% 
+    .[iso3==explore_country & !is.na(var_mean), .(var_lower, var_mean, var_upper, ADM0_NAME, ADM1_NAME,  ADM2_NAME)] %>% 
     .[order(var_mean)] %>% 
-    .[c(1, nrow(.)), .(var_lower, var_mean, var_upper, ADM2_NAME)]
+    .[c(1, nrow(.)), .(var_lower, var_mean, var_upper, ADM0_NAME, ADM1_NAME, ADM2_NAME)]
 
   st_distance(filter(shp, NAME_2==out[1, ADM2_NAME]), 
               filter(shp, NAME_2==out[2, ADM2_NAME])) %>% 
@@ -224,16 +225,22 @@ annotations <- ifelse(
 )
 if(!check) saveRDS(annotations, file=annotations_path)
 
-#read in link_table
-global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>% as.data.table
-adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, ADM2_NAME, ADM2_CODE)] %>% unique
+#merge sr region names/IDs/SDI quintiles
+locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
+  .[, .(iso3=ihme_loc_id, location_id, location_name, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
 
-#create file to crosswalk AD0 to iso3
-iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid) 
-iso3_map$geometry <- NULL
-iso3_map <- as.data.table(iso3_map) %>% unique
-locs <- merge(locs, iso3_map, by='iso3')
-adm_links <- merge(adm_links, locs, by=c('ADM0_CODE'), all.x=T)
+locs_sdi <- get_location_metadata(location_set_id = 40, gbd_round_id = 6) %>% 
+  .[, .(location_id, location_name, parent_id, level)] #subset to relevant columns
+
+locs_sdi <- locs_sdi[level!=0] %>% 
+  merge(., 
+        locs_sdi[level==0, .(location_id, sdi_quintile=location_name)], 
+        by.x='parent_id',
+        by.y='location_id') %>% 
+  .[, `:=` (parent_id=NULL, location_name=NULL, level=NULL)]
+
+#TODO fix issue with aggregated SDIs, currently drops countries like ZAF, IND, etc
+#locs <- merge(locs, locs_sdi, by='location_id')
 
 #read in shps
 stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad2_gadm.shp')
@@ -243,6 +250,17 @@ adm2 <- rbind(stage1, stage2)
 #read in mbg region info
 stages <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread #read info about stages
 
+#read in link_table
+global_link_table <- file.path(global_link_dir, "lbd_full_link.rds") %>% readRDS %>% as.data.table
+adm_links <- global_link_table[, .(ADM0_CODE, ADM1_NAME, ADM1_CODE, ADM2_CODE)] %>% unique
+
+#create file to crosswalk AD0 to iso3
+iso3_map <- dplyr::select(adm2, iso3, ADM0_CODE=gadm_geoid) 
+iso3_map$geometry <- NULL
+iso3_map <- as.data.table(iso3_map) %>% unique
+locs <- merge(locs, iso3_map, by='iso3')
+adm_links <- merge(adm_links, locs, by=c('ADM0_CODE'), all.x=T)
+
 #read in the input data
 #TODO define using the indicator name
 input_dt <- file.path(share.model.dir, "cooking_fuel_solid.csv") %>% fread
@@ -250,20 +268,12 @@ ker_dt <- file.path(share.model.dir, "cooking_fuel_kerosene.csv") %>% fread
 
 #read in results
 results <- file.path(data.dir, 'all_summary.fst') %>% read_fst(as.data.table=T)
-dt <- results[dimension=='ad2' & term=='lvl'] %>% Filter(function(x) !all(is.na(x)), .)
-dt_d <- results[dimension=='ad2' & term%like%'change'] %>% Filter(function(x) !all(is.na(x)), .)
-
-#merge sr region names/IDs
-locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
-  .[, .(iso3=ihme_loc_id, location_name, super_region_id, super_region_name, region_id, region_name)] #subset to relevant columns
+#dt <- results[dimension=='ad2' & term=='lvl'] %>% Filter(function(x) !all(is.na(x)), .)
+dt <- results[dimension=='ad2'] %>% Filter(function(x) !all(is.na(x)), .)
+#dt_d <- results[dimension=='ad2' & term%like%'change'] %>% Filter(function(x) !all(is.na(x)), .)
 
 # #merge sr region names/IDs
-# dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
-# dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'))
-
-#read in results for lri/children
-# dt_d <- file.path(data.dir, 'admin_2_delta_summary.csv') %>% fread
-# dt_d <- merge(dt_d, locs, by='ADM0_CODE')
+dt <- merge(dt, adm_links, by=c('ADM0_CODE', 'ADM2_CODE'), all.x=T)
 
 #read in input data and prepare it for mapping
 data <- load_map_results(indicator, indicator_group, run_date, raked, 
@@ -311,10 +321,19 @@ gbd_dt <-
 
 #reload estimates from the central db if they have changed
 if (new_gbd_estimates) {
-
-  #cause=322(LRI)//rei=87(HAP)
+  
+  #which locations
   loc_ids <- unique(gbd_dt$location_id)
   
+  #pull SDI values
+  sdi <- get_covariate_estimates(covariate_id = 881,
+                                 gbd_round_id=6,
+                                 year_id = c(2000:2019),
+                                 location_id = loc_ids, 
+                                 decomp_step = 'iterative')
+
+
+  #cause=322(LRI)//rei=87(HAP)
   hap <- get_outputs("rei", rei_id = 87, cause_id = 322, metric_id = 1, measure_id = 1, 
                      location_id=loc_ids,
                      year_id = c(2000, 2010, 2019),
@@ -407,12 +426,12 @@ ggplot(ker_dt, aes(x=year, y=ad0_kerosene, color=super_region_name)) +
 ##2017 patterns##
 #TODO verify that popweighting shoudl be done with u5 pop, if not switch pop vars here
 #country level
-results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) sum(pop_total*x, na.rm=T)), 
-                 .SDcols=paste('prev', var_types, sep='_')] #pop exposed to dfu 
-results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) sum(pop*x, na.rm=T)), 
-                 .SDcols=paste('prev', var_types, sep='_')] #under 5 exposed to dfu in
-results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
-                 .SDcols=paste('prev', var_types, sep='_')] #avg proportion
+# results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) sum(pop_total*x, na.rm=T)), 
+#                  .SDcols=paste('prev', var_types, sep='_')] #pop exposed to dfu 
+# results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) sum(pop*x, na.rm=T)), 
+#                  .SDcols=paste('prev', var_types, sep='_')] #under 5 exposed to dfu in
+# results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
+#                  .SDcols=paste('prev', var_types, sep='_')] #avg proportion
 # results[['ad0']][year==analysis_year & type=='HAP' & super_region_name=='Sub-Saharan Africa', 
 #                  lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
 #                  .SDcols=c('prev_lower', 'prev_mean', 'prev_upper')] #avg proportion in SSA
@@ -420,106 +439,98 @@ results[['ad2']][year==analysis_year & type=='HAP', lapply(.SD, function(x) weig
 # dt_ad0[year==analysis_year & super_region_name=='Sub-Saharan Africa', .(mean=weighted.mean(dfu_mean, w=pop)), by=iso3] %>% .[order(mean)]
 # dt_ad0[year==analysis_year & super_region_name=='Latin America and Caribbean', .(mean=weighted.mean(dfu, w=pop)), by=iso3] %>% .[order(mean)]
 
+#country level patterns
+#abs/rel change in prevalence
+tabulateR(lvl='global', types='HAP', ind='prev', terms=c('lvl'), years=c(2000, 2018))
+tabulateR(lvl='super_region', types='HAP', ind='prev', terms=c('lvl'), years=c(2000, 2018))
+tabulateR(lvl='ad0', types='HAP', ind='prev', terms=c('lvl'), years=c(2000, 2018))
+
 #district level
 #counts based on threshold
 threshold <- .95
 
-#how many districts were about .95 in 2018
+#how many districts were above .95 in 2018
 dt[year==analysis_year & type=='HAP' & term=='lvl', lapply(.SD, function(x) sum(x>threshold, na.rm=T)/.N), 
    .SDcols=paste0('prev_', var_types)]
 
-#worst superregion
-results[['ad2']][year==analysis_year & type=='HAP',
-                 .(mean=weighted.mean(prev_mean, w=pop)), by=.(ADM2_CODE, iso3, super_region_name)] %>% 
-  .[, .(count=sum(mean>threshold, na.rm=T), N=.N), by=super_region_name] %>% 
-  .[, .(count, N, pct=count/N), by=super_region_name]
-
-#worst region
-results[['ad2']][year==analysis_year & type=='HAP',
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3, region_name)] %>% 
-  .[, .(count_lower=sum(lower>threshold, na.rm=T), 
-        count_mean=sum(mean>threshold, na.rm=T),
-        count_upper=sum(upper>threshold, na.rm=T), N=.N), by=region_name] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=region_name]
-
 #worst country
-results[['ad2']][year==analysis_year & type=='HAP',
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
-  .[, .(count_lower=sum(lower>threshold, na.rm=T), 
-        count_mean=sum(mean>threshold, na.rm=T),
-        count_upper=sum(upper>threshold, na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
-  .[order(pct)]
+dt[year==analysis_year & type=='HAP' & term=='lvl', 
+        .(count_lower=sum(prev_lower>threshold, na.rm=T), 
+        count_mean=sum(prev_mean>threshold, na.rm=T),
+        count_upper=sum(prev_upper>threshold, na.rm=T), N=.N), by=ADM0_NAME] %>% 
+  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=ADM0_NAME] %>% 
+  .[order(-pct)]
 
 #worst country outside of SSA
-results[['ad2']][year==analysis_year & type=='HAP' & super_region_id!=166,
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
-  .[, .(count_lower=sum(lower>threshold, na.rm=T), 
-        count_mean=sum(mean>threshold, na.rm=T),
-        count_upper=sum(upper>threshold, na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
-  .[order(pct)]
-
-#worst country outside of SSA
-results[['ad2']][year==analysis_year & type=='HAP' & super_region_id!=166,
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
-  .[, .(count_lower=sum(lower>threshold, na.rm=T), 
-        count_mean=sum(mean>threshold, na.rm=T),
-        count_upper=sum(upper>threshold, na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
-  .[order(pct)]
+dt[year==analysis_year & type=='HAP' & term=='lvl' & super_region_id!=166, 
+   .(count_lower=sum(prev_lower>threshold, na.rm=T), 
+     count_mean=sum(prev_mean>threshold, na.rm=T),
+     count_upper=sum(prev_upper>threshold, na.rm=T), N=.N), by=ADM0_NAME] %>% 
+  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=ADM0_NAME] %>% 
+  .[order(-pct)]
 
 #worst country in Americas
-results[['ad2']][year==analysis_year & type=='HAP' & super_region_id==103,
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
-  .[, .(count_lower=sum(lower>threshold, na.rm=T), 
-        count_mean=sum(mean>threshold, na.rm=T),
-        count_upper=sum(upper>threshold, na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
-  .[order(pct)]
+dt[year==analysis_year & type=='HAP' & term=='lvl' & super_region_id==103, 
+   .(count_lower=sum(prev_lower>threshold, na.rm=T), 
+     count_mean=sum(prev_mean>threshold, na.rm=T),
+     count_upper=sum(prev_upper>threshold, na.rm=T), N=.N), by=ADM0_NAME] %>% 
+  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=ADM0_NAME] %>% 
+  .[order(-pct)]
 
-#best country
-results[['ad2']][year==analysis_year & type=='HAP',
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
-  .[, .(count_lower=sum(lower<(1-threshold), na.rm=T), 
-        count_mean=sum(mean<(1-threshold), na.rm=T),
-        count_upper=sum(upper<(1-threshold), na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
-  .[order(pct)]
-
-#best country in Americas
-results[['ad2']][year==analysis_year & type=='HAP' & super_region_id==103,
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
-  .[, .(count_lower=sum(lower<(1-threshold), na.rm=T), 
-        count_mean=sum(mean<(1-threshold), na.rm=T),
-        count_upper=sum(upper<(1-threshold), na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
-  .[order(pct)]
-
-#best country in SSA
-results[['ad2']][year==analysis_year & type=='HAP' & super_region_id==166,
-                 .(lower=weighted.mean(prev_lower, w=pop), 
-                   mean=weighted.mean(prev_mean, w=pop),
-                   upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
-  .[, .(count_lower=sum(lower<(1-threshold), na.rm=T), 
-        count_mean=sum(mean<(1-threshold), na.rm=T),
-        count_upper=sum(upper<(1-threshold), na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
-  .[order(pct)]
+# #worst country outside of SSA
+# results[['ad2']][year==analysis_year & type=='HAP' & super_region_id!=166,
+#                  .(lower=weighted.mean(prev_lower, w=pop), 
+#                    mean=weighted.mean(prev_mean, w=pop),
+#                    upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
+#   .[, .(count_lower=sum(lower>threshold, na.rm=T), 
+#         count_mean=sum(mean>threshold, na.rm=T),
+#         count_upper=sum(upper>threshold, na.rm=T), N=.N), by=iso3] %>% 
+#   .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
+#   .[order(pct)]
+# 
+# 
+# results[['ad2']][year==analysis_year & type=='HAP' & super_region_id==103,
+#                  .(lower=weighted.mean(prev_lower, w=pop), 
+#                    mean=weighted.mean(prev_mean, w=pop),
+#                    upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
+#   .[, .(count_lower=sum(lower>threshold, na.rm=T), 
+#         count_mean=sum(mean>threshold, na.rm=T),
+#         count_upper=sum(upper>threshold, na.rm=T), N=.N), by=iso3] %>% 
+#   .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
+#   .[order(pct)]
+# 
+# #best country
+# results[['ad2']][year==analysis_year & type=='HAP',
+#                  .(lower=weighted.mean(prev_lower, w=pop), 
+#                    mean=weighted.mean(prev_mean, w=pop),
+#                    upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
+#   .[, .(count_lower=sum(lower<(1-threshold), na.rm=T), 
+#         count_mean=sum(mean<(1-threshold), na.rm=T),
+#         count_upper=sum(upper<(1-threshold), na.rm=T), N=.N), by=iso3] %>% 
+#   .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
+#   .[order(pct)]
+# 
+# #best country in Americas
+# results[['ad2']][year==analysis_year & type=='HAP' & super_region_id==103,
+#                  .(lower=weighted.mean(prev_lower, w=pop), 
+#                    mean=weighted.mean(prev_mean, w=pop),
+#                    upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
+#   .[, .(count_lower=sum(lower<(1-threshold), na.rm=T), 
+#         count_mean=sum(mean<(1-threshold), na.rm=T),
+#         count_upper=sum(upper<(1-threshold), na.rm=T), N=.N), by=iso3] %>% 
+#   .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
+#   .[order(pct)]
+# 
+# #best country in SSA
+# results[['ad2']][year==analysis_year & type=='HAP' & super_region_id==166,
+#                  .(lower=weighted.mean(prev_lower, w=pop), 
+#                    mean=weighted.mean(prev_mean, w=pop),
+#                    upper=weighted.mean(prev_upper, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
+#   .[, .(count_lower=sum(lower<(1-threshold), na.rm=T), 
+#         count_mean=sum(mean<(1-threshold), na.rm=T),
+#         count_upper=sum(upper<(1-threshold), na.rm=T), N=.N), by=iso3] %>% 
+#   .[, .(count_lower, count_mean, count_upper, N, pct=count_mean/N), by=iso3] %>% 
+#   .[order(pct)]
 
 # dt[year==analysis_year & super_region_name=='Sub-Saharan Africa', .(mean=weighted.mean(dfu, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
 #   .[, .(count=sum(mean>threshold, na.rm=T), N=.N), by=iso3] %>% 
@@ -540,17 +551,17 @@ results[['ad2']][year==analysis_year & type=='HAP' & super_region_id==166,
 #   .[order(pct)]
 
 #counts of exposed
-results[['ad2']][year==analysis_year & type=='HAP', .(count_lower=sum(prev_lower*pop_total, na.rm=T),
+dt[term=='lvl' & year==analysis_year & type=='HAP', .(count_lower=sum(prev_lower*pop_total, na.rm=T),
                                                       count=sum(prev_mean*pop_total, na.rm=T),
                                                       count_upper=sum(prev_upper*pop_total, na.rm=T)
-                                                      ), by=.(ADM2_CODE, ADM2_NAME, iso3)] %>% 
+                                                      ), by=.(ADM2_CODE, ADM2_NAME, ADM0_NAME, ADM1_NAME)] %>% 
   .[order(count)]
 #***********************************************************************************************************************
 
 # ---INEQUALITY---------------------------------------------------------------------------------------------------------
 ##produce metrics of inequality for 2017##
 #calculate GINI/MAD at country level
-dt_ineq <- results[['ad2']][year==analysis_year & type=='HAP',
+dt_ineq <- dt[term=='lvl' & year==analysis_year & type=='HAP',
               .(iso3, year, ADM0_CODE, ADM2_CODE, ADM2_NAME, prev_mean, 
                 super_region_id, super_region_name, region_id, region_name, pop_total)]
 dt_ineq[, gini := gini(prev_mean, weights = pop_total), by=.(iso3, year)]
@@ -566,68 +577,71 @@ dt_ineq[year==analysis_year, .(range=max-min), by=iso3] %>%
   unique %>% 
   .[order(range)]
 
-exploreRange('SSD', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
-exploreRange('EGY', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
-exploreRange('HND', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
-exploreRange('NGA', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
+exploreRange('MRT', shp=adm2, dt=dt[term=='lvl' & year==analysis_year & type=='HAP'], var='prev')
+# exploreRange('EGY', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
+# exploreRange('HND', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
+# exploreRange('NGA', shp=adm2, dt=results[['ad2']][year==analysis_year & type=='HAP'], var='prev')
 
-#find the most extreme rook neighbors
-data_18 <- filter(data$admin2, year==analysis_year & type=='HAP') 
-rooks <- data_18 %>%  #TODO could be written more eloquently
-  dplyr::select(prev_mean, ADM0_CODE, ADM0_NAME, ADM1_CODE, ADM1_NAME, ADM2_CODE, ADM2_NAME, year) %>%  
-  st_join(data_18, st_rook, suffix=c('_og', '_rook')) %>% 
-  mutate(range=prev_mean_og-prev_mean_rook) 
-
-summary(rooks$range)
-filter(rooks, range==max(range, na.rm=T)) #biggest contrast
-extreme_rook_limit <- quantile(rooks$range, p=.99, na.rm=T) #top 1% of contrasts
-extreme_rooks <- filter(rooks, range > extreme_rook_limit) #which districts meet top 1% of contrasts
-as.character(extreme_rooks$ADM0_NAME_og) %>% table #which countries had the most districts with large contrast
-
-#find which countries have the highest percentage of their districts with at least one extreme rook
-extreme_rooks %>% 
-  as.data.table %>% 
-  .[,geometry := NULL] %>% #no longer relevant in dt format 
-  .[, extreme_count := .N, by=ADM0_NAME_og] %>% 
-  unique(., by='ADM0_NAME_og') %>% 
-  merge(., results[dimension=='ad2' & year==analysis_year & type=='HAP' & term=='lvl', .N, by=ADM0_NAME], 
-        by.x='ADM0_NAME_og', by.y='ADM0_NAME') %>% 
-  .[, pct := extreme_count/N] %>% 
-  .[order(pct)] %>% 
-  tail(n=20)
-
-distinct(extreme_rooks, ADM2_NAME_og, .keep_all = T) %>% 
-  count('ADM0_NAME_og') %>% 
-  merge(., count(data_18, 'ADM0_NAME'), by.y='ADM0_NAME', by.x='ADM0_NAME_og') %>% 
-  mutate(pct=freq.x/freq.y) %>% 
-  arrange(pct)
-
-#GINI results
-summary(dt_ineq$gini)
-dt_ineq[year==2000 & gini>mean(gini, na.rm=T), uniqueN(iso3)]
-dt_ineq[year==analysis_year & gini>mean(gini, na.rm=T), uniqueN(iso3)]
-dt_ineq[gini>mean(gini, na.rm=T), table(iso3, year)]
+# #find the most extreme rook neighbors
+# data_18 <- filter(data$admin2, year==analysis_year & type=='HAP') 
+# rooks <- data_18 %>%  #TODO could be written more eloquently
+#   dplyr::select(prev_mean, ADM0_CODE, ADM0_NAME, ADM1_CODE, ADM1_NAME, ADM2_CODE, ADM2_NAME, year) %>%  
+#   st_join(data_18, st_rook, suffix=c('_og', '_rook')) %>% 
+#   mutate(range=prev_mean_og-prev_mean_rook) 
+# 
+# summary(rooks$range)
+# filter(rooks, range==max(range, na.rm=T)) #biggest contrast
+# extreme_rook_limit <- quantile(rooks$range, p=.99, na.rm=T) #top 1% of contrasts
+# extreme_rooks <- filter(rooks, range > extreme_rook_limit) #which districts meet top 1% of contrasts
+# as.character(extreme_rooks$ADM0_NAME_og) %>% table #which countries had the most districts with large contrast
+# 
+# #find which countries have the highest percentage of their districts with at least one extreme rook
+# extreme_rooks %>% 
+#   as.data.table %>% 
+#   .[,geometry := NULL] %>% #no longer relevant in dt format 
+#   .[, extreme_count := .N, by=ADM0_NAME_og] %>% 
+#   unique(., by='ADM0_NAME_og') %>% 
+#   merge(., results[dimension=='ad2' & year==analysis_year & type=='HAP' & term=='lvl', .N, by=ADM0_NAME], 
+#         by.x='ADM0_NAME_og', by.y='ADM0_NAME') %>% 
+#   .[, pct := extreme_count/N] %>% 
+#   .[order(pct)] %>% 
+#   tail(n=20)
+# 
+# distinct(extreme_rooks, ADM2_NAME_og, .keep_all = T) %>% 
+#   count('ADM0_NAME_og') %>% 
+#   merge(., count(data_18, 'ADM0_NAME'), by.y='ADM0_NAME', by.x='ADM0_NAME_og') %>% 
+#   mutate(pct=freq.x/freq.y) %>% 
+#   arrange(pct)
+# 
+# #GINI results
+# summary(dt_ineq$gini)
+# dt_ineq[year==2000 & gini>mean(gini, na.rm=T), uniqueN(iso3)]
+# dt_ineq[year==analysis_year & gini>mean(gini, na.rm=T), uniqueN(iso3)]
+# dt_ineq[gini>mean(gini, na.rm=T), table(iso3, year)]
 
 #AID results
 #note that AID = gini * 2 * mean
-aid.dt <-
-na.omit(dt_ineq, cols='dfu_mean') %>% 
-.[, .(aid=gini(dfu_mean, weights=pop_total) * 2 * weighted.mean(dfu_mean, weights = pop_total, na.rm=T),
-      pop=sum(pop_total, na.rm=T)), 
-  by=.(super_region_id, region_id, iso3, year)] %>% 
+aid.dt <- dt[cause=='lri' & grouping=='under5' & type=='HAP' & term=='lvl', 
+             .(iso3, year, ADM0_CODE, ADM0_NAME, ADM2_CODE, ADM2_NAME, prev_mean, 
+               super_region_id, super_region_name, region_id, region_name, pop_total)] %>% 
+    na.omit(., cols='prev_mean') %>% 
+  .[, mean := weighted.mean(prev_mean, weights = pop_total, na.rm=T), by=.(iso3, year)] %>% 
+  .[, .(mean,
+        aid=gini(prev_mean, weights=pop_total) * 2 * mean,
+        pop=sum(pop_total, na.rm=T)), 
+    by=.(super_region_id, region_name, iso3, year)] %>% 
   unique(by=c('iso3', 'year')) %>% 
   .[order(aid),] %>% 
   .[year==min(year), aid_start := aid] %>% 
-  .[, aid_start := min(aid_start, na.rm=T), by=.(iso3)] %>%
+  .[, aid_start := mean(aid_start, na.rm=T), by=.(iso3)] %>%
   .[, aid_d := (aid-aid_start)] %>% 
-  .[, aid_dr := aid_d/aid_start] %>% 
-  .[year==max(year), label := iso3]
+  .[, aid_dr := aid_d/aid_start]
 
 #average change in AID
 aid.dt[year==max(year)] %>% .[,weighted.mean(aid_dr, weights=pop)]
 
 #regional changes
-aid.dt[year==max(year) & region_id==159] #south asia
+aid.dt[year==max(year) & region_name=='South Asia'] #south asia
 aid.dt[year==max(year) & region_id==167] #central sub-saharan africa
 #***********************************************************************************************************************
 
@@ -646,31 +660,37 @@ tabulateR(lvl='global', types='HAP', ind='prev', terms=c('lvl'), years=c(2000, 2
 tabulateR(lvl='global', types='HAP', ind='share', terms=c('change', 'change_rate', 'lvl'), years=c(2000, 2018))
 
 #regional/ad0 results
+tabulateR(lvl='super_region', types='HAP', ind='prev', terms=c('change_rate'))
 tabulateR(lvl='region', types='HAP', ind='prev', terms=c('change', 'change_rate'))
 tabulateR(lvl='ad0', types='HAP', ind='prev', terms=c('change', 'change_rate'))
 
+#best in SSA
+tabulateR(lvl='ad0', types='HAP', ind='prev', terms=c('change_rate'),
+          filter=list(var='ADM0_CODE', vals=unique(locs[super_region_id==166, ADM0_CODE]), type=T),
+          sorted='up')
+
 #ad2 results
-tabulateR(lvl='ad2', types='HAP', ind='prev', terms=c('change'))
+tabulateR(lvl='ad2', types='HAP', ind='prev', terms=c('change_rate'))
 
 #regional change 
-dt_d[year==analysis_year & type=='HAP' & super_region_name=='Sub-Saharan Africa',
-     lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
-     .SDcols=paste('prev', var_types, 'dr', sep='_')] #avg proportion change
-
-dt_d[year==analysis_year & type=='HAP',
-     lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
-     .SDcols=paste('prev', var_types, 'dr', sep='_'), 
-     by=super_region_name] %>% .[order(prev_mean_dr)]
-
-dt_d[year==analysis_year & type=='HAP',
-     lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
-     .SDcols=paste('prev', var_types, 'dr', sep='_'), 
-     by=region_name] %>% .[order(prev_mean_dr)]
-
-dt_d[year==analysis_year & type=='HAP',
-     lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
-     .SDcols=paste('prev', var_types, 'd', sep='_'), 
-     by=iso3] %>% .[order(prev_mean_d)]
+# dt_d[year==analysis_year & type=='HAP' & super_region_name=='Sub-Saharan Africa',
+#      lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
+#      .SDcols=paste('prev', var_types, 'dr', sep='_')] #avg proportion change
+# 
+# dt_d[year==analysis_year & type=='HAP',
+#      lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
+#      .SDcols=paste('prev', var_types, 'dr', sep='_'), 
+#      by=super_region_name] %>% .[order(prev_mean_dr)]
+# 
+# dt_d[year==analysis_year & type=='HAP',
+#      lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
+#      .SDcols=paste('prev', var_types, 'dr', sep='_'), 
+#      by=region_name] %>% .[order(prev_mean_dr)]
+# 
+# dt_d[year==analysis_year & type=='HAP',
+#      lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)),
+#      .SDcols=paste('prev', var_types, 'd', sep='_'), 
+#      by=iso3] %>% .[order(prev_mean_d)]
 
 # dt_d[year==analysis_year & region_name %like% "Andean|Tropical", .(mean=weighted.mean(dfu_dr, w=pop, na.rm=T))]
 # dt_d[year==analysis_year & super_region_name=='Sub-Saharan Africa', 
@@ -693,35 +713,51 @@ dt_d[year==analysis_year & type=='HAP',
 
 #district level
 #biggest change
-biggest_change <-
-dt_d[type=='HAP'] %>%  
-  .[!is.na(prev_mean_d)] %>% 
-  .[order(prev_mean_d)] %>% 
-  .[1, ADM2_CODE]
-results[['ad2']][ADM2_CODE==biggest_change & type=='HAP' & year %in%c(start_year, end_year)]
-
-dt_d[!is.na(dfu_d) & dfu_d >= 0] # number of districts making no progress
-nrow(dt_d[!is.na(dfu_d) & dfu_d >= 0]) / nrow(dt_d)
+# biggest_change <-
+# dt_d[type=='HAP'] %>%  
+#   .[!is.na(prev_mean_d)] %>% 
+#   .[order(prev_mean_d)] %>% 
+#   .[1, ADM2_CODE]
+# results[['ad2']][ADM2_CODE==biggest_change & type=='HAP' & year %in%c(start_year, end_year)]
+# 
+# dt_d[!is.na(dfu_d) & dfu_d >= 0] # number of districts making no progress
+# nrow(dt_d[!is.na(dfu_d) & dfu_d >= 0]) / nrow(dt_d)
 
 #what percent of districts stagnated?
 #counts based on threshold of improving less than 1%
 threshold <- -.01
-q75_dfu <- results[['ad0']][year==start_year & type=='HAP',  quantile(prev_mean, p=.75, na.rm=T)]
-q75_countries <-  results[['ad0']][year==start_year & type=='HAP' & prev_mean>=q75_dfu, unique(iso3)]
+dt[year==analysis_year & term=='change' & type=='HAP', lapply(.SD, function(x) sum(x >= threshold, na.rm=T)), 
+   .SDcols=paste('prev', var_types, sep='_')]
+dt[year==analysis_year & term=='change' & type=='HAP', lapply(.SD, function(x) sum(x >= threshold, na.rm=T)/.N), 
+   .SDcols=paste('prev', var_types, sep='_')]
 
-dt_d[year==analysis_year & iso3 %in% q75_countries & type=='HAP', lapply(.SD, function(x) sum(x >= threshold)), 
-     .SDcols=paste('prev', var_types, 'd', sep='_')]
-dt_d[year==analysis_year & iso3 %in% q75_countries & type=='HAP', lapply(.SD, function(x) sum(x >= threshold)/.N), 
-     .SDcols=paste('prev', var_types, 'd', sep='_')]
 
-dt_d[year==analysis_year & iso3 %in% q75_countries & type=='HAP'] %>% 
-  .[, .(count=sum(prev_mean_d>threshold, na.rm=T), N=.N), by=iso3] %>% 
-  .[, .(pct=count/N), by=iso3] %>% 
+#subset to upper quartile
+q75_sfu <- results[dimension=='ad0' & term=='lvl' & year==min(year) & type=='HAP',  quantile(prev_mean, p=.75, na.rm=T)]
+q75_countries <-  results[dimension=='ad0' & year==min(year) & type=='HAP' & prev_mean>=q75_sfu, unique(ADM0_NAME)]
+
+dt[year==analysis_year & term=='change' & ADM0_NAME %in% q75_countries & type=='HAP', lapply(.SD, function(x) sum(x >= threshold)), 
+     .SDcols=paste('prev', var_types, sep='_')]
+dt[year==analysis_year & term=='change' & ADM0_NAME %in% q75_countries & type=='HAP', lapply(.SD, function(x) sum(x >= threshold)/.N), 
+     .SDcols=paste('prev', var_types, sep='_')]
+
+dt[year==analysis_year & term=='change' & type=='HAP'] %>% 
+  .[, .(count=sum(prev_mean>threshold, na.rm=T), N=.N), by=ADM0_NAME] %>% 
+  .[, .(pct=count/N), by=ADM0_NAME] %>% 
   .[order(pct)]
 
-dt_d[year==analysis_year & iso3 %in% q75_countries & type=='HAP', lapply(.SD, function(x) sum(x >= threshold)/.N), 
-     .SDcols=paste('prev', var_types, 'd', sep='_'), by=iso3] %>% 
-  .[order(prev_mean_d)]
+#with C.I
+dt[year==analysis_year & term=='change' & type=='HAP'] %>% 
+  .[, .(prev_lower=sum(prev_lower>threshold, na.rm=T),
+        prev_mean=sum(prev_mean>threshold, na.rm=T),
+        prev_upper=sum(prev_upper>threshold, na.rm=T),
+        N=.N), by=ADM0_NAME] %>% 
+  .[, lapply(.SD, function(x) x/N), .SDcols=paste('prev', var_types, sep='_'), by=ADM0_NAME] %>% 
+  .[order(prev_mean)]
+
+# dt_d[year==analysis_year & iso3 %in% q75_countries & type=='HAP', lapply(.SD, function(x) sum(x >= threshold)/.N), 
+#      .SDcols=paste('prev', var_types, 'd', sep='_'), by=iso3] %>% 
+#   .[order(prev_mean_d)]
   
 # dt_d[year==analysis_year & super_region_name!='Sub-Saharan Africa', .(mean=weighted.mean(dfu_dr, w=pop)), by=.(ADM2_CODE, iso3)] %>% 
 #   .[, .(count=sum(mean>threshold, na.rm=T), N=.N), by=iso3] %>% 
@@ -738,14 +774,14 @@ dt_d[year==analysis_year & iso3 %in% q75_countries & type=='HAP', lapply(.SD, fu
 #   .[order(pct)]
 
 #range results
-# dt_d[year==analysis_year, .(range=max(dfu_d, na.rm=T)-min(dfu_d, na.rm=T)), by=iso3] %>% 
-#   unique %>% 
-#   .[order(range)]
+dt[year==analysis_year & term=='change' & type=='HAP', .(range=max(prev_mean, na.rm=T)-min(prev_mean, na.rm=T)), by=iso3] %>%
+  unique %>%
+  .[order(range)]
 
 #explore the range to find inequality
-exploreRange('MEX', shp=adm2, 
-             dt=merge(dt_d[year==analysis_year & type=='HAP'], adm_links[, .(ADM2_CODE, ADM2_NAME)], by='ADM2_CODE'),
-             var='prev', stub='d')
+exploreRange('BTN', shp=adm2, 
+             dt=dt[term=='change' & year==analysis_year & type=='HAP'],
+             var='prev')
 
 #explore the range to find equality
 #select countries that improved by more than 10%
@@ -803,8 +839,8 @@ projs <- unique(projs, by=key(projs)) %>%
   .[, c(cols, 'draw') := NULL]
 
 #calculate relative uncertainty of SEV
-projs[, sev_rel_uncertainty := (sev_upper-sev_lower)/2/sev_mean]
-projs[sev_rel_uncertainty>1, sev_rel_uncertainty := 1] #cap at 1
+projs[, sev_rel_uncertainty := (sev_upper-sev_lower)/sev_mean]
+projs[sev_rel_uncertainty>2, sev_rel_uncertainty := 2] #cap at 2
 
 #district level results
 target_threshold <- .05
@@ -815,15 +851,18 @@ ad0_probs <-
 probs[target==target_threshold & year==2030, 
       .(prob=weighted.mean(absolute_goal_prob, w=pop_total), 
         pop=sum(pop_total, na.rm=T)), by=.(super_region_id, region_id, iso3)] %>% 
-  .[, global_pop := sum(pop, na.rm=T)]
+  .[, global_pop := sum(pop, na.rm=T)] %>% 
+  merge(., iso3_map, by='iso3')
 
-ad0_probs[, .(fail=sum(prob>=prob_threshold, na.rm=T), success=sum(prob<=(1-prob_threshold), na.rm=T))]
+ad0_probs[, .(success=sum(prob>=prob_threshold, na.rm=T), fail=sum(prob<=(1-prob_threshold), na.rm=T))]
 ad0_probs[prob>=prob_threshold, .(regs=uniqueN(region_id), pop=sum(pop, na.rm=T), global_pop=mean(global_pop))] %>% 
   .[, pop_share := pop/global_pop] %>% print
 ad0_probs[prob<=(1-prob_threshold), .(regs=uniqueN(region_id), pop=sum(pop, na.rm=T), global_pop=mean(global_pop))] %>% 
   .[, pop_share := pop/global_pop] %>% print
 
-#what percent of 
+#what is the country with the highest SFU in 2000 that is on track to succeed
+tabulateR(lvl='ad0', types='HAP', ind='prev', terms=c('lvl'), years=c(2000)) %>% 
+  .[ADM0_CODE %in% ad0_probs[prob>=prob_threshold, unique(ADM0_CODE)]]
 
 #how many districts have met in 2018
 probs[target==target_threshold & year==2018] %>% 
@@ -856,33 +895,33 @@ probs[target==target_threshold & year==2030 & ADM2_CODE%in%unmet_districts] %>%
 
 #country breakdown
 probs[target==target_threshold & year==2030 & ADM2_CODE%in%unmet_districts] %>% 
-  .[, .(count=sum(absolute_goal_prob>=prob_threshold, na.rm=T), N=.N), by=ADM0_NAME] %>% 
-  .[, .(count, N, pct=count/N), by=ADM0_NAME] %>% 
+  .[, .(count=sum(absolute_goal_prob>=prob_threshold, na.rm=T), N=.N), by=iso3] %>% 
+  .[, .(count, N, pct=count/N), by=iso3] %>% 
   .[order(pct)]
 
 #country breakdown for SSA
-probs[target==target_threshold & year==2030 & ADM2_CODE%in%unmet_districts & region_name %like% 'Saharan'] %>% 
-  .[, .(count=sum(absolute_goal_prob>=prob_threshold, na.rm=T), N=.N), by=ADM0_NAME] %>% 
-  .[, .(count, N, pct=count/N), by=ADM0_NAME] %>% 
+probs[target==target_threshold & year==2030 & ADM2_CODE%in%unmet_districts & region_name %like% 'Latin'] %>% 
+  .[, .(count=sum(absolute_goal_prob>=prob_threshold, na.rm=T), N=.N), by=iso3] %>% 
+  .[, .(count, N, pct=count/N), by=iso3] %>% 
   .[order(pct)]
 
 #country failure breakdown for 2030
 probs[target==target_threshold & year==2030] %>% 
-  .[, .(count=sum(absolute_goal_prob<=(1-prob_threshold), na.rm=T), N=.N), by=ADM0_NAME] %>% 
-  .[, .(count, N, pct=count/N), by=ADM0_NAME] %>% 
+  .[, .(count=sum(absolute_goal_prob<=(1-prob_threshold), na.rm=T), N=.N), by=iso3] %>% 
+  .[, .(count, N, pct=count/N), by=iso3] %>% 
   .[order(pct)]
 
-#country failure breakdown for 2030 (ESA/Oceania)
-probs[target==target_threshold & year==2030 & region_id %in% c(174, 21)] %>% 
-  .[, .(count=sum(absolute_goal_prob<=(1-prob_threshold), na.rm=T), N=.N), by=ADM0_NAME] %>% 
-  .[, .(count, N, pct=count/N, resid=N-count), by=ADM0_NAME] %>% 
+#country failure breakdown for 2030 (ESSA)
+probs[target==target_threshold & year==2030 & region_id %in% c(174)] %>% 
+  .[, .(count=sum(absolute_goal_prob<=(1-prob_threshold), na.rm=T), N=.N), by=iso3] %>% 
+  .[, .(count, N, pct=count/N, resid=N-count), by=iso3] %>% 
   .[order(pct)]
 
 #country with the largest divide
 probs[target==target_threshold & year==2030] %>% 
   .[, .(count_fail=sum(absolute_goal_prob<=(1-prob_threshold), na.rm=T), 
         count_success=sum(absolute_goal_prob>=prob_threshold, na.rm=T),
-        N=.N), by=ADM0_NAME] %>% 
+        N=.N), by=iso3] %>% 
   .[, ratio := count_fail/count_success] %>% 
   .[count_fail!=0&count_success!=0] %>% 
   .[order(ratio)]
@@ -904,8 +943,18 @@ tabulateR(lvl='super_region', types='HAP', ind='share', terms=c('lvl', 'change',
 tabulateR(lvl='region', types='TAP', ind='pm_pc') #highest TAP
 tabulateR(lvl='region', types='TAP', ind='paf', years=c(start_year, end_year)) #highest TAP PAF
 tabulateR(lvl='region', types='HAP', ind='share', terms=c('lvl', 'change')) #highest HAP share
+
+#examine south asia
+tabulateR(lvl='region', types='HAP', ind='share', terms=c('lvl', 'change'), years=c(start_year, end_year)) %>% 
+  .[region_id==159]#change in HAP share in South Asia
+tabulateR(lvl='region', types='HAP', ind='prev', terms=c('change_rate')) %>% 
+  .[region_id==159]#change in SFU for South Asia
 tabulateR(lvl='region', types='AAP', ind='pm_pc', terms=c('lvl', 'change'), years=c(start_year, end_year)) %>% 
   .[region_id==159]#change in AAP dose in South Asia
+
+#deeper dive to countries in south asia
+tabulateR(lvl='ad0', types='HAP', ind='prev', terms=c('change_rate'), 
+          filter=list(var='ADM0_CODE', vals=unique(locs[super_region_name=='South Asia', ADM0_CODE]), type=T))
 
 #pct decreases at global level
 dt_d[type=='TAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
@@ -955,103 +1004,106 @@ tabulateR(lvl='ad0', types='AAP', ind='share', sorted='up') #lowest AAP share
 tabulateR(lvl='ad0', types='AAP', ind='share') #highest AAP share
 
 #country level HAP:AAP ratio, what percent of countries is HAP the main contributor vs AAP
-tabulateR(lvl='ad0', types='AAP', ind='share') %>% .[share_mean>.5, .N] #highest HAP share
-tabulateR(lvl='ad0', types='AAP', ind='share', years=start_year) %>% .[share_mean>.5, .N] #highest HAP share
+tabulateR(lvl='ad0', types='HAP', ind='share') %>% .[share_mean>.5, .N] #2018
+tabulateR(lvl='ad0', types='HAP', ind='share', years=start_year) %>% .[share_mean>.5, .N] #2000
 
-#country pct decrease
-dt_d[type=='TAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
-     .SDcols=apply(expand.grid(c('pm_pc', 'paf'), paste0(var_types, '_dr')), 1, paste, collapse="_") %>% 
-       sort, by=iso3] 
-dt_d[type=='HAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
-     .SDcols=paste('share', var_types, 'dr', sep="_"), by=iso3] 
-
-#country abs decrease
-dt_d[type=='TAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
-     .SDcols=apply(expand.grid(c('pm_pc', 'paf'), paste0(var_types, '_d')), 1, paste, collapse="_") %>% 
-       sort, by=iso3] 
-dt_d[type=='HAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
-     .SDcols=paste('share', var_types, 'd', sep="_"), by=iso3] 
-
-#pct of population that lives below WHO threshold
+# #country pct decrease
+# dt_d[type=='TAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
+#      .SDcols=apply(expand.grid(c('pm_pc', 'paf'), paste0(var_types, '_dr')), 1, paste, collapse="_") %>% 
+#        sort, by=iso3] 
+# dt_d[type=='HAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
+#      .SDcols=paste('share', var_types, 'dr', sep="_"), by=iso3] 
+# 
+# #country abs decrease
+# dt_d[type=='TAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
+#      .SDcols=apply(expand.grid(c('pm_pc', 'paf'), paste0(var_types, '_d')), 1, paste, collapse="_") %>% 
+#        sort, by=iso3] 
+# dt_d[type=='HAP', lapply(.SD, function(x) weighted.mean(x, w=pop_total, na.rm=T)), 
+#      .SDcols=paste('share', var_types, 'd', sep="_"), by=iso3] 
+# 
+#pct of population that lives below WHO threshold 
 threshold <- 10
-dt[year==analysis_year & pm_pc_mean < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
-dt[year==analysis_year & pm_pc_lower < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
-dt[year==analysis_year & pm_pc_upper < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
+dt[year==analysis_year & term=='lvl' & type=='TAP', 
+   lapply(.SD, function(x) sum((x < threshold)*pop, na.rm=T)/sum(pop, na.rm=T)),
+   .SDcols=paste0('pm_pc_', var_types)]
 
 #pct of population that lives below WHO threshold interim-1
 threshold <- 35
-dt[year==analysis_year & pm_pc_mean < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
-dt[year==analysis_year & pm_pc_lower < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
-dt[year==analysis_year & pm_pc_upper < threshold & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] / dt[year==analysis_year & cause=='lri' & type=='TAP', sum(pop, na.rm=T)] 
+dt[year==analysis_year & term=='lvl' & type=='TAP', 
+   lapply(.SD, function(x) sum((x < threshold)*pop, na.rm=T)/sum(pop, na.rm=T)),
+          .SDcols=paste0('pm_pc_', var_types)]
+dt[year==min(year) & term=='lvl' & type=='TAP', 
+   lapply(.SD, function(x) sum((x < threshold)*pop, na.rm=T)/sum(pop, na.rm=T)),
+   .SDcols=paste0('pm_pc_', var_types)]
 
-#how many districts did hap share stagnate or increase
-threshold <- -0.01
-dt_d[, .(mean=weighted.mean(hap_pct_mean_d, w=pop, na.rm=T)), by=.(ADM2_CODE, iso3, region_name)] %>% 
-  .[, .(count=sum(mean>threshold, na.rm=T), N=.N)]
-dt_d[, .(mean=weighted.mean(hap_pct_mean_d, w=pop, na.rm=T)), by=.(ADM2_CODE, iso3, region_name)] %>% 
-  .[, .(count=sum(mean>threshold, na.rm=T), N=.N), by=region_name] %>% 
-  .[, .(pct=count/N), by=region_name]
-
-#pct breakdown of stagnating or increasing districts by reg
-stagnators <-
-  dt_d[, .(mean=weighted.mean(hap_pct_mean_d, w=pop, na.rm=T)), by=.(ADM2_CODE, iso3, region_name)] %>% 
-  .[mean>threshold, unique(ADM2_CODE)] 
-dt_d[ADM2_CODE %in% stagnators & year==analysis_year, region_name] %>% table %>% prop.table %>% round(2)
-
-#how many stagnators were above the average TAP_pc
-dt_d[ADM2_CODE %in% stagnators & year==analysis_year, .N]
-dt_d[ADM2_CODE %in% stagnators & year==analysis_year, sum(tap_pc_mean>weighted.mean(tap_pc_mean, weight=pop, na.rm=T))/.N]
-     
-#explore stagnators
-dt_d[ADM2_CODE %in% stagnators & tap_pc_d > 0, summary(dfu)]
-dt_d[ADM2_CODE %in% stagnators, tap_pc_d > 0] %>% table
-dt_d[ADM2_CODE %in% stagnators, tap_pc_d > 0] %>% table %>% prop.table %>% round(2)
-
-#range of hap pct
-dt[year==analysis_year, .(range=max(hap_pct_mean, na.rm=T)-min(hap_pct_mean, na.rm=T)), by=iso3] %>% 
-  unique %>% 
-  .[order(range)]
-
-exploreRange('PAK', shp=adm2, dt=dt, var='hap_pct_mean')
-
-#range of tap dose
-dt[year==analysis_year, .(range=max(tap_pc_mean, na.rm=T)-min(tap_pc_mean, na.rm=T)), by=iso3] %>% 
-  unique %>% 
-  .[order(range)]
-
-exploreRange('TCD', shp=adm2, dt=dt, var='tap_pc_mean')
-exploreRange('SOM', shp=adm2, dt=dt, var='tap_pc_mean')
-
-#find the most extreme rook neighbors for HAP share
-rooks <- filter(data$admin2, year==analysis_year) %>% 
-  dplyr::select(hap_pct, ADM0_CODE, ADM0_NAME, ADM1_CODE, ADM1_NAME, ADM2_CODE, ADM2_NAME) %>%  
-  st_join(data_17, st_rook, suffix=c('_og', '_rook')) %>% 
-  mutate(range=hap_pct_og-hap_pct_rook) 
-
-summary(rooks$range)
-quantile(rooks$range, p=.97, na.rm=T)
-filter(rooks, range==max(range, na.rm=T)) #biggest contrast
-extreme_rooks <- filter(rooks, range>quantile(rooks$range, p=.99, na.rm=T)) #top 1% of contrasts
-as.character(extreme_rooks$ADM0_NAME_og) %>% table #which countries had the most districts with large contrast
-
-#correlation analyses
-threshold <- 0 #very weak negative correlation
-dt[year==analysis_year, cor < threshold] %>% table %>% prop.table %>% round(2) 
-
-for (reg in unique(dt$region_name)) {
-  
-  message(reg)
-  dt[year==analysis_year & region_name==reg, cor < threshold] %>% table %>% prop.table %>% round(2) %>% print
-  
-}
-
-threshold <- -.5 #strong negative correlation
-for (reg in unique(dt$region_name)) {
-  
-  message(reg)
-  dt[year==analysis_year & region_name==reg, cor < threshold] %>% table %>% prop.table %>% round(2) %>% print
-  
-}
+# #how many districts did hap share stagnate or increase
+# threshold <- -0.01
+# dt_d[, .(mean=weighted.mean(hap_pct_mean_d, w=pop, na.rm=T)), by=.(ADM2_CODE, iso3, region_name)] %>% 
+#   .[, .(count=sum(mean>threshold, na.rm=T), N=.N)]
+# dt_d[, .(mean=weighted.mean(hap_pct_mean_d, w=pop, na.rm=T)), by=.(ADM2_CODE, iso3, region_name)] %>% 
+#   .[, .(count=sum(mean>threshold, na.rm=T), N=.N), by=region_name] %>% 
+#   .[, .(pct=count/N), by=region_name]
+# 
+# #pct breakdown of stagnating or increasing districts by reg
+# stagnators <-
+#   dt_d[, .(mean=weighted.mean(hap_pct_mean_d, w=pop, na.rm=T)), by=.(ADM2_CODE, iso3, region_name)] %>% 
+#   .[mean>threshold, unique(ADM2_CODE)] 
+# dt_d[ADM2_CODE %in% stagnators & year==analysis_year, region_name] %>% table %>% prop.table %>% round(2)
+# 
+# #how many stagnators were above the average TAP_pc
+# dt_d[ADM2_CODE %in% stagnators & year==analysis_year, .N]
+# dt_d[ADM2_CODE %in% stagnators & year==analysis_year, sum(tap_pc_mean>weighted.mean(tap_pc_mean, weight=pop, na.rm=T))/.N]
+#      
+# #explore stagnators
+# dt_d[ADM2_CODE %in% stagnators & tap_pc_d > 0, summary(dfu)]
+# dt_d[ADM2_CODE %in% stagnators, tap_pc_d > 0] %>% table
+# dt_d[ADM2_CODE %in% stagnators, tap_pc_d > 0] %>% table %>% prop.table %>% round(2)
+# 
+# #range of hap pct
+# dt[year==analysis_year, .(range=max(hap_pct_mean, na.rm=T)-min(hap_pct_mean, na.rm=T)), by=iso3] %>% 
+#   unique %>% 
+#   .[order(range)]
+# 
+# exploreRange('PAK', shp=adm2, dt=dt, var='hap_pct_mean')
+# 
+# #range of tap dose
+# dt[year==analysis_year, .(range=max(tap_pc_mean, na.rm=T)-min(tap_pc_mean, na.rm=T)), by=iso3] %>% 
+#   unique %>% 
+#   .[order(range)]
+# 
+# exploreRange('TCD', shp=adm2, dt=dt, var='tap_pc_mean')
+# exploreRange('SOM', shp=adm2, dt=dt, var='tap_pc_mean')
+# 
+# #find the most extreme rook neighbors for HAP share
+# rooks <- filter(data$admin2, year==analysis_year) %>% 
+#   dplyr::select(hap_pct, ADM0_CODE, ADM0_NAME, ADM1_CODE, ADM1_NAME, ADM2_CODE, ADM2_NAME) %>%  
+#   st_join(data_17, st_rook, suffix=c('_og', '_rook')) %>% 
+#   mutate(range=hap_pct_og-hap_pct_rook) 
+# 
+# summary(rooks$range)
+# quantile(rooks$range, p=.97, na.rm=T)
+# filter(rooks, range==max(range, na.rm=T)) #biggest contrast
+# extreme_rooks <- filter(rooks, range>quantile(rooks$range, p=.99, na.rm=T)) #top 1% of contrasts
+# as.character(extreme_rooks$ADM0_NAME_og) %>% table #which countries had the most districts with large contrast
+# 
+# #correlation analyses
+# threshold <- 0 #very weak negative correlation
+# dt[year==analysis_year, cor < threshold] %>% table %>% prop.table %>% round(2) 
+# 
+# for (reg in unique(dt$region_name)) {
+#   
+#   message(reg)
+#   dt[year==analysis_year & region_name==reg, cor < threshold] %>% table %>% prop.table %>% round(2) %>% print
+#   
+# }
+# 
+# threshold <- -.5 #strong negative correlation
+# for (reg in unique(dt$region_name)) {
+#   
+#   message(reg)
+#   dt[year==analysis_year & region_name==reg, cor < threshold] %>% table %>% prop.table %>% round(2) %>% print
+#   
+# }
 #***********************************************************************************************************************
 
 # ---ATTRIBUTABLE LRI---------------------------------------------------------------------------------------------------
@@ -1064,7 +1116,6 @@ tabulateR(lvl='global', types='TAP', ind='atr_count', years=c(analysis_year, sta
           terms=c('lvl', 'change', 'change_rate')) 
 tabulateR(lvl='global', types=c('HAP', 'AAP'), ind='atr_count', years=c(analysis_year, start_year),
           terms=c('lvl', 'change', 'change_rate')) 
-
 
 tabulateR(lvl='super_region', types='TAP', ind='atr_count') #highest TAP count
 tabulateR(lvl='region', types='TAP', ind='atr_count') #highest TAP count
@@ -1091,6 +1142,17 @@ dt[year==analysis_year & type=='TAP' & term=='lvl', lapply(.SD, function(x) sum(
 tabulateR(lvl='global', types='HAP', ind='atr_count', years=c(analysis_year, start_year)) %>%
   .[, c(3:5)] %>%
   .[] / (tabulateR(lvl='global', types='TAP', ind='atr_count', years=c(analysis_year, start_year)) %>% .[, c(3:5)])
+
+#investigate countries where LRI rate fell but SFU was stable
+tabulateR(lvl='ad0', types='TAP', ind='rate', terms='change_rate', years=c(analysis_year, start_year), sorted='up')
+tabulateR(lvl='ad0', types='HAP', ind='prev', terms='change_rate', years=c(analysis_year, start_year))
+
+#what is the lowest HAP paf in a country where LRI rate remains above 4/1000
+results[year==analysis_year & dimension=='ad0' & type=='HAP' & term=='lvl' & rate_mean>2/1e3] %>% 
+  .[order(paf_mean), .(ADM0_NAME, 
+                        rate_lower=rate_lower*1e3, rate_mean=rate_mean*1e3, rate_upper=rate_upper*1e3, 
+                        prev_lower, prev_mean, prev_upper,
+                        paf_lower, paf_mean, paf_upper)]
 
 # tabulateR(lvl='ad0', types='AAP', ind='atr_count', years=c(analysis_year, start_year)) %>%
 #   .[ADM0_NAME %in% c('Nigeria', 'India'), c(3:5)] %>%

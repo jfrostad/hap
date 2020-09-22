@@ -59,7 +59,7 @@ skip.stacking,0
 skip.inla,0
 fit_with_tmb,FALSE
 gbd_fixed_effects_age,
-summstats,"c('mean','cirange')"
+summstats,"c('mean','cirange', 'upper', 'lower')"
 z_list,0
 zcol,z_column_default_blank
 scale_gaussian_variance_N,TRUE

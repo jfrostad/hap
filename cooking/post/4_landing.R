@@ -387,7 +387,7 @@ projs[, sev_rel_uncertainty := (sev_upper-sev_lower)/2/sev_mean]
 projs[sev_rel_uncertainty>1, sev_rel_uncertainty := 1] #cap at 1
 
 #TODO fix in descent
-#impute mean for somalia
+#impute mean for somalia, has a few missing ad2s
 projs[ADM0_CODE==203, sev_mean := zoo::na.aggregate(sev_mean), by=.(year)]
 projs[ADM0_CODE==203, sev_rel_uncertainty := zoo::na.aggregate(sev_rel_uncertainty), by=.(year)]
 
@@ -638,9 +638,9 @@ saveMappingInput(
 #D: Attributable LRI rates
 saveMappingInput(
   dt[type=='TAP'], 
-  map_ind='tap_lri_rate',
+  map_ind='tap_lri',
   data_ind='atr_rate',
-  map_measure='mean',
+  map_measure='mean_rate',
   data_measure='mean'
 )
 
@@ -666,7 +666,7 @@ saveMappingInput(
 #C: Change rate for attributable LRI 2000-2018
 saveMappingInput(
   dt_d[type=='TAP'&term=='change_rate'], 
-  map_ind='tap_lri_rate',
+  map_ind='tap_lri',
   data_ind='atr_rate',
   map_measure='change_rate',
   data_measure='mean'
@@ -684,7 +684,7 @@ saveMappingInput(
 #E: Probability of hitting SDG threshold
 saveMappingInput(
   projs, 
-  map_ind='sev_uncertainty',
+  map_ind='sev',
   data_ind='sev',
   map_measure='relative_uncertainty',
   data_measure='rel_uncertainty'

@@ -30,7 +30,7 @@
   proj            <- ifelse(use_geos_nodes, paste0(' -P ', proj_arg, ' -l gn=TRUE '), paste0(' -P ', proj_arg, ' '))
   
   # set script arguments
-  skip_entry <- T #use to skip to descent stage
+  skip_entry <- F #use to skip to descent stage
   
   # set covariate arguments
   plot_covariates <- TRUE
@@ -67,7 +67,7 @@
                'seas',
                'mide+TKM', 'soas')
   
-  regions <- c('ansa-VEN')
+  regions <- c('CHN')
   #regions <- c('AGO', 'ERI+DJI+YEM', 'NGA', 'sssa-ZAF')
   
   ## Set repo location, indicator group, and some arguments
