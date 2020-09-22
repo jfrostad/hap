@@ -1,41 +1,32 @@
 /***********************************************************************************************************
- Author: Patrick Liu (pyliu@uw.edu) edited by Manny Garcia (gmanny@uw.edu)                                                                  
+// Redacted                                                              
  Date: 7/13/2015
  Project: ubCov
  Purpose: Run Script
 ***********************************************************************************************************/
-// do /homes/jfrostad/_code/lbd/hap/extract/1_extract_batch.do
+// Redacted
 
 //////////////////////////////////
 // Setup
 //////////////////////////////////
 
-if c(os) == "Unix" {
-    local j "/home/j"
-    local L "/ihme/limited_use/"
-    set odbcmgr unixodbc
-}
-else if c(os) == "Windows" {
-    local j "J:"
-    local L "L:"
-}
+// Redacted
 
 clear all
 set more off
 set obs 1
 
 // Settings
-local central_root "`j'/WORK/01_covariates/common/ubcov_central"
-// local central_root "/homes/jfrostad/_code/ubcov_central"
+// Redacted
 local topics hap //ENTER YOUR TOPIC HERE
-local username jfrostad
+// Redacted
 
 // Load functions
 cd "`central_root'"
-do "`central_root'/modules/extract/core/load.do"
+// Redacted
 
 // Load the base code for ubCov
-local paths  `central_root'/modules/extract/core/ `central_root'/modules/extract/core/addons/
+// Redacted
 foreach path in `paths' {
     local files : dir "`path'" files "*.do"
     foreach file in `files' {
@@ -65,9 +56,8 @@ init, topics(`topics')
         - bypass: Skips the extraction check
         - run_all: Loops through all ubcov_ids in the codebook.
 */
-//Enter path where you'd like your extracts saved below between the quotes
-//DO NOT EXTRACT DATA FROM LIMITED USE TO THE J DRIVE. YOU CAN GET IN BIG TROUBLE. If you need to extract from LIMITED_USE contact IT and your PO to organize a workaround. 
-local outpath = "`L'/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/"
+// Redacted
+local outpath = // Redacted
 local thisvar = "cooking_fuel_mapped"
 
    get, vars
@@ -81,7 +71,4 @@ local thisvar = "cooking_fuel_mapped"
                  central_root(`central_root') ///
                  cluster_project(proj_geospatial) ///
                  output_path("`outpath'") ///
-                 store_vals_path("/share/temp/sgeoutput/`c(username)'") ///
-                 logs_path("/share/temp/sgeoutput/`c(username)'") ///
-                 run_log_path("/share/temp/sgeoutput/`c(username)'") ///
-                 db_path("/share/temp/sgeoutput/`c(username)'") 
+// Redacted

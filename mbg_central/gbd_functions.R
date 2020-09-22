@@ -1,17 +1,9 @@
 ###########################################################
-### Author: Patrick Liu
-### Date: 1/26/2015
-### Project: ubCov
-### Purpose: Database utility functions
+### Purpose: GBD Database utility functions
 ###########################################################
 
-###################
-### Setting up ####
-###################
-#pacman::p_load(data.table, dplyr, parallel, plyr, RMySQL, stringr)
-
 ####################################################################################################################################################
-# 															   Table of Contents
+#                                  Table of Contents
 ####################################################################################################################################################
 
 ## Base
@@ -38,12 +30,12 @@
 
 
 ####################################################################################################################################################
-# 																	 Base
+#                                    Base
 ####################################################################################################################################################
 
 
 get_con <- function(dbname, host) {
-  con <- suppressWarnings(src_mysql(dbname = dbname, host = host, user = "dbview", password = "E3QNSLvQTRJm"))
+  con <- suppressWarnings(src_mysql(dbname = dbname, host = host, user = "<<<< USERNAME REDACTED >>>>", password = "<<<< PASSWORD REDACTED >>>>"))
   return(con)
 }
 
@@ -54,12 +46,12 @@ run_query <- function(dbname, host, query) {
 
 
 ####################################################################################################################################################
-# 																	 Pulls
+#                                    Pulls
 ####################################################################################################################################################
 
 get_ages <- function() {
   dbname <- "shared"
-  host   <- "modeling-cod-db.ihme.washington.edu"
+  host   <- "<<<< DATABASE HOST REDACTED >>>>"
   query  <- "SELECT * FROM shared.age_group"
   run_query(dbname, host, query)
 }
@@ -68,7 +60,7 @@ get_ages <- function() {
 
 get_sexes <- function() {
   dbname <- "shared"
-  host   <- "modeling-cod-db.ihme.washington.edu"
+  host   <- "<<<< DATABASE HOST REDACTED >>>>"
   query  <- "SELECT * FROM shared.sex"
   run_query(dbname, host, query)
 }
@@ -77,7 +69,8 @@ get_sexes <- function() {
 
 get_location_hierarchy <- function(location_set_version_id, china.fix=FALSE) {
   dbname <- "shared"
-  host   <- "modeling-cod-db.ihme.washington.edu"
+  host   <- "<<<< DATABASE HOST REDACTED >>>>"
+
   ## Find active version id if not specified
   query  <- paste0("SELECT * FROM shared.location_hierarchy_history WHERE location_set_version_id=", location_set_version_id)
   df <- suppressWarnings(run_query(dbname, host, query))
@@ -86,7 +79,7 @@ get_location_hierarchy <- function(location_set_version_id, china.fix=FALSE) {
   if (china.fix) df <- china_hierarchy_fix(df)
   
   ## Create hierarchy
-  hierarchy <- stringr::str_split_fixed(df$path_to_top_parent, ",", max(df$level) + 1) %>% data.table
+  hierarchy <- str_split_fixed(df$path_to_top_parent, ",", max(df$level) + 1) %>% data.table
   hierarchy <- hierarchy[, lapply(.SD, as.numeric)]
   setnames(hierarchy, names(hierarchy), paste0("level_", seq(0, max(df$level))))
   df <- cbind(df, hierarchy)
@@ -104,7 +97,7 @@ get_demographics <- function(location_set_version_id,
   ## Years
   years <- seq(year_start, year_end,1)
   ## Sexes
-  if (is.blank(custom_sex_id)) { 	
+  if (is.blank(custom_sex_id)) {  
     if (by_sex == 1) {
       sexes <- c(1,2)
     } else if (by_sex == 0) {
@@ -117,7 +110,7 @@ get_demographics <- function(location_set_version_id,
   if (is.blank(custom_age_group_id)) {
     if (by_age==1) {
       dbname <- "shared"
-      host   <- "modeling-cod-db.ihme.washington.edu"
+      host   <- "<<<< DATABASE HOST REDACTED >>>>"
       query  <- "SELECT age_group_id FROM shared.age_group_set_list WHERE age_group_set_id=1"
       ages <- run_query(dbname, host, query)$age_group_id
     } else if (by_age==0) {
@@ -151,7 +144,7 @@ get_populations <- function(location_set_version_id,
   
   ## Pull
   dbname <- "shared"
-  host   <- "modeling-cod-db.ihme.washington.edu"
+  host   <- "<<<< DATABASE HOST REDACTED >>>>"
   query <- paste0("SELECT 
                   o.age_group_id,
                   year_id,
@@ -189,7 +182,7 @@ get_covariate_metadata <- function(list=NULL) {
   
   ## Pull
   dbname <- "shared"
-  host <- "modeling-covariates-db.ihme.washington.edu"
+  host <- "<<<< DATABASE HOST REDACTED >>>>"
   query <- paste0("SELECT * FROM shared.covariate ", where)
   df <- run_query(dbname, host, query)
   
@@ -211,7 +204,7 @@ get_covariate_metadata <- function(list=NULL) {
 pull_covariate <- function(cov, ci=FALSE) {
   
   dbname <- "shared"
-  host <- "modeling-covariates-db.ihme.washington.edu"
+  host <- "<<<< DATABASE HOST REDACTED >>>>"
   
   if (ci) ci_query  <- paste0(", model.lower_value AS '", tolower(paste0(cov, "_lower")), "',
                               model.upper_value AS '", tolower(paste0(cov, "_upper")), "'")
@@ -234,7 +227,7 @@ pull_covariate <- function(cov, ci=FALSE) {
                   AND is_best=1 AND covariate.covariate_name_short = '", cov, "'")
   data <- run_query(dbname, host, query)
   
-  if (!(4749 %in% unique(data$location_id))|!(44533 %in% unique(data$location_id))) data <- janky_covariate_fix(data, cov)
+  if (!(4749 %in% unique(data$location_id))|!(44533 %in% unique(data$location_id))) data <- covariate_fix(data, cov)
   
   return(data)
   
@@ -279,7 +272,7 @@ get_covariates <- function(list, ci=FALSE) {
 
 get_covariate_version <- function(list) {
   dbname <- "shared"
-  host <- "modeling-covariates-db.ihme.washington.edu"
+  host <- "<<<< DATABASE HOST REDACTED >>>>"
   
   query <- paste0("SELECT
                   data_version.covariate_id,
@@ -287,7 +280,7 @@ get_covariate_version <- function(list) {
                   model_version.data_version_id,
                   model_version.model_version_id,
                   model_version.last_updated,
-                  model_version.description 			
+                  model_version.description       
                   FROM covariate.model_version 
                   JOIN covariate.data_version ON model_version.data_version_id=data_version.data_version_id
                   JOIN shared.covariate ON data_version.covariate_id=covariate.covariate_id
@@ -302,7 +295,7 @@ get_covariate_version <- function(list) {
 
 get_citations <- function(nids) {
   dbname <- "shared"
-  host <- "modeling-cod-db.ihme.washington.edu"
+  host <- "<<<< DATABASE HOST REDACTED >>>>"
   query <- paste0("SELECT 
                   nid, field_citation_value, series_title
                   FROM
@@ -313,7 +306,7 @@ get_citations <- function(nids) {
 
 
 ####################################################################################################################################################
-# 																	 Utility
+#                                    Utility
 ####################################################################################################################################################
 
 is.blank <- function(x) {
@@ -335,7 +328,7 @@ detect_demographics <- function(df) {
 #####################################################################################################################################################
 
 
-age_sex_spec <- function(df) {	
+age_sex_spec <- function(df) {  
   demos <- detect_demographics(df)
   by_age <- ifelse(22 %in% demos$age_group_id, 0, 1)
   by_sex <- ifelse(3 %in% demos$sex_id, 0 , 1)
@@ -364,7 +357,7 @@ age_sex_merge <- function(df1, df2) {
     ## If age matches but sex doesn't match
     if (test$by_age & !test$by_sex) {
       drop_cols <- "sex_id"
-    }	
+    } 
     ## If age doesnt match and sex matches
     else if (!test$by_age & test$by_sex) {
       drop_cols <- "age_group_id"
@@ -393,7 +386,7 @@ agg_vars <- function(df, location_set_version_id, vars, parent_ids) {
     custom_age_group_id <- demos$age_group_id
     pops <- get_populations(location_set_version_id, year_start, year_end, custom_sex_id=custom_sex_id, custom_age_group_id=custom_age_group_id)
     df <- merge(df, pops, by=c("location_id", "year_id", "age_group_id", "sex_id")) 
-  }	
+  } 
   
   ## Merge on parent_ids if need be
   if (!("parent_id" %in% names(df))) {
@@ -442,7 +435,7 @@ make_square <- function(location_set_version_id,
                         year_start, year_end,
                         by_sex=1, by_age=1,
                         custom_sex_id=NULL, custom_age_group_id=NULL,
-                        covariates=NULL, population=FALSE) {	
+                        covariates=NULL, population=FALSE) {  
   ## Skeleton
   df <- get_demographics(location_set_version_id, 
                          year_start, year_end, 
@@ -500,6 +493,7 @@ get_cov_estimates <- function(covariate_name_short, filters=list()) {
                         WHERE covariate_name_short='%s'", covariate_name_short)
   
   query_params <- c()
+  
   # Default to best model if not specified
   if (!("model_version_id" %in% names(filters))) {
     query_params <- c(query_params, "AND is_best=1")
@@ -524,7 +518,7 @@ get_cov_estimates <- function(covariate_name_short, filters=list()) {
   query <- paste(query, collapse=" ")
   
   # Get and return estimates
-  conn <- dbConnect(RMySQL::MySQL(), host="modeling-covariates-db.ihme.washington.edu", username="readonly", password="justlooking")
+  conn <- dbConnect(RMySQL::MySQL(), host="<<<< DATABASE HOST REDACTED >>>>", username="<<<< USERNAME REDACTED >>>>", password="<<<< PASSWORD REDACTED >>>>")
   dbSendQuery(conn, "SET NAMES utf8")
   estimates <- dbGetQuery(conn, query)
   dbDisconnect(conn)
@@ -535,12 +529,8 @@ get_cov_estimates <- function(covariate_name_short, filters=list()) {
 }
 
 
-####################################################################################################################################################
-# 															     Janky Shit
-####################################################################################################################################################
-
 # ## 4749, 44533 fix to create if missing
-janky_covariate_fix <- function(df, var) {
+covariate_fix <- function(df, var) {
   
   ## Merge on populations
   spec <- age_sex_spec(df)

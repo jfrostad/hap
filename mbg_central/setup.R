@@ -8,7 +8,6 @@
 #' \code{is_singularity} returns TRUE if within a Singularity container, FALSE
 #' otherwise.
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' This function can determine if it is being run in a Singularity container.
@@ -33,8 +32,8 @@
 #' @examples
 #' # return TRUE if in any Singularity container / FALSE otherwise
 #' is_singularity()
-#' # TRUE only if container is spun up from image in "/share/singularity-images/lbd"
-#' is_singularity(image_dir = "/share/singularity-images/lbd")
+#' # TRUE only if container is spun up from image in "<<<< FILEPATH REDACTED >>>>"
+#' is_singularity(image_dir = "<<<< FILEPATH REDACTED >>>>")
 #' # Will \code{stop()} because an invalid path was supplied
 #' is_singularity(image_dir = "/path/to/nowhere")
 #'
@@ -60,8 +59,6 @@ is_singularity <- function(image_dir = "") {
 #' \code{is_lbd_singularity} convenience function to check if a Singularity
 #' container was spun up specifically from a LBD image.
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' This could be used in multiple places and only wanted to change the path
 #' to where the Singularity images live (if it ever changes) in one place and
@@ -75,18 +72,15 @@ is_singularity <- function(image_dir = "") {
 #' \code{\link{load_R_packages}}
 #'
 is_lbd_singularity <- function() {
-  is_singularity(image_dir = "/share/singularity-images/lbd") ||
-  is_singularity(image_dir = "/share/singularity-images/lbd/releases") ||
-  is_singularity(image_dir = "/share/singularity-images/lbd/test_deploy") ||
-  is_singularity(image_dir = "/share/singularity-images/lbd/testing_INLA_builds")
+  is_singularity(image_dir = "<<<< FILEPATH REDACTED >>>>") ||
+  is_singularity(image_dir = "<<<< FILEPATH REDACTED >>>>") ||
+  is_singularity(image_dir = "<<<< FILEPATH REDACTED >>>>")
 }
 
 ## is_rstudio() --------------------------------------------------------------->
 #' @title Tests if within RStudio
 #'
 #' @description \code{is_rstudio} returns TRUE if within RStudio, FALSE otherwise.
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' This function can tell if it is being run from within RStudio. If the
@@ -129,9 +123,6 @@ is_rstudio <- function(check_singularity = FALSE) {
 #' @description
 #' \code{load_R_packages} loads a list of R packages depending on where the
 #' script is being run.
-#' @note Deprecated since the library will load all dependent packages
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' WARNING: The logic for this function is dependent on the SINGULARITY_NAME
@@ -145,7 +136,7 @@ is_rstudio <- function(check_singularity = FALSE) {
 #'
 #' WARNING: In addition to the SINGULARITY_NAME this function also assumes that
 #'          all packages built into LBD Singularity images live at:
-#'          /usr/local/R-<version>/library
+#'          <<<< FILEPATH REDACTED >>>>
 #'
 #' This function is an attempt to address the tangle that is loading packages
 #' from different locations. This was much worse in the past when we were
@@ -159,16 +150,10 @@ is_rstudio <- function(check_singularity = FALSE) {
 #'
 #' Scenario | How is R Run?            | Load Packages From Directory
 #' ---------|------------------------------------------------------------------
-#'     A    | R in LBD image           | /usr/local/R-<version>/library
-#'     B    | RStudio in LBD image     | /usr/local/R-<version>/library
-#'     C    | RStudio in non-LBD image | /share/geospatial/non_lbd_rstudio_pkgs/<version>
+#'     A    | R in LBD image           | <<<< FILEPATH REDACTED >>>>
+#'     B    | RStudio in LBD image     | <<<< FILEPATH REDACTED >>>>
+#'     C    | RStudio in non-LBD image | <<<< FILEPATH REDACTED >>>>
 #'
-
-#' Note that R packages meant for use in RStudio not supported by the LBD team
-#' were originally stored at '/home/j/temp/geospatial/singularity_packages'
-#' but in October of 2018, were moved to
-#' '/share/geospatial/non_lbd_rstudio_pkgs' after an update was made to the
-#' cluster where /home/j was not necessarily accessible from all nodes.
 
 #' This function tries to identify each of these scenarios and then load
 #' packages from the correct place. Scenario A and B are when running R from
@@ -179,7 +164,7 @@ is_rstudio <- function(check_singularity = FALSE) {
 #'
 #' Scenario C would be for those users that continue to use RStudio from
 #' images that LBD does not construct or support
-#' (/share/singularity-images/rstudio) and only has a limited number of packages
+#' (<<<< FILEPATH REDACTED >>>>) and only has a limited number of packages
 #' built in to the image, which is why we rely on the directory of R packages
 #' outside of the image.
 #'
@@ -212,9 +197,8 @@ load_R_packages <- function(package_list) {
   }
   # Not an LBD RStudio running within Singularity container
   if(is_rstudio(check_singularity = TRUE) & !is_lbd_singularity()) {
-    dir_name <- paste(R.version$major, R.version$minor, sep = ".")
-    # e.g., '/home/.../singularity_packages/3.5.1/'
-    package_lib <- paste('/share/geospatial/non_lbd_rstudio_pkgs', dir_name, sep = "/")
+    dir_name <- '<<<< FILEPATH REDACTED >>>>'
+    package_lib <- paste('<<<< FILEPATH REDACTED >>>>', dir_name, sep = "/")
     # Create directory if it doesn't exist (e.g., because R was upgraded)
     if (!dir.exists(package_lib)) {
         stop(paste0("You're using a version of R for which no LBD packages have been installed. Please ask the lbd_core team to install packages for ", dir_name))
@@ -225,10 +209,10 @@ load_R_packages <- function(package_list) {
   # doesn't matter if this is RStudio or not. LBD Singularity images always have
   # their packages installed at the same location.
   } else if(is_lbd_singularity()) {
-    # All packages are in the '/usr/local/R-<version>/library' directory in the
+    # All packages are in the '<<<< FILEPATH REDACTED >>>>' directory in the
     # LBD Singularity image. In the past, other package directories have snuck
     # in so we enforce this here.
-    package_lib <- paste(R.home(), 'library', sep = '/')
+    package_lib <- '<<<< FILEPATH REDACTED >>>>'
     if(!dir.exists(package_lib)) {
       stop(paste0("Could not find expected LBD Singularity image package directory: '",
                    package_lib, "'...\nExiting!"))
@@ -255,8 +239,6 @@ load_R_packages <- function(package_list) {
 #' \code{source_functions} sources a list of functions with
 #' with complete path names
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' A standalone function that will source in functions from a provided character
 #' vector of functions names with complete paths.
@@ -273,7 +255,7 @@ load_R_packages <- function(package_list) {
 #' @examples
 #' mbg_functions <- c('setup.R','mbg_functions.R', 'misc_functions.R')
 #' source_functions(paste0(
-#'                   '/share/code/geospatial/imdavis/repos/lbd_core/mbg_central/',
+#'                   '<<<< FILEPATH REDACTED >>>>',
 #'                   mbg_functions))
 #'
 source_functions <- function(functions) {
@@ -294,8 +276,6 @@ source_functions <- function(functions) {
 #' \code{load_mbg_functions} finds all of the *.R files with 'functions' in the
 #' naming convention and sources them with a message.
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' Makes sure that the provided repo directory exists and if so, attempts to
 #' load scripts of R functions from within that directory. Note that this
@@ -304,7 +284,6 @@ source_functions <- function(functions) {
 #' directory provided for 'repo'.
 #'
 #' @param repo Path to repository directory to attempt to load functions from
-#' @note There is an exception added to not pull from the 'testing' subdirectory
 #'
 #' @return None
 #'
@@ -341,8 +320,6 @@ load_mbg_functions <- function(repo) {
 #' \code{is_lbd_core_repo} returns TRUE/FALSE if final subdirectory is
 #' 'lbd_core'
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' A function to detect if a directory path is the central lbd_core repo or
 #' likely a fork of that repo. This is necessary for \code{mbg_setup} to know
@@ -364,40 +341,32 @@ is_lbd_core_repo <- function(path) {
   else return(FALSE)
 }
 
+## fix_raster_tmpdir() -------------------------------------------------------->
 #' @title
 #' Set temporary directory used by the raster package and clear old files.
 #'
 #' @description
 #' \code{fix_raster_tmpdir()} loads and configures the raster package.
 #'
-#' @author Mike Richards, \email{miker985@uw.edu}
-#'
 #' @details
 #' By default the raster package uses /tmp to store temporary files by default.
 #' This is problematic as IHME machines are not configured to have a large
 #' amount of /tmp space, and multiple users will quickly fill the directory
 #' leading to a non-functioning computer. This function does two things: set the
-#' temporary directory to /share/scratch/tmp/geospatial-tempfiles/$USER (a location
+#' temporary directory to <<<< FILEPATH REDACTED >>>> (a location
 #' agreed to by IHME infrastructure) and also delete all files a week or older
 #' in that directory owned by whomever is running the function.
-#'
-#' Users may also override this value by setting the environment variable
-#' LBD_RASTER_TMPDIR. The value provided will be used as the temporary
-#' directory for raster files.
 #'
 #' @return NULL
 #'
 #' @seealso This is called by:
 #' \code{\link{mbg_setup}}
-#' @importFrom raster rasterOptions removeTmpFiles
 #'
 fix_raster_tmpdir <- function() {
     # Give the user a message about what is happening
     message("Loading and configuring the raster package...")
     # set temporary file dir. INFR does not regularly delete files from here
-    raster_tmp_dir <- Sys.getenv("LBD_RASTER_TMPDIR",
-      unset = file.path("/share/scratch/tmp/geospatial-tempfiles", Sys.getenv("USER"))
-    )
+    raster_tmp_dir <- paste("<<<< FILEPATH REDACTED >>>>", Sys.getenv("USER"), sep="/")
     if(!dir.exists(raster_tmp_dir)) dir.create(raster_tmp_dir)
     raster::rasterOptions(tmpdir = raster_tmp_dir)
     # delete files older than 25 days (maximum days in geospatial.q)
@@ -410,8 +379,6 @@ fix_raster_tmpdir <- function() {
 #' @description
 #' \code{load_setthreads()} \code{dyn.loads()} the pre-compiled setthreads.so if
 #' in an LBD Singularity image.
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' This function will first check to see if it is being run in an LBD '
@@ -448,11 +415,8 @@ fix_raster_tmpdir <- function() {
 #'
 #' @return None
 #'
-#' @useDynLib LBDCore
-#'
 #' @family MBG setup functions
 #'
-#' @export
 #' @seealso Threads for MKL and OpenMP as well as MKL DYNAMIC and OMP NESTED
 #' are set here automatically and can be set to different values using these
 #' related functions:
@@ -464,15 +428,13 @@ fix_raster_tmpdir <- function() {
 load_setthreads <- function() {
   # This shared library will only exist in an LBD Singularity image
   if(is_lbd_singularity()) {
-    # but let's check anyway ... unless we're in the package, which auto-loads the dynamic library
-    if (!.in.package()) {
-      if(!file.exists('/opt/compiled_code_for_R/setthreads.so')) {
-        stop(paste0("'setthreads.so' not found in /opt/compiled_code_for_R...\nExiting!"))
-      }
-      # Load it and make sure that the two functions for setting threads are
-      # available
-      dyn.load("/opt/compiled_code_for_R/setthreads.so")
+    # but let's check anyway
+    if(!file.exists('/opt/compiled_code_for_R/setthreads.so')) {
+      stop(paste0("'setthreads.so' not found in /opt/compiled_code_for_R...\nExiting!"))
     }
+    # Load it and make sure that the two functions for setting threads are
+    # available
+    dyn.load("/opt/compiled_code_for_R/setthreads.so")
     if(!is.loaded("setMKLthreads")) {
       stop("C function 'setMKLthreads' not loaded...\nExiting!")
     }
@@ -504,8 +466,6 @@ load_setthreads <- function() {
 #' \code{mbg_setup()} Loads R packages and sources functions for MBG modeling
 #' with helper functions in 'MBG setup functions' family
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' This function makes use of some other helper functions in the 'MBG setup
 #' functions' family to load all the necessary packages in a provided vector
@@ -534,7 +494,7 @@ load_setthreads <- function() {
 #' \code{\link{is_lbd_core_repo}}
 #'
 #' @examples
-#' mbg_setup(package_list = 'ggplot2', repos = '/share/code/geospatial/lbd_core')
+#' mbg_setup(package_list = 'ggplot2', repos = '<<<< FILEPATH REDACTED >>>>')
 #' mbg_setup(package_list = package_list, repos = c(core_repo, indic_repo))
 #'
 mbg_setup <- function(package_list, repos) {
@@ -575,8 +535,6 @@ mbg_setup <- function(package_list, repos) {
 #' \code{set_serial_threads()} Uses functions in the "setthreads.so" shared
 #' library built into LBD Singularity images to set MKL/OMP threads to serial.
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' Uses functions in the "setthreads.so" shared ' library built into LBD
 #' Singularity images to set MKL/OMP threads to serial. The shared library
@@ -605,7 +563,6 @@ mbg_setup <- function(package_list, repos) {
 #' mclapply(...)
 #' set_original_threads()
 #'
-#' @useDynLib LBDCore
 set_serial_threads <- function() {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -626,8 +583,6 @@ set_serial_threads <- function() {
 #' \code{set_original_threads()} Uses functions in the "setthreads.so" shared
 #' library built into LBD Singularity images to set MKL/OMP back to an original
 #' setting.
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' Uses functions in the "setthreads.so" shared library built into LBD
@@ -660,7 +615,6 @@ set_serial_threads <- function() {
 #' mclapply(...)
 #' set_original_threads()
 #'
-#' @useDynLib LBDCore
 set_original_threads <- function() {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -696,8 +650,6 @@ set_original_threads <- function() {
 #' @description
 #' \code{is_integer()} Tests if object is an integer since \code{is.integer()}
 #' does not.
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' We need to be able to test if an object is an integer or not. Unfortunately
@@ -744,8 +696,6 @@ is_integer <- function(i) {
 #' built into LBD Singularity images to set the number of MKL threads to a user
 #' defined value
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' Uses a function in the "setthreads.so" shared library built into LBD
 #' Singularity images to set the number of MKL threads to a user defined value.
@@ -775,7 +725,6 @@ is_integer <- function(i) {
 #' @examples
 #' setmklthreads(2) # sets the MKL threads to 2
 #'
-#' @useDynLib LBDCore
 setmklthreads <- function(threads = 1) {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -804,8 +753,6 @@ setmklthreads <- function(threads = 1) {
 #' \code{setmkldynamic()} Uses a function in the "setthreads.so" shared library
 #' built into LBD Singularity images to enable/disable MKL's ability to change
 #' the number of OpenMP threads dynamically.
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' Uses a function in the "setthreads.so" shared library built into LBD
@@ -840,7 +787,6 @@ setmklthreads <- function(threads = 1) {
 #' @examples
 #' setmkldynamic(enable = FALSE) # disables MKL dynamic
 #'
-#' @useDynLib LBDCore
 setmkldynamic <- function(enable = FALSE) {
   # Only logicals allowed for our only argument
   if(!is.logical(enable)) stop("Logical values only to enable/disable MKL dynamic...\nExiting!")
@@ -876,8 +822,6 @@ setmkldynamic <- function(enable = FALSE) {
 #' built into LBD Singularity images to set the number of OMP threads to a user
 #' defined value
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' Uses a function in the "setthreads.so" shared library built into LBD
 #' Singularity images to set the number of OMP threads to a user defined value.
@@ -907,7 +851,6 @@ setmkldynamic <- function(enable = FALSE) {
 #' @examples
 #' setompthreads(2) # sets the OMP threads to 2
 #'
-#' @useDynLib LBDCore
 setompthreads <- function(threads = 1) {
   # This shared library will only exist in a Singularity image
   if(is_lbd_singularity()) {
@@ -926,7 +869,7 @@ setompthreads <- function(threads = 1) {
       }
     }
     invisible(.C("setOMPthreads", as.integer(threads)))
-  } else message("WARNING: Not an LBD Singularity image. No OMP thread adjustment made.")
+  } else message("WARNING: Not and LBD Singularity image. No OMP thread adjustment made.")
 }
 
 
@@ -937,8 +880,6 @@ setompthreads <- function(threads = 1) {
 #' \code{setompnested()} Uses a function in the "setthreads.so" shared library
 #' built into LBD Singularity images to enable/disable OpenMP nested
 #' parallelism.
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' Uses a function in the "setthreads.so" shared library built into LBD
@@ -974,7 +915,6 @@ setompthreads <- function(threads = 1) {
 #' @examples
 #' setompnested(enable = TRUE) # disables OMP nesting
 #'
-#' @useDynLib LBDCore
 setompnested <- function(enable = TRUE) {
   # Only logicals allowed for our only argument
   if(!is.logical(enable)) stop("Logical values only to enable/disable OpenMP nested parallelism...\nExiting!")
@@ -1009,8 +949,6 @@ setompnested <- function(enable = TRUE) {
 #' \code{get_mkl_threads()} Uses environmental variable "MKL_NUM_THREADS" used
 #' in LBD Singualirty images to determine how many threads have been assigned
 #' for MKL operations.
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' The OpenMP function \code{omp_get_num_threads()} will report how many threads
@@ -1048,8 +986,6 @@ get_mkl_threads <- function() {
 #' in LBD Singualirty images to determine how many threads have been assigned
 #' for OpenMP operations.
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' The OpenMP function \code{omp_get_num_threads()} will report how many threads
 #' have been set for OpenMP operations. Unfortunately, there is no
@@ -1085,8 +1021,6 @@ get_omp_threads <- function() {
 #' \code{get_total_threads()} Uses functions \code{get_mkl_threads()} and
 #' \code{get_omp_threads()} to determine total cores allocated to the job.
 #'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
-#'
 #' @details
 #' In an LBD image, the total number of threads are broken up over OpenMP
 #' operations (OMP_NUM_THREADS) and MKL operations (MKL_NUM_THREADS). Since we
@@ -1105,16 +1039,14 @@ get_omp_threads <- function() {
 #' This function is used by:
 #' \code{\link{get_max_forked_threads()}}
 #'
-#' @examples 
-#' \dontrun{
-#' # Set to serial operation, use \code{get_total_threads()} to
-#' # determine how many total threads are available, run the parallel operation,
-#' # then set the threads back to the original setting:
+#' @examples Set to serial operation, use \code{get_total_threads()} to
+#' determine how many total threads are available, run the parallel operation,
+#' then set the threads back to the original setting:
 #' set_serial_threads()
 #' cores <- get_total_threads()
 #' model <- fit_glmnet(...)
 #' set_original_threads()
-#' }
+#'
 get_total_threads <- function() {
   return(get_mkl_threads() * get_omp_threads())
 }
@@ -1125,8 +1057,6 @@ get_total_threads <- function() {
 #' @description
 #' \code{get_max_forked_threads()} Determines how many threads to give forked
 #' applications (like \code{mclapply()}).
-#'
-#' @author Ian M. Davis, \email{imdavis@uw.edu}
 #'
 #' @details
 #' When using \code{mclapply()} we should only parallelize over the smaller of
@@ -1160,10 +1090,9 @@ get_total_threads <- function() {
 #' \code{\link{set_serial_threads()}}
 #' \code{\link{set_original_threads()}}
 #'
-#' @examples 
-#' # Set to serial operation, use \code{get_max_forked_threads()} to
-#' # determine how many threads to use, run the forked operation, then set the
-#' # threads back to the original setting:
+#' @examples Set to serial operation, use \code{get_max_forked_threads()} to
+#' determine how many threads to use, run the forked operation, then set the
+#' threads back to the original setting:
 #' set_serial_threads()
 #' cores <- get_max_forked_threads(nobjs = length(folds))
 #' model <- mclapply(folds, ...)

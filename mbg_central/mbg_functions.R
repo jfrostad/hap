@@ -6,87 +6,11 @@ invlogit <- function(x) {
   exp(x)/(1+exp(x))
 }
 
-# save_mbg_input <- function(indicator, indicator_group, df, simple_raster, mesh_s, mesh_t, cov_list, pathaddin="") {
-#
-#   # Split list of covariates into a brick of non-time-varying covariates and separate bricks for each time-varying covariate.
-#   covs <- stack()
-#   for(i in 1:length(cov_list)) {
-#     if(length(names(cov_list[[i]]))==1) { # One layer indicates non-time-varying
-#       covs <- stack(cov_list[[i]], covs)
-#     }
-#     else { # More than one layer indicates time-varying
-#         cov_name <- gsub(".1", "", names(cov_list[[i]])[1])
-#         assign(paste0("tv_", cov_name), cov_list[[i]])
-#       }
-#     }
-#   covs <- brick(covs)
-#
-#   if(dim(covs)[3]==0) TV_only = TRUE else TV_only = FALSE
-#
-#   # make periods for all surveys
-#   i <- length(unique(df$year))
-#   periods <- data.frame(group = rep(1:i,5),years = rep(sort(unique(df$year)),5)) # NOTE:  why is this repeating 5 times?
-#   df$period <- match(df$year, periods$years) # add these to df
-#
-#   # ~~~~~~~~~~~~~~~
-#   # sort covariates
-#
-#   # extract cluster covariates
-#   df$longitude<-as.numeric(df$longitude)
-#   df$latitude <-as.numeric(df$latitude )
-#
-#   # remove missing values
-#   #df <- na.omit(df)
-#
-#   if(!TV_only){
-#     # extract cluster level covariates
-#     cluster_covs <- as.data.frame(extract(covs, df[,c('longitude', 'latitude'),with=F]))
-#
-#     # add to dataframe
-#     df <- cbind(df, cluster_covs)
-#   }
-#
-#   # add dummy column for time-varying covariates
-#   TVnames = c()
-#   for(l in ls()[grep('tv_',ls())]){
-#     df[,substr(l,4,nchar(l))]=NA
-#     TVnames[length(TVnames)+1]=substr(l,4,nchar(l))
-#   }
-#
-#   # loop through time varying covariates to insert them
-#   for (period in sort(unique(periods$group))) {
-#     for(l in TVnames){
-#
-#       # find matching rows
-#       l=paste0('tv_',l)
-#       message(paste0(l,period))
-#       idx_tv<- which(df$period == period)
-#
-#       # get raster
-#       craster  <- get(l)[[period]]
-#       crs(craster)="+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-#
-#       # extract values
-#       extr <- extract(craster, df[idx_tv, c('longitude', 'latitude'),with=F])
-#
-#       # add into df, on gam transformed scale (already in it)
-#       df[[substr(l,4,nchar(l))]][idx_tv]=extr
-#
-#     }
-#   }
-#
-#   # Save df with covariates merged, time-varying covariate bricks and single brick of all non-time-varying covariates, meshes, and an empty raster to project model.
-#   # Along with the hyperparamters in the config file, these are all the inputs needed to run an MBG model.
-#   to_save <- c("df", "simple_raster", ls()[grep('^tv_',ls())], "covs", "mesh_s", "mesh_t")
-#   save(list = to_save, file = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
-#   message(paste0('All inputs saved to /share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin,'.RData'))
-#
-# }
-
+## Save mbg inputs
 save_mbg_input <- function(indicator = indicator, indicator_group = indicator_group, df = df , simple_raster = simple_raster, simple_raster2 = NULL, mesh_s = mesh_s,
                            mesh_t = mesh_t, cov_list = all_cov_layers, run_date = NULL, pathaddin="",
                            child_model_names = NULL, all_fixed_effects = NULL, period_map = NULL,centre_scale = T) {
-  
+
   period_map <- copy(period_map) ## to avoid global scoping issues
   just_covs <- extract_covariates(df, cov_list, return_only_results = T, centre_scale = centre_scale, period_var = 'year', period_map = period_map)
   if(centre_scale==TRUE){
@@ -95,7 +19,7 @@ save_mbg_input <- function(indicator = indicator, indicator_group = indicator_gr
   just_covs <- just_covs[, year := NULL]
   just_covs <- just_covs[, period_id := NULL]
   df = cbind(df, just_covs)
-  
+
   #create a period column
   if(is.null(period_map)) {
     period_map <- make_period_map(c(2000,2005,2010,2015))
@@ -104,7 +28,7 @@ save_mbg_input <- function(indicator = indicator, indicator_group = indicator_gr
   setnames(period_map, 'data_period', 'year')
   setnames(period_map, 'period_id', 'period')
   df = merge(df, period_map, by = 'year', sort =F)
-  
+
   ## Now that we've extracted covariate values to our data in the buffer zone, clip cov list to simple_raster instead of simple_polygon
   ##    (simple_raster is area we actually want to model over)
   for(l in 1:length(cov_list)) {
@@ -112,13 +36,13 @@ save_mbg_input <- function(indicator = indicator, indicator_group = indicator_gr
     cov_list[[l]]  <- setExtent(cov_list[[l]], simple_raster)
     cov_list[[l]]  <- raster::mask(cov_list[[l]], simple_raster)
   }
-  
+
   ## Save all inputs
   to_save <- c("df", "simple_raster", "mesh_s", "mesh_t", 'cov_list', 'child_model_names', 'all_fixed_effects','period_map')
   if(!is.null(simple_raster2)) to_save <- c(to_save, "simple_raster2")
-  save(list = to_save, file = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
-  message(paste0('All inputs saved to /share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin,'.RData'))
-  
+  save(list = to_save, file = paste0('<<<< FILEPATH REDACTED >>>>/', run_date, pathaddin, '.RData'))
+  message(paste0('All inputs saved to /<<<< FILEPATH REDACTED >>>>/', run_date, pathaddin,'.RData'))
+
 }
 
 transform_theta <- function(theta) {(exp(theta)-1) / (1+exp(theta))}
@@ -128,7 +52,7 @@ test_rho_priors <- function(temporal_model_theta1_prior) {
   mean <- temporal_model_theta1_prior$param[1]
   prec <- temporal_model_theta1_prior$param[2]
   sd <- sqrt(1/prec)
-  
+
   message(paste0('theta1_prior_prec: ', round(prec, 2)))
   lower <- transform_theta(mean - (1.96*sd))
   upper <- transform_theta(mean + (1.96*sd))
@@ -276,16 +200,17 @@ build_mbg_formula_with_priors <- function(fixed_effects,
     }
   }
   
-  f_nugget <- as.formula(paste0('~f(IID.ID, model = "iid", hyper = list(theta=', nugget_prior, '))'))
-  f_nid_res <- as.formula(paste0('~f(NID, model = "iid", hyper = list(theta=', nugget_prior, '))'))
-  f_res <- as.formula(paste0('~f(CTRY.ID, model = "iid", hyper = list(theta=', ctry_re_prior, '))'))
-  f_subnat <- as.formula(paste0('~f(SUBNAT.ID, model = "iid", constr=TRUE, hyper = list(theta=', subnat_re_prior, "))"))
-
-    ## spatial gps correlated across grouping (usually time)
+  f_nugget <- as.formula(paste0('~f(IID.ID, model = "iid", hyper = list(theta=', nugget_prior, '), constr = TRUE)'))
+  f_nid_res <- as.formula(paste0('~f(NID, model = "iid", hyper = list(theta=', nugget_prior, '), constr = TRUE)'))
+  f_res <- as.formula(paste0('~f(CTRY.ID, model = "iid", hyper = list(theta=', ctry_re_prior, '), constr = ', as.logical(ctry_re_sum0), ')'))
+  f_subnat <- as.formula(paste0('~f(SUBNAT.ID, model = "iid", hyper = list(theta=', subnat_re_prior, '), constr = TRUE)'))  
+  
+  ## spatial gps correlated across grouping (usually time)
   test_rho_priors(temporal_model_theta1_prior) ## Report how priors for theta1 (Rho) are being used in Rho space.
   f_space_time <- as.formula(paste0('~f(space,
                                     model = spde,
                                     group = space.group,
+                                    constr = ', as.logical(spde_integrate0), ',
                                     control.group = list(model = ', temporal_model_type, ", ",
                                     "hyper = list(theta = ", temporal_model_theta_prior, ", theta1 = ", temporal_model_theta1_prior, ")))"))
   ## space only gp
@@ -455,7 +380,7 @@ build_mbg_data_stack <- function(df, fixed_effects, mesh_s, mesh_t,
       build_mbg_data_stack_tmb(d          = df,
                                yl         = yl,                 # year list
                                fes        = fixed_effects,  # fixed effects in the model
-                               indic      = indicator,          # indicator #TODO: change this so we arent pulling from the global env 
+                               indic      = indicator,          # indicator
                                exclude_cs = exclude_cs,
                                nugget     = use_nugget,
                                country_re = use_ctry_res,
@@ -709,7 +634,6 @@ fit_mbg <- function(indicator_family,
     (success_msg <- inla.pardiso.check())
     
     if (!grepl("SUCCESS", success_msg)) {
-      print(success_msg)
       warning("PARDISO solver was not set up properly. Reverting to 'huge' strategy")
       omp_strat <- "huge"
     } else {
@@ -733,7 +657,7 @@ fit_mbg <- function(indicator_family,
   # roughly as flat as possible on logit scale without >1 inflection
   
   # code just to fit the model (not predict)
-  inla_working_dir <- paste0("/share/scratch/tmp/geos_inla_intermediate/inla_", run_date)
+  inla_working_dir <- paste0("<<<< FILEPATH REDACTED >>>>/inla_", run_date)
   dir.create(inla_working_dir, showWarnings = FALSE)
   if (indicator_family == "binomial") {
     system.time(
@@ -1452,14 +1376,14 @@ predict_mbg <- function(res_fit, cs_df, mesh_s, mesh_t, cov_list,
 }
 
 save_mbg_preds <- function(config, time_stamp, run_date, mean_ras, sd_ras, res_fit, cell_pred, df ,pathaddin="") {
-  
-  if(time_stamp==TRUE) output_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date)
-  if(time_stamp==FALSE) output_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/scratch')
+
+  if(time_stamp==TRUE) output_dir <- '<<<< FILEPATH REDACTED >>>>'
+  if(time_stamp==FALSE) output_dir <- '<<<< FILEPATH REDACTED >>>>'
   dir.create(output_dir, showWarnings = FALSE)
-  
+
   # Save log of config file
   write.csv(config, paste0(output_dir,'/config.csv'), row.names = FALSE)
-  
+
   if (!is.null(mean_ras)) {
     writeRaster(
       mean_ras,
@@ -1467,7 +1391,7 @@ save_mbg_preds <- function(config, time_stamp, run_date, mean_ras, sd_ras, res_f
       overwrite = TRUE
     )
   }
-  
+
   if (!is.null(sd_ras)) {
     # latent sd
     writeRaster(
@@ -1476,7 +1400,7 @@ save_mbg_preds <- function(config, time_stamp, run_date, mean_ras, sd_ras, res_f
       overwrite = TRUE
     )
   }
-  
+
   # save model
   save(res_fit,
        file = (paste0(output_dir, '/', indicator,'_model_eb',pathaddin,'.RData')))
@@ -1489,11 +1413,11 @@ save_mbg_preds <- function(config, time_stamp, run_date, mean_ras, sd_ras, res_f
   # save training data
   write.csv(
     df,
-    file = (paste0(output_dir, '/', indicator,'_trainingdata',pathaddin,'.csv')),
+    file = (paste0(output_dir, '/', indicator,'_trainingdata',pathaddin)),
     row.names = FALSE
   )
-  
+
   # Write a an empty file to indicate done with this parallel script
   write(NULL, file = paste0(output_dir, "/fin_", pathaddin))
-  
+
 }

@@ -160,7 +160,6 @@ calcSummaryStats <- function(i, by_list, dt, labs_dt=adm_links, ind_cols,
   }
   
   message('calculating change stats')
-  #agg[, term := 'lvl'] #note that vals are currently calculating the lvl for a given year
   
   #add term variable to key
   by_cols <- c(by_cols, 'term')
@@ -172,7 +171,6 @@ calcSummaryStats <- function(i, by_list, dt, labs_dt=adm_links, ind_cols,
     setkeyv(c(by_cols %>% .[!(. %like% 'year')], 'draw')) #also remove year from key to calculate trends using shift
   
   #helper functions
-  #TODO add AROC
   absChange <- function(x) x-data.table::shift(x,n=1)
   relChange <- function(x) (x-data.table::shift(x, n=1))/data.table::shift(x,n=1)
   
@@ -218,13 +216,3 @@ calcSummaryStats <- function(i, by_list, dt, labs_dt=adm_links, ind_cols,
   agg[, dimension := this_dimension] %>% return
   
 }
-
-#produce change metrics
-#TODO move this to be at pixel level
-#calculate rates of change
-these_cols <- c('prev',  'share', 'pm_pc', 'paf', 'atr_count', 'atr_rate')
-these_cols <- sapply(c('lower', 'mean', 'upper'), function(x) paste(these_cols, x, sep='_'))
-d_cols <- paste0(these_cols, '_d')
-dr_cols <- paste0(these_cols, '_dr')
-aroc_cols <- paste0(these_cols, '_aroc')
-

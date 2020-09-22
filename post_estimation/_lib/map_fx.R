@@ -12,60 +12,7 @@
 
 load_map_annotations <- function(use.sf=T, mask_stage3=T) {
 
-  if(use.sf) {
-    
-    ## Base shapefile (country outlines)
-    message('->loading country borders')
-    stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad0_gadm.shp')
-    stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad0_gadm.shp')
-    adm0 <- rbind(stage1, stage2)
-    
-    ## Stage 3 mask
-    message("---->loading stage 3 mask")
-    stage3 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/stage_3_mask.shp')
-
-    ## Lakes
-    message('-->loading lake mask')
-    lakes <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_lakes.tif') %>% 
-      { if (mask_stage3) mask(x=., mask=stage3, inverse=T) %>% crop(., adm0) else . } %>% 
-      as(., 'SpatialPolygonsDataFrame') %>% 
-      st_as_sf
-
-    
-    ## Population mask
-    message('--->loading population mask')
-    mask <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_mask_master.tif') %>% 
-      { if (mask_stage3) mask(x=., mask=stage3, inverse=T) %>% crop(., adm0) else . } %>% 
-      as(., 'SpatialPolygonsDataFrame') %>% 
-      st_as_sf
-
-  } else {
-  
-    ## Base shapefile (country outlines)
-    message('->loading country borders')
-    stage1 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad0_gadm.shp')
-    stage2 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad0_gadm.shp')
-    adm0 <- bind(stage1, stage2) %>% fortify
-  
-    ## Lakes
-    message('-->loading lake mask')
-    lakes <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_lakes.tif') %>% 
-      rasterToPoints %>% 
-      as.data.table %>% 
-      setnames(., c("long", 'lat', 'lakes'))
-  
-    ## Population mask
-    message('--->loading population mask')
-    mask <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_mask_master.tif') %>% 
-    rasterToPoints %>% 
-      as.data.table %>% 
-      setnames(., c("long", 'lat', 'mask'))
-    
-    ## Stage 3 mask
-    message("---->loading stage 3 mask")
-    stage3 <- shapefile('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/stage_3_mask.shp') %>% fortify
-  
-  }
+  #REDACTED
 
   return(list(adm0 = adm0, lakes = lakes, mask = mask, stage3 = stage3))
 
@@ -89,7 +36,7 @@ load_map_results <- function(indicator, indicator_group, run_date, raked,
   else year_list <- single_year
 
   ## Set the input directory
-  maps_path <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date)
+  maps_path <- paste0('#REDACTED/', indicator_group, '/', indicator, '/output/', run_date)
   
   ## Helper function to prepare the admin level results
   prep_admin_x <- function(x) {

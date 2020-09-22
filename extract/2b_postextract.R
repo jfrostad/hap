@@ -1,15 +1,5 @@
 #####################################################################
-# POST UBCOV EXTRACTION DATA CLEANING FOR GEOSPATIAL DATA EXTRACTIONS & GEOGRAPHY MATCHING
-# PIONEERED BY ANNIE BROWNE
-# UPDATED & OVERHAULED BY MANNY GARCIA
-# STANDARDIZED BY SCOTT SWARTZ
-# EMAIL ABROWNE@WELL.OX.AC.UK
-# EMAIL GMANNY@UW.EDU
-# EMAIL SSWARTZ@UW.EDU
-
-# INSTRUCTIONS:
-# UBCOV OUTPUTS MUST BE SAVED IN LIMITED USE DIRECTORY
-# source('/homes/jfrostad/_code/lbd/hap/extract/2b_hap_postextract.R')
+#Redacted
 #####################################################################
 
 #####################################################################
@@ -18,20 +8,14 @@
 rm(list=ls())
 
 #Define values
-topic <- "hap"
-extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja', 'kel15')
+#Redacted
 redownload <- F #update the codebook from google drive
 cores <- 15
 year_cutoff <- 2000 #only modelling >2000
 #test_country <- 'SOM' #define in order to subset extractions to a single country for testing purposes
 
 #Setup
-j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
-h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
-l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/") 
-folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic) #where your extractions are stored
-folder_out <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic) #where you want to save the big csv of all your extractions together
-  setwd(folder_in)
+#Redacted
 
 package_lib    <- file.path(h, '_code/_lib/pkg')
   .libPaths(package_lib)
@@ -52,7 +36,7 @@ if (interactive) {
   
   ## set arguments
   this_stage <- '1'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap"
+  core_repo <- "#Redacted"
   indicator_group <- 'cooking'
   
 } else {
@@ -66,11 +50,11 @@ if (interactive) {
 } 
 
 #TODO can remove when drop issues are fixed, use mod dt to test for drops in PE reruns
-share.model.dir  <- file.path('/share/geospatial/mbg/input_data/')
+share.model.dir  <- file.path('#Redacted')
 mod.dt <- file.path(share.model.dir, 'cooking_fuel_dirty.csv') %>% fread
 
 #read info about stages, subset to current stage
-stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% 
+stages <- file.path(j, '#Redacted/stage_master_list.csv') %>% 
   fread %>% 
   .[Stage==this_stage]
 these_countries <- unique(stages$iso3)
@@ -79,25 +63,20 @@ these_countries <- unique(stages$iso3)
 #####################################################################
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
-package_list <- paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv') %>% fread %>% t %>% c
+package_list <- paste0(core_repo, '#Redacted/package_list.csv') %>% fread %>% t %>% c
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
-source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
+source("#Redacted/geocodebook_functions.R")
 #####################################################################
 ######################## BIND UBCOV EXTRACTS ########################
 #####################################################################
-#Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if (redownload)drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+#Redacted
 codebook <- read_xlsx('hap.xlsx', sheet='codebook') %>% as.data.table
 
 #subset codebook based on outliers, or files that are too large to handle here
 #census is handled separately
 codebook <- codebook[!(survey_name %like% 'IPUMS')]
-
-#angola mics based on negative comment about its quality in response to EBF paper (see dia_lri_modelers slack chat) 
-#TODO better to handle using outlier column with notes in the data vetting sheet
-codebook <- codebook[nid != 687]
 
 #subset the codebook to ONLY the files that our extractors have worked on
 codebook <- codebook[assigned %in% extractor_ids]
@@ -127,11 +106,6 @@ topics <- mclapply(extractions,
                    integer64='character',
                    mc.cores = cores) %>% 
   rbindlist(fill=T, use.names=T)
-
-##Save raw data file, if desired
-#TODO need to split this file because its getting the null embedded error too
-if (!exists('test_country')) write_feather(topics, path=paste0(folder_out, "/topics_no_geogs_stage_",  this_stage, '_', today, ".feather"))
-
 #####################################################################
 ######################## VERIFY EXTRACTIONS##########################
 #####################################################################
@@ -258,19 +232,6 @@ wn <- distinct(wn, psu, hh_id, .keep_all=T) #TODO make data.table
 all <- list(all[survey_module != "WN", ], wn) %>% 
   rbindlist(fill=T, use.names=T)
 
-message("drop duplicate HH entries and cleanup hh_sizes")
-print(nrow(all))
-####
-# 0. Set hh_size values to NA for nid 157397 7438
-#TODO look further into this and why just these NIDs
-nids_without_unique_hh_ids <- c(157397, 7438, 24915)
-all[nid %in% nids_without_unique_hh_ids, hh_size := NA]
-print(nrow(all))
-# 1. separate NA hh_size values from dataset
-
-#drop data that doesn't need a hh_size crosswalk and that has NA hh_sizes
-#all <- all[!is.na(hh_size) & !is.na(t_type) & !is.na(w_source_drink) & !(nid %in% nids_that_need_hh_size_crosswalk), ]
-
 #create indicator for hh_size missingness
 all[, missingHHsize := sum(is.na(hh_size)), by=nid]
 all[, obs := .N, by=nid]
@@ -295,16 +256,6 @@ missing_hh_size_hh <- all[is.na(hh_size) & survey_module == 'HH', ]
 
 all <- list(hhhs, has_hh_size_no_id, missing_hh_size, missing_hh_size_hh) %>% 
   rbindlist(fill=T, use.names=T)
-
-nids_that_need_hh_size_crosswalk <- c(20998, #MACRO_DHS_IN UGA 1995 WN
-                                      32144, 32138, 1301, 1308, 1322, #BOL/INTEGRATED_HH_SURVEY_EIH
-                                      7375) # KEN 2007 Household Health Expenditure Utilization Survey KEN/HH_HEALTH_EXPENDITURE_UTILIZATION_SURVEY
-all[nid %in% nids_that_need_hh_size_crosswalk, hh_size := NA]
-
-#TODO push into HAP tracking sheet
-excluded_surveys <- c(8556, #dropping MEX/NATIONAL_HEALTH_SURVEY_ENSA due to bad weighting
-                      261889, 261887) #MAL_ED due to non-representative sample from hospital visits
-all <- all[!(nid %in% excluded_surveys),]
 
 #check to see if any NIDs were lost in the process by comparing to model dt
 #TODO better comparison point?
@@ -332,7 +283,7 @@ if (!exists('test_country')) {
     distinct %>% 
     merge(., stages, by='iso3', all.x=T) %>% 
     write.csv(., 
-              file.path(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched", topic,
+              file.path("#Redacted", topic,
                         paste0("stage_",  this_stage, "_new_geographies_to_match.csv")), 
               row.names=F, na="")
   print(nrow(all))

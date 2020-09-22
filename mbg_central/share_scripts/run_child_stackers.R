@@ -61,7 +61,6 @@ if ('gbm' %in% child_model_names) {
 }
 
 #Fit a BRT model with Xgboost (faster than GBM)
-#TODO cleanup this control flow
 if ('xgboost' %in% child_model_names) {
   tic("Stacking - Xgboost")
 
@@ -74,22 +73,12 @@ if ('xgboost' %in% child_model_names) {
   if (as.logical(xg_model_tune) & as.logical(xg_grid_search)){
     message("Building sobol sequence grid to tune xgb hyperparameters")
     hyperparameter_filepath = NULL
-    
-    # use just a uniform grid
-    # xg_grid <- expand.grid(nrounds = 100,
-    #                        max_depth = c(2, 4, 6, 8),
-    #                        eta = seq(0.02, 0.2, by = .04),
-    #                        colsample_bytree = seq(.4, 1, by=.2),
-    #                        min_child_weight = seq(1, 5, by=2),
-    #                        subsample = seq(.1, 1, by=.1),
-    #                        gamma = 0)
-    
+
     gen_sequence <- function(min, max, rounding=4, scalar) {
       
       round(min + (max - min) * scalar, rounding) %>% return
     }
 
-    #TODO make a function where you can use a csv to input the max/mins
     #use the sobol sequence to generate a quasi random grid
     #note, scrambling=3 means:  Owen+Faure-Tezuka type of scrambling is applied
     sobol_scalars <- data.frame(runif.sobol(n = 200, dim = 6, scrambling = 3, seed = 98118, init = TRUE))
@@ -112,11 +101,6 @@ if ('xgboost' %in% child_model_names) {
     
   }
   
-  # if (xg_model_tune & exists("hyperparameter_filepath")){
-  #   message("Tuning xgboost on pre-specified grid search")
-  #   #TODO
-  # }
-
   #fit xgboost model
   xgboost <- fit_xgboost_child_model(df = the_data,
                                      covariates = all_fixed_effects,

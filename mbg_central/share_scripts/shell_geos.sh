@@ -1,7 +1,7 @@
 #!/bin/bash
 
-MEMINFO=/homes/miker985/code/mem-profiler/meminfo
-MEMINFO_ROOT=/ihme/scratch/users/miker985/session-meminfo
+MEMINFO=<<<< FILEPATH REDACTED >>>>
+MEMINFO_ROOT=<<<< FILEPATH REDACTED >>>>
 if [[ -z ${JOB_ID+x} ]]; then
     # JOB_ID unset. This is not a job, so record by PID as a fallback.
     F="$MEMINFO_ROOT/pids/$$"
@@ -17,7 +17,7 @@ fi
 $MEMINFO --loop-interval=1 > $F &
 MEMINFO_PID=$!
 
-/usr/bin/R <$1 --no-save $@
+<<<< FILEPATH REDACTED >>>/R <$1 --no-save $@
 
 RETCODE=$?
 

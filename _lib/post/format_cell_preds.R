@@ -5,7 +5,7 @@ raster_to_dt <- function(the_raster,
                          year_list,
                          interval_mo,
                          outputdir,
-                         pixel_id) { #TODO will pull names from raster by default add user pass in functionality
+                         pixel_id) { 
   
   #some rasters are badly named with multiple slotnames, subset to first name only
   raster_name <- names(the_raster)[1]
@@ -67,12 +67,11 @@ link_cell_pred <- function(ind_gp,
                            year_start,
                            year_end,
                            var_names = ind, # name using ind by default, but can pass custom name
-                           n_draws = 250, #TODO automatically check the config file for 'samples' value?
-                           #matrix_pred_name = NULL,
+                           n_draws = 250, 
                            skip_cols = NULL,
                            rk = T,
                            coastal_fix = T, # if model wasn't run w new coastal rasterization, force old simple raster process 
-                           rake_subnational = rk, # TODO is this correct? might need to be defined custom by country
+                           rake_subnational = rk, 
                            shapefile_version = 'current',
                            covs=NA, #added fx to bring in covariates and merge
                            debug=F) {
@@ -125,7 +124,6 @@ link_cell_pred <- function(ind_gp,
     }
     
     #generate a populations dt with all the relevant hap groupings    
-    #TODO test if its worth using a1564t+a65plt * gender_ratio (a1549m:a1549f) instead
     covdt <-
       lapply(c('a1549m', 'a1549f', 'a0514t', 'a0004t'), load_populations_list) %>% 
       Reduce(function(...) merge(..., all = TRUE), .) %>% 
@@ -177,7 +175,7 @@ link_cell_pred <- function(ind_gp,
     message('~>loading cell pred for: ', ind[[i]])
     
     # Load the relevant pred object - loads an object named cell_pred
-    rdata_file <- paste0('/share/geospatial/mbg/', ind_gp[[i]], '/', ind[[i]], '/output/', rd[[i]], '/',
+    rdata_file <- paste0('#REDACTED', ind_gp[[i]], '/', ind[[i]], '/output/', rd[[i]], '/',
                          ind[[i]], 
                          ifelse(rk, paste0("_raked_", measure), ""), 
                          "_cell_draws_eb_bin0_", reg, "_0.RData")
@@ -201,7 +199,6 @@ link_cell_pred <- function(ind_gp,
     if (!exists("cell_pred")) stop("Unable to load raked cell pred object!")
     
     # If extra columns at front of cell_pred, can skip here
-    #TODO what is this for
     if(!(is.null(skip_cols))) cell_pred <- as.matric(cell_pred[, (skip_cols+1):ncol(cell_pred)])
     
     # Verify alignment  
@@ -240,13 +237,8 @@ link_cell_pred <- function(ind_gp,
   #load/format all the cell preds and then merge them together
   cell_pred <- lapply(1:length(ind), loadCellPreds) %>% 
     Reduce(function(...) merge(..., all = TRUE), .)
-  
-  #TODO should add a test here to verify that the resulting nrow = original cell_pred/num_yrs/250
-  #tested it now and it looks OK but this is important to make more robust
-  
+
   # merge cell_pred on the link
-  # TODO note that pixel_id col in link dt is a duplicate of ID, and causes a merge issue (pixel_id.x|pixel_id.y)
-  # eventually should fix this issue upstream but for now removing it pre-merge is sufficient
   cell_pred <- merge(link[, -c('pixel_id')], cell_pred, by.x = "ID", by.y = "cell_id", allow.cartesian = TRUE)
 
   #also load/merge on any user-provided covariates
@@ -283,7 +275,6 @@ link_cell_pred <- function(ind_gp,
   }
   
   #drop irrelevant columns and return
-  #TODO may be easier to keep columns instead =)
   null_vars <- c('ID', 'ADM_CODE', 'NAME_0', 'NAME_1', 'NAME_2', 'ADM0_NAME', 'ADM1_NAME', 'ADM2_NAME', 
                  'geo_id', 'ad2_id', 'ad0_parent', 'ad1_parent', 'location_id',
                  'start_area', 'end_area', 'total_area',

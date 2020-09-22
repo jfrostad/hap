@@ -120,7 +120,6 @@ build_raking_link_table <- function(shapefile_version = "current", force_adm0 = 
     # where the first 3 characters of an ihme_loc_id with "_" in it will be the location's 
     # parent ihme_loc_id.
     # We take the parent location out of those.
-    # e.g.: "USA_501" -> "USA"
     gbd_locset[ihme_loc_id %like% "_", parent_to_subnat := substr(ihme_loc_id, 1, 3)]
     gbd_locset_submap <- gbd_locset[ihme_loc_id %in% unique(na.omit(gbd_locset$parent_to_subnat)), .(parent_to_subnat = ihme_loc_id, subnat_map = location_id)]
     gbd_locset_submap <- unique(merge(gbd_locset, gbd_locset_submap, "parent_to_subnat")[, .(location_id, subnat_map)])

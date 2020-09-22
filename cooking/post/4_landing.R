@@ -1,37 +1,14 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
-# Author: JF
+# Author: #REDACTED
 # Date: 09/05/2018
 # Purpose: Produce HAP diagnostics, results and sub-analyses
-# source("/homes/jfrostad/_code/lbd/hap/cooking/post/4_landing.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
 # clear memory
 rm(list=ls())
 
-# runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  j_root <- "/home/j/"
-  h_root <- "/homes/jfrostad/"
-  arg <- commandArgs()[-(1:3)] # First args are for unix use only
-  
-  if (length(arg)==0) {
-    # arg <- c("IND", #current project iteration
-    #          "8", #output version
-    #          1) #number of cores provided to multicore functions
-  }
-  
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-  # arg <- c("IND", #current project iteration
-  #          "4", #output version
-  #          1) #number of cores provided to multicore functions
-}
+#REDACTED
 
 #use cairo to render instead of quartz (quartz causes big slowdowns with geom_sf)
 if(!identical(getOption("bitmapType"), "cairo") && isTRUE(capabilities()[["cairo"]])){
@@ -39,18 +16,14 @@ if(!identical(getOption("bitmapType"), "cairo") && isTRUE(capabilities()[["cairo
 }
 
 ## Set core_repo location and indicator group
-user            <- Sys.info()['user']
-core_repo       <- '/homes/jfrostad/_code/lbd/lbd_core/'
-core_repo       <- '/homes/jfrostad/_code/lbd/hap/'
-my_repo       <- '/homes/jfrostad/_code/lbd/hap/'
-commondir       <- paste(core_repo, 'mbg_central/share_scripts/common_inputs', sep = '/')
+#REDACTED
 
 #load packages
 package_lib    <- sprintf('%s_code/_lib/pkg',h_root)
 ## Load libraries and  MBG project functions.
 .libPaths(package_lib)
 pacman::p_load(data.table, fst, scales, ggplot2, RColorBrewer, sf, stringr, viridis, farver, reldist) 
-package_list    <- package_list <- fread('/share/geospatial/mbg/common_inputs/package_list.csv') %>% t %>% c
+package_list    <- package_list <- fread('/#REDACTED/package_list.csv') %>% t %>% c
 
 # Use setup.R functions to load common LBD packages and mbg_central "function" scripts
 message('Loading in required R packages and MBG functions')
@@ -61,10 +34,7 @@ mbg_setup(package_list = package_list, repos = core_repo)
 today <- Sys.Date() %>% gsub("-", "_", .)
 
 #options
-run_date <- '2020_05_17_11_40_28'
-run_date <- '2020_09_01_11_42_52'
-lri_run_date <- '2020_06_11_11_19_26'
-shapefile <- "2019_09_10"
+#REDACTED
 
 indicator_group <- 'cooking'
 indicator <- 'cooking_fuel_solid'
@@ -87,21 +57,21 @@ map_ind_gp <- 'hap'
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
 #results
-data.dir <- file.path('/ihme/geospatial/mbg/cooking/post', run_date)
+data.dir <- file.path('/#REDACTED/cooking/post', run_date)
 
-lri_dir <- '/ihme/geospatial/mbg/lri/has_lri/output'
+lri_dir <- '/#REDACTED/lri/has_lri/output'
   lri_rate_path <- 'has_lri_raked_mortality_admin_draws_eb_bin0_0.RData'
   lri_counts_path <- 'has_lri_raked_mortality_c_admin_draws_eb_bin0_0.RData'
   
 #link
-global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', shapefile) #TODO make official
+global_link_dir <- file.path('#REDACTED', shapefile) #TODO make official
   
 ###Output###
 hap.paths <- data.table(admin2=file.path(data.dir, 'admin_2_summary_children.csv'))
 hap.paths.d <- data.table(admin2=file.path(data.dir, 'admin_2_delta_summary.csv'))
-out.dir  <- file.path('/ihme/geospatial/mbg/cooking/maps', run_date) %T>% dir.create(recursive = T)
+out.dir  <- file.path('/#REDACTED/cooking/maps', run_date) %T>% dir.create(recursive = T)
   annotations_path <- file.path(out.dir, 'annotations.RDs')
-map.dir <- file.path(j_root, 'WORK/11_geospatial/09_MBG_maps', map_ind_gp)
+map.dir <- file.path(j_root, '#REDACTED', map_ind_gp)
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -111,7 +81,7 @@ file.path(my_repo, '_lib', 'post', 'map_fx.R') %>% source
 file.path(my_repo, '_lib', 'post', 'landing_gear.R') %>% source
 
 #gbd fx
-gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
+gbd.shared.function.dir <- '#REDACTED'
 file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_age_metadata.R') %>% source
 file.path(gbd.shared.function.dir, 'get_draws.R') %>% source
@@ -138,12 +108,11 @@ adm_links <- global_link_table[, .(ADM0_NAME, ADM0_CODE, ADM1_NAME, ADM1_CODE, A
 admins <- get_sp_hierarchy(shapefile_version = modeling_shapefile_version)
 
 #read in shps
-stage1 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage1_ad2_gadm.shp')
-stage2 <- st_read('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/shps_by_stage/stage2_ad2_gadm.shp')
+#REDACTED
 adm2 <- rbind(stage1, stage2)
 
 #read in mbg region info
-stages <- file.path(j_root, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread #read info about stages
+stages <- file.path('#REDACTED/stage_master_list.csv') %>% fread #read info about stages
 
 #read in gbd location info
 locs <- get_location_metadata(location_set_id = 35, gbd_round_id = 6) %>% 
@@ -222,7 +191,6 @@ setnames(gbd, 'year_id', 'year')
 
 #merge LRI results to HAP results
 dt <- merge(dt, lri_dt, by=c('ADM2_CODE', 'year', 'draw', 'grouping', 'cause'), all.x=T) 
-dt[count==0, rate := 0] #TODO why do 0 count ad2s have NaN rates
 
 #impute BRA/CHN LRI figures from GBD, since LBD has no data and does not produce estimates
 na_dt <- dt[is.na(rate) | is.na(count)] #BRA/CHN
@@ -244,15 +212,6 @@ dt[, atr_count := count * paf]
 #merge sr region names/IDs/ADM1_CODES
 dt <- merge(dt, locs, by='ADM0_CODE', all.x=T)
 dt <- merge(dt, adm_links[, .(ADM1_CODE, ADM2_CODE)], by='ADM2_CODE')
-
-#for some reason its missing TTO
-#TODO update centrally
-dt[ADM0_CODE==225, `:=` (iso3='TTO',
-                         location_name='Trinidad and Tobago',
-                         super_region_id=103,
-                         super_region_name='Latin America and Caribbean',
-                         region_id=120,
-                         region_name='Andean Latin America')]
 
 #define columns to summarize
 ind_cols <- c('share', 'pm_pc', 'prev', 'paf', 'rate', 'count', 'atr_rate', 'atr_count')
@@ -291,48 +250,6 @@ saveResults <- function(agg, dt) {
 } 
 
 lapply(by_cols %>% names, saveResults, dt=results)
-
-stop()
-
-#subset to ad2 for figures
-dt <- results[dimension=='ad2' & term=='lvl'] %>% Filter(function(x) !all(is.na(x)), .)
-dt_d <- results[dimension=='ad2' & term%like%'change'] %>% Filter(function(x) !all(is.na(x)), .)
-
-#produce inequality metrics
-#calculate GINI/MAD at country level
-dt_ineq <- dt[year %in% c(start_year, end_year), .(iso3, year, ADM0_CODE, ADM2_CODE, ADM2_NAME, dfu_mean, 
-                                                  super_region_id, super_region_name, region_id, region_name)]
-dt_ineq[, gini := gini(dfu_mean), by=.(iso3, year)]
-dt_ineq[, mad := mad(dfu_mean, center = mean(dfu_mean)), by=.(iso3, year)]
-dt_ineq[, mean := mean(dfu_mean, na.rm=T), by=.(iso3, year)]
-dt_ineq[, max := max(dfu_mean, na.rm=T), by=.(iso3, year)]
-dt_ineq[, min := min(dfu_mean, na.rm=T), by=.(iso3, year)]
-dt_ineq[, range := max-min]
-
-#also output the file for later
-write.csv(dt_d, file.path(data.dir, 'admin_2_delta_summary.csv'), row.names = F)
-
-#also create ad2 sf object for spatial analyses
-data <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   year_list=c(start_year:end_year),
-                   custom_path = hap.paths,
-                   geo_levels=c('admin2'),
-                   cores=cores,
-                   debug=F)
-
-data_d <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   year_list=2018,
-                   custom_path = list('admin2'=dt_d),
-                   geo_levels=c('admin2'),
-                   cores=cores)
-
-#***********************************************************************************************************************
-
-# ---RUN MODEL DIAGNOSTICS----------------------------------------------------------------------------------------------
-#produce lineplots and other model diagnostics
-
 #***********************************************************************************************************************
 
 # ---SEV CELL_PREDS-----------------------------------------------------------------------------------------------------
@@ -384,225 +301,6 @@ projs <- unique(projs, by=key(projs)) %>%
 
 #calculate relative uncertainty of SEV
 projs[, sev_rel_uncertainty := (sev_upper-sev_lower)/2/sev_mean]
-projs[sev_rel_uncertainty>1, sev_rel_uncertainty := 1] #cap at 1
-
-#TODO fix in descent
-#impute mean for somalia, has a few missing ad2s
-projs[ADM0_CODE==203, sev_mean := zoo::na.aggregate(sev_mean), by=.(year)]
-projs[ADM0_CODE==203, sev_rel_uncertainty := zoo::na.aggregate(sev_rel_uncertainty), by=.(year)]
-
-#make sf datasets for plotting
-threshold <- .01
-data_projs <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   year_list=c(2018, 2020, 2030),
-                   custom_path = list('admin2'=projs),
-                   geo_levels=c('admin2'),
-                   cores=cores)
-data_sdg <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   year_list=2030,
-                   custom_path = list('admin2'=probs),
-                   geo_levels=c('admin2'),
-                   cores=cores)
-
-#make colorscales
-d_colors <- brewer_pal(palette='BrBG')(11) %>% rev 
-d_values <- c(seq(-.2, -.1, length.out = 2), seq(-.1, 0, length.out = 7), seq(0, .2, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-p_colors <- brewer_pal(palette='BrBG')(11) %>% .[c(1, 3:9, 11)]
-p_values <- c(seq(0, .05, length.out = 2), seq(.1, .9, length.out = 5), seq(.95, 1, length.out = 2)) %>%
-  unique %>%
-  rescale
-
-s_values <- c(seq(0, .05, length.out = 2), seq(.1, 1, length.out = 9)) %>% 
-  unique %>%
-  rescale
-
-#make ad2 plots
-#plot AROCs
-global <-
-  data_projs$admin2 %>% 
-  filter(year==2018) %>% 
-  plot_map(., this_var='aroc_mean',
-           annotations, limits=c(-.2, .2), title='Mean AROC of SEV, 2000-2018', 
-           legend_colors=d_colors, legend_color_values = d_values,
-           legend_title='AROC',
-           #zoom=zoom.global,
-           debug=F)
-ggsave(filename=file.path(out.dir, 'sev_aroc.png'), plot=global, 
-       width=12, height=8, units='in', dpi=500)
-
-#plot projections
-global <-
-  data_projs$admin2 %>% 
-  filter(year==2018) %>% 
-  plot_map(., this_var='sev_mean',
-           annotations, limits=c(0, 1), title='Mean SEV, 2020', 
-           legend_color_values = p_values,
-           legend_title='SEV',
-           #zoom=zoom.global,
-           debug=F)
-ggsave(filename=file.path(out.dir, 'sev_2020.png'), plot=global, 
-       width=12, height=8, units='in', dpi=500)
-
-global <-
-  data_projs$admin2 %>% 
-  filter(year==2018) %>% 
-  plot_map(., this_var='sev_lower',
-           annotations, limits=c(0, 1), title='Lower C.I. for SEV, 2020', 
-           legend_color_values = p_values,
-           legend_title='SEV',
-           #zoom=zoom.global,
-           debug=F)
-ggsave(filename=file.path(out.dir, 'sev_2020_lower.png'), plot=global, 
-       width=12, height=8, units='in', dpi=500)
-
-#make plots of probabilities of attainment
-global <-  
-  data_sdg$admin2 %>% 
-  filter(target==threshold) %>% 
-  plot_map(., this_var='absolute_goal_prob',
-           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.01%) in 2030', 
-           legend_colors=p_colors, legend_color_values = p_values,
-           legend_title='Probability',
-           #zoom=zoom.global,
-           debug=F)
-ggsave(filename=file.path(out.dir, 'sdg_7_probs.png'), plot=global, 
-       width=12, height=8, units='in', dpi=500)
-
-global <-
-  data_sdg$admin2 %>% 
-  filter(target==.05) %>% 
-  plot_map(., this_var='absolute_goal_prob',
-           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.05%) in 2030', 
-           legend_colors=p_colors, legend_color_values = p_values,
-           legend_title='Probability',
-           #zoom=zoom.global,
-           debug=F)
-ggsave(filename=file.path(out.dir, 'sdg_7_probs_05.png'), plot=global, 
-       width=12, height=8, units='in', dpi=500)
-
-#testing country specific plots
-ctry.name <- 'Sudan'
-ctry_data <- data_sdg$admin2 %>% 
-  filter(NAME_0==ctry.name & target==threshold) 
-ctry.zoom <- data.table(x1=1, x2=15, y1=3, y2=15) #NGA
-
-ctry.dfu <-
-  plot_map(ctry_data, this_var='absolute_goal_prob',
-           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.05%) in 2030', 
-           legend_colors=viridis(10, direction=-1),
-           legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-           legend_title='DFU %', legend_flip=T,
-           zoom=T,
-           debug=F)
-
-ctry.name <- 'Pakistan'
-ctry_data <- data_sdg$admin2 %>% 
-  copy %>% 
-  filter(NAME_0==ctry.name & target==threshold) 
-
-ctry.dfu <-
-  plot_map(ctry_data, this_var='absolute_goal_prob',
-           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.05%) in 2030', 
-           legend_colors=viridis(10, direction=-1),
-           legend_breaks=seq(0, 1, .1), legend_labels=seq(0, 1, .1),
-           legend_title='DFU %', legend_flip=T,
-           zoom=T,
-           debug=F)
-
-#create raster from probabilities
-out <-
-  prepare_aroc_proj_rasters(
-    regions='all',
-    indicator_group = indicator_group,
-    indicator = indicator,
-    run_date = run_date,
-    measure='sev',
-    pred_deriv='target_probs',
-    raking='raked',
-    uselogit=T,
-    abs_rel = 'absolute',
-    target_yr = '2030',
-    target = .01,
-    target_type = 'less',
-    baseline_year = 2017,
-    shapefile_version = modeling_shapefile_version,
-    debug=F
-  )
-
-proj_raster <- lapply(out, function(x) x[['raster']])
-
-#TODO move this section to spirit.R
-#make plots of raster vals
-rasterPlot <- function(x, this_var, legend_color_values=NA) {
-  
-  df <- as.data.frame(x, xy = TRUE) %>% as.data.table
-  df[, plot_var := get(this_var)]
-  
-  if(legend_color_values %>% is.na) {
-    
-    message('->color values not provided, building from data IQR')
-    
-    data_min <- df$plot_var %>% min(na.rm=T) %>% floor
-    data_p25 <- df$plot_var %>% quantile(probs=.2, na.rm=T)
-    data_p75 <- df$plot_var %>% quantile(probs=.8, na.rm=T)
-    data_max <- df$plot_var %>% max(na.rm=T) %>% ceiling
-    
-    legend_color_values <- c(seq(data_min, data_p25, length.out = 2), 
-                             seq(data_p25, data_p75, length.out = 8), #bring out the variation in the IQR
-                             seq(data_p75, data_max, length.out = 2)) %>%
-      unique %T>% 
-      print %>%
-      rescale
-    
-  }
-  
-  plot <- ggplot() +
-    geom_raster(data =df, aes(x = x, y = y, fill = plot_var)) + 
-    scale_fill_viridis_c(guide=F, na.value="white", values = legend_color_values) + #matching ad2 aggs) +
-    coord_quickmap() +
-    theme_bw() +
-    theme(axis.text=element_blank(), 
-          axis.ticks=element_blank(),
-          axis.title=element_blank())
-  
-  return(plot)
-  
-}
-
-#make plot of all regions
-grobs <- lapply(proj_raster, rasterPlot, this_var='layer', legend_color_values=ad2_values)
-arrangeGrob(grobs=grobs) %>% grid.arrange
-
-#plot ad2s aggregated from cells
-proj_ad2 <- lapply(out, function(x) x[['ad2']]) %>%
-  .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
-  rbindlist(use.names=T, fill=T) %>%
-  merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>%
-  merge(., adm_links, by=c('ADM0_CODE', 'ADM2_CODE')) %T>%
-  write.csv(., file.path(data.dir, 'agg_admin_2_sdg_summary.csv'), row.names = F)
-
-#make ad2 plot at stricter threshold
-data_sdg <-  
-  load_map_results(indicator, indicator_group, run_date, raked, 
-                   single_year=2030,
-                   custom_path = list('admin2'=proj_ad2),
-                   geo_levels=c('admin2'),
-                   cores=cores)
-
-global <-
-  plot_map(data_sdg$admin2, this_var='mean',
-           annotations, limits=c(0, 1), title='Probability of achieving SDG 7.1 (<.01%) in 2030', 
-           legend_colors=viridis(10, direction=-1),
-           legend_title='Probability',
-           #zoom=zoom.global,
-           debug=F)
-ggsave(filename=file.path(out.dir, 'sdg_7_probs_01_agg.png'), plot=global, 
-       width=12, height=8, units='in', dpi=500)
 #***********************************************************************************************************************
  
 # ---SAVE MAPPING INPUTS------------------------------------------------------------------------------------------------
@@ -699,118 +397,4 @@ saveMappingInput(
   map_measure='mean',
   data_measure='prob'
 )
-#***********************************************************************************************************************
-
-# ---FIGURE 4-----------------------------------------------------------------------------------------------------------
-#histogram/density plot of LRI deaths vs tap_pc
-#setup plot data
-plot.dt <- dt %>% 
-  copy %>% 
-  .[year %in% c(2000, 2017)] %>% 
-  .[year==2017, year := 2018] %>% 
-  #.[tap_pc>1500, tap_pc := 1500] %>%  #cap at 500 ug/m3
-  na.omit(., cols=c('dfu', 'lri_c', 'lri', 'pop'))
-
-by_vars <- c('year', 'pm', 'super_region_id')
-
-plot.dt[, pm := round_any(tap_pc, 10)]
-plot.dt[, n := sum(lri_c), by=by_vars]
-plot.dt[, r := weighted.mean(lri, w=pop), by=by_vars]
-plot.dt[, hap_share := weighted.mean(hap_pct, w=pop), by=by_vars]
-plot.dt <- unique(plot.dt, by=by_vars)
-
-ggplot(data=plot.dt[year==2000 & !is.na(super_region_id)], aes(x=pm,  y=r*1000, fill=hap_share)) +
-  #geom_ribbon() + 
-  facet_wrap(~super_region_name) +
-  geom_bar(stat = "identity") +
-  scale_fill_viridis(option='viridis') +
-  scale_x_continuous(limits=c(0, 750)) +
-  scale_y_continuous(limits=c(0, 10)) +
-  coord_trans(y='sqrt') +
-  ggtitle('2000') +
-  theme_minimal()
-
-ggplot(data=plot.dt[year==2018 & !is.na(super_region_id)], aes(x=pm,  y=r*1000, fill=hap_share)) +
-  #geom_ribbon() + 
-  facet_wrap(~super_region_name) +
-  geom_bar(stat = "identity") +
-  scale_fill_viridis(option='viridis') +
-  scale_x_continuous(limits=c(0, 750)) +
-  scale_y_continuous(limits=c(0, 10)) +
-  coord_trans(y='sqrt') +
-  ggtitle('2018') +
-  theme_minimal()
-
-ggplot(data=plot.dt[year==2000 & !is.na(super_region_id)], aes(x=pm,  y=n, fill=hap_share)) +
-  #geom_ribbon() + 
-  facet_wrap(~super_region_name) +
-  geom_bar(stat = "identity") +
-  scale_fill_viridis(option='viridis') +
-  scale_x_continuous(limits=c(0, 750)) +
-  scale_y_continuous(limits=c(0, 20000)) +
-  coord_trans(y='sqrt') +
-  ggtitle('2000') +
-  theme_minimal()
-
-ggplot(data=plot.dt[year==2018 & !is.na(super_region_id)], aes(x=pm,  y=n, fill=hap_share)) +
-  #geom_ribbon() + 
-  facet_wrap(~super_region_name) +
-  geom_bar(stat = "identity") +
-  scale_fill_viridis(option='viridis') +
-  scale_x_continuous(limits=c(0, 750)) +
-  scale_y_continuous(limits=c(0, 20000)) +
-  coord_trans(y='sqrt') +
-  ggtitle('2018') +
-  theme_minimal()
-
-# ggplot(data=plot.dt[year==2018], aes(tap_pc,  y = ..count.., weight = lri_c, fill=hap_pct>.5)) +
-#   geom_density(binwidth = 5, position = "stack", alpha=.2) + 
-#   theme_bw()
-#***********************************************************************************************************************
-
-# ---SCRAPS-------------------------------------------------------------------------------------------------------------
-plot(tmp[1], col = "red", main = "Neighbors: st_intersection")
-plot(nc[spare_mtx[[50]], "NAME"], add = TRUE)
-plot(nc[50, "AREA"], add = TRUE)
-
-FIRSTdegreeNeighbors <- function(x) { 
-  
-  # -- use sf functionality and output to sparse matrix format for minimizing footprint 
-  first.neighbor <- st_touches(x, x, sparse = TRUE) 
-  
-  # -- convert results to data.frame (via sparse matrix)
-  n.ids <- sapply(first.neighbor, length)
-  vals <- unlist(first.neighbor) 
-  out <- sparseMatrix(vals, rep(seq_along(n.ids), n.ids))
-
-  out.summ <- summary(out)  # -- this is currently only generating row values, need to map to actual obs [next line]
-  data.frame(country = x[out.summ$j,]$NAME, 
-             countryid = x[out.summ$j,]$CNTY_ID, 
-             firstdegreeneighbors = x[out.summ$i,]$NAME, 
-             firstdegreeneighborid = x[out.summ$i,]$CNTY_ID, 
-             stringsAsFactors = FALSE)
-}
-
-x = st_join(tmp, tmp, join = st_rook)
-
-sel = unlist(st_relate(tmp, tmp, pattern = "F***0****"))
-sel = st_touches(tmp, tmp) %>% unlist
-plot(st_geometry(tmp))
-plot(st_geometry(tmp[sel,]), add = TRUE, col = 'grey')
-
-
-# proj_ad0 <- lapply(out, function(x) x[['ad0']]) %>% 
-#   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
-#   rbindlist(use.names=T, fill=T) %>%
-#   merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>% 
-#   merge(., adm_links[, .(ADM0_CODE, ADM0_NAME)] %>% unique, by=c('ADM0_CODE')) %T>% 
-#   write.csv(., file.path(data.dir, 'admin_0_sdg_summary.csv'), row.names = F)
-# 
-# proj_ad2 <- lapply(out, function(x) x[['ad2']]) %>% 
-#   .[!sapply(., is.null)] %>% #remove the null tables (missing raster values)
-#   rbindlist(use.names=T, fill=T) %>%
-#   merge(., stages[, .(ADM0_CODE=gadm_geoid, mbg_reg, spr_reg_id)], by=c('ADM0_CODE')) %>% 
-#   merge(., adm_links, by=c('ADM0_CODE', 'ADM2_CODE')) %T>% 
-#   write.csv(., file.path(data.dir, 'admin_2_sdg_summary.csv'), row.names = F)
-
 #***********************************************************************************************************************

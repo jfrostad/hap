@@ -27,8 +27,6 @@
 #' the administrative estimates must have "mean", "upper", and "lower" columns
 #' to allow uncertainty intervals to be plotted.
 #'
-#' @author Jon Mosser, \email{jmosser@uw.edu}
-#'
 #' @param ad0_df admin-0 level data.frame or data.table from the standard aggregation code
 #' @param ad1_df admin-1 level data.frame or data.table from the standard aggregation code
 #' @param ad2_df admin-2 level data.frame or data.table from the standard aggregation code.
@@ -83,9 +81,8 @@
 #'
 #' # Set run_date, indicator, indicator_group, out_dir per your preferences
 #'
-#' share_dir <- paste0("/share/geospatial/mbg/", indicator_group, "/",
-#'                     indicator, "/output/", run_date, "/")
-#' in_dir <- paste0(share_dir, "pred_derivatives/admin_summaries/")
+#' share_dir <- '<<<< FILEPATH REDACTED >>>>'
+#' in_dir <- '<<<< FILEPATH REDACTED >>>>'
 #'
 #' in_file_ad0 <- paste0(in_dir, indicator, "_admin_0_raked_summary.csv")
 #' in_file_ad1 <- paste0(in_dir, indicator, "_admin_1_raked_summary.csv")
@@ -107,7 +104,7 @@
 #' # Pre-loading them here and using the "africa" background map instead of default GAUL
 #' # since it's a bit prettier - cuts off far-outlying islands, etc.)
 #'
-#' ad0_shape <- readRDS("/share/geospatial/rds_shapefiles/background_map_africa/background_map_africa.rds")
+#' ad0_shape <- readRDS('<<<< FILEPATH REDACTED >>>>')
 #' ad1_shape <- readOGR(get_admin_shapefile(admin_level=1))
 #' ad2_shape <- readOGR(get_admin_shapefile(admin_level=2))
 #'
@@ -140,9 +137,8 @@
 #' run_dates <- c("run_date_1", "run_date_2,... "run_date_x)
 #' run_label <- c("indicator 1", "indicator 2",... "indicator x")
 #' indicator <- c("indicator 1", "indicator 2", ... "indicator x")
-#' share_dir <- paste0("/share/geospatial/mbg/", indicator_group, "/",
-#'                     indicator, "/output/", run_dates, "/")
-#' in_dir <- paste0(share_dir, "pred_derivatives/admin_summaries/")
+#' share_dir <- '<<<< FILEPATH REDACTED >>>>'
+#' in_dir <- '<<<< FILEPATH REDACTED >>>>'
 #'
 #' in_file_ad0 <- paste0(in_dir, indicator, "_admin_0_raked_summary.csv")
 #' in_file_ad1 <- paste0(in_dir, indicator, "_admin_1_raked_summary.csv")
@@ -339,7 +335,7 @@ subnational_ts_plots <- function(ad0_df,
   if (is.factor(ad2_shape_simple@data$ADM2_CODE)) ad2_shape_simple@data$ADM2_CODE <- as.numeric(levels(ad2_shape_simple@data$ADM2_CODE))[ad2_shape_simple@data$ADM2_CODE]
   
   # Add simple world shapefile if region is specified as Africa
-  if ("ad0" %in% plot_levels & "africa" %in% tolower(ad0_map_regions)) world_shape_simple <- readRDS('/share/geospatial/mbg/time_trend_plots/world_shape_simple.rds')
+  if ("ad0" %in% plot_levels & "africa" %in% tolower(ad0_map_regions)) world_shape_simple <- readRDS('<<<< FILEPATH REDACTED >>>>/world_shape_simple.rds')
 
   # Define some utility functions -----------------------------------------------------------------------------------------------------
   # Function to fix aspect ratios
@@ -440,7 +436,7 @@ subnational_ts_plots <- function(ad0_df,
           strip.text.x = element_blank())
   
   # Add IHME logo for plotting later
-  ihme_logo <- png::readPNG('/share/geospatial/mbg/time_trend_plots/ihme_logo.png')
+  ihme_logo <- png::readPNG('<<<< FILEPATH REDACTED >>>>/ihme_logo.png')
   ihme_grob <- rasterGrob(ihme_logo)
 
   # Add slightly different version for plotting multiple runs
@@ -919,8 +915,6 @@ subnational_ts_plots <- function(ad0_df,
 #' 4) time_series_multiple_data: This plots multiple model predictions and also includes the aggregated input data to that admin unit.
 #' I only recommend using this if comparing different model runs of the same indicator, as plotting the data and multiple indicators makes the plots too busy
 #'
-#' @author Michael Cork, \email{mcork23@uw.edu}
-#'
 #' @param model_data admin level data table from the standard aggregation code (typically ad0_df/ad1_df/ad2_df specified to certain geographic area)
 #' @param input_data input data collapsed to admin level (typically ad0_data/ad1_data/ad2_data specified to certain geographic area)
 #' @param admin specified admin level (0/1/2)
@@ -1122,8 +1116,6 @@ time_series_multiple_data <- function(model_data,
 #' This function is called in the subnational_ts_function and is a way to generalize locator maps
 #' that are useful to contextualize where the admin unit lies within a reigon or country.
 #'
-#' @author Michael Cork, \email{mcork23@uw.edu}
-#'
 #' @param admin_shape SpatialPolygonsDataFrame specified to the specific admin unit, colored in red
 #' @param surround_shape SpatialPolygonsDataFrame of surrounding geography to place admin unit.
 #' If highlighted admin_shape is a country, then the surround_shape is typically the region it falls in
@@ -1182,8 +1174,6 @@ location_map_draw <- function(admin_shape, surround_shape) {
 #'
 #' This function is called in the subnational_ts_function and is pretty specific to this function. However, it could also serve as a
 #' template for generalizing a labeled map function that also colors by a specific indicator.
-#'
-#' @author Michael Cork, \email{mcork23@uw.edu}
 #'
 #' @param shape SpatialPolygonsDataFrame specified to the region/country/admin1 level that your model was run over
 #' @param centroids Data table that species the x and y coordinates of the centroids for the shape of the map
@@ -1312,8 +1302,6 @@ geom_path_quiet     <- function(...) {suppressMessages(ggplot2::geom_path(...))}
 #' a data table that binds the predictions together with a column titled "run" that specified what indicator/model run the model
 #' prediction is from, dependent on the run label.
 #'
-#' @author Michael Cork, \email{mcork23@uw.edu}
-#'
 #' @param prediction_list List where each component is a model prediction at a specified admin level
 #' @param run_label This labels each model run/different indicator so that we can eventually facet by the run
 #'                  column when creating a ggplot2 object
@@ -1328,9 +1316,9 @@ geom_path_quiet     <- function(...) {suppressMessages(ggplot2::geom_path(...))}
 #' run_label <- c("STI symp", "Condom use")
 #' indicators <- c("condom_last_time", "sti_symptoms")
 #'
-#' share_dir <- paste0("/share/geospatial/mbg/", indicator_group, "/", indicators, "/output/", run_dates, "/")
-#' in_dir <- paste0(share_dir, "pred_derivatives/admin_summaries/")
-#' out_dir <- paste0(share_dir, "admin_plots/")
+#' share_dir <- '<<<< FILEPATH REDACTED >>>>'
+#' in_dir <- '<<<< FILEPATH REDACTED >>>>'
+#' out_dir <- '<<<< FILEPATH REDACTED >>>>'
 #'
 #' in_file_ad0 <- paste0(in_dir, indicators, "_admin_0_unraked_summary.csv")
 #' in_file_ad1 <- paste0(in_dir, indicators, "_admin_1_unraked_summary.csv")
@@ -1364,8 +1352,6 @@ add_run_label <- function(prediction_list, run_label = NULL){
 #'
 #' Currently, this is relatively inflexible - ideally would be extended to include
 #' other category/color schemes and work with admin1s.  Feel free to submit a PR!
-#'
-#' @author Jon Mosser, \email{jmosser@uw.edu}
 #'
 #' @param P Param description
 #' @param P Param description
@@ -1554,8 +1540,6 @@ format_plot_obj <- function(plot_obj) {
 #' Currently, this is relatively inflexible - ideally would be extended to include
 #' other category/color schemes and work with admin1s.  Feel free to submit a PR!
 #'
-#' @author Jon Mosser, \email{jmosser@uw.edu}
-#'
 #' @param df data.frame or data.table from the aggregation code.  Needs to have
 #'           columns for `mean`, `upper`, `lower`, `ADM2_CODE`, `ADM0_CODE`, `year`, and also a
 #'           also a `pop` column which can be obtained as in the example (from merging on the
@@ -1581,14 +1565,10 @@ format_plot_obj <- function(plot_obj) {
 #' # Set up directories and files  ########################################
 #' # Set `run_date`, `indicator`, `indicator_group`, `out_dir` as you wish
 #'
-#' share_dir <- paste0("/share/geospatial/mbg/", indicator_group, "/",
-#'                     indicator, "/output/", run_date, "/")
-#' in_dir <- paste0(share_dir, "pred_derivatives/admin_summaries/")
-#' in_file_ad2 <- paste0(in_dir, indicator, "_admin_2_raked_summary.csv")
+#' share_dir <- '<<<< FILEPATH REDACTED >>>>'
+#' in_dir <- '<<<< FILEPATH REDACTED >>>>'
+#' in_file_ad2 <- '<<<< FILEPATH REDACTED >>>>'
 #' ad2_df <- fread(in_file_ad2)
-#'
-#' # Drop Ma'tan al-Sarra if present
-#' ad2_df <- subset(ad2_df, ADM0_CODE != 40762)
 #'
 #' # Merge on populations
 #' load(paste0(share_dir, indicator, "_raked_admin_draws_eb_bin0_0.RData"))
@@ -1597,7 +1577,7 @@ format_plot_obj <- function(plot_obj) {
 #' rm(admin_2)
 #'
 #' # Use GAUL shapefiles as defaults
-#' ad0_shp <- readRDS("/share/geospatial/rds_shapefiles/background_map_africa/background_map_africa.rds")
+#' ad0_shp <- readRDS("<<<< FILEPATH REDACTED >>>>")
 #' ad2_shp <- readOGR(get_admin_shapefile(admin_level=2))
 #'
 #' a_grob <- plot_ordered_admins_colors(df = ad2_df,
@@ -1826,8 +1806,6 @@ plot_ordered_admins_colors <- function(df,
 #' This function uses the sf package, which will currently only work when running on the lbd_singularity image or in
 #' Rstudio on the cluster.
 #'
-#' @author Michael Cork, \email{mcork23@uw.edu}
-#'
 #' @param indicator indicator name used in file structure for mbg
 #' @param indicator_group indicator group
 #' @param regions Regions specified from your model
@@ -1904,14 +1882,14 @@ input_aggregate_admin <- function(indicator,
   
   # If input_data not passed to the function, load in input data from model, or from mbg if the appropriate column name is not specified.
   if (is.null(input_data)){
-    mod_dir <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/', indicator_group, indicator, run_date)
+    mod_dir <- '<<<< FILEPATH REDACTED >>>>'
     message(paste0("Input data was not provided, so loading from model directory: ", mod_dir,
                    ". \n If this does not exist, consider passing input data as an argument to this function"))
     input_data <- fread(paste0(mod_dir, 'input_data.csv'))
     
     if (!sample_column %in% names(input_data)) {
-      message("Sample weights column not found in model directory, pulling from input data on J drive")
-      input_data <- fread(paste0("/home/j/WORK/11_geospatial/10_mbg/input_data/", indicator, ".csv"))
+      message("Sample weights column not found in model directory, pulling from input data on <<<< FILEPATH REDACTED >>>>")
+      input_data <- fread(paste0("<<<< FILEPATH REDACTED >>>>", indicator, ".csv"))
       if (!sample_column %in% names(input_data)) stop("Sample weights column not found on J drive, make sure to add a sum of sample weights column)                                         in collapse code and specify columns name as sample_column argument in function")
     }
   } else {

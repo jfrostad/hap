@@ -1,29 +1,14 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
-# Author: JF
+# Author: REDACTED
 # Date: 03/31/2020
 # Purpose: Run MBG Raking/Aggregation for HAP
-# source('/homes/jfrostad/_code/lbd/hap/cooking/post/2_entry.R') 
 #***********************************************************************************************************************
 
 # ----SETUP-------------------------------------------------------------------------------------------------------------
 # clear memory
 rm(list=ls())
-# runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  j_root <- "/home/j/"
-  h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
-  ## Load libraries and  MBG project functions.
-  .libPaths(package_lib)
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-}
+
+#REDACTED
 
 #load external packages
 pacman::p_load(assertthat, data.table, dplyr, mgsub, raster, sf, fasterize, fst)
@@ -35,19 +20,7 @@ interactive <- F  %>% #manual override
 
 if (interactive) {
   
-  ## Set repo location, indicator group, and some arguments
-  user <- 'jfrostad'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap"
-  indicator_group <- 'cooking'
-  indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_sp_fine'
-  holdout <- 0
-  age <- 0
-  run_date <- '2020_09_01_11_42_52'
-  measure <- 'prev'
-  reg <- 'CHN'
-  cov_par <- paste(indicator_group, reg, sep='_')
-  my_repo <- "/homes/jfrostad/_code/lbd/hap"
+  #REDACTED
   
 } else {
   
@@ -73,14 +46,14 @@ interval_mo = 12 #TODO config??
 
 #dirs
 ## Set filepath and pathaddin
-sharedir <- sprintf("/share/geospatial/mbg/%s/%s", indicator_group, indicator)
-outputdir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
+sharedir <- sprintf("#REDACTED/%s/%s", indicator_group, indicator)
+outputdir <- paste0('#REDACTED', indicator_group, '/', indicator, '/output/', run_date, '/')
 pathaddin <- paste0('_bin0_', reg, '_', holdout)
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
 ## Load MBG packages
-package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+package_list <- c(t(read.csv(paste0(core_repo, '#REDACTED/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -115,7 +88,7 @@ file.path(my_repo, '_lib', 'post', 'aggregate_inputs.R') %>% source
 
 # ---PREP CONFIG--------------------------------------------------------------------------------------------------------
 ## Read config file and save all parameters in memory
-config_filepath <- 'cooking/model/configs/'
+config_filepath <- '#REDACTED'
 config <- set_up_config(repo            = my_repo,
                         indicator_group = indicator_group,
                         indicator       = indicator,
@@ -146,60 +119,10 @@ message(pop_measure)
 message(holdout)
 ## Define raking parameters ---------------------------------------------------------------------------
 
-## If this is not a solid fuel indicator model run set all countries to not be raked
-if (!(indicator %like% 'solid')) {
-  
-  rake_countries <- F
 
-  # Create function to pull isos for diarrhea custom regs
-  get_region_isos <- function(modeling_region) {
-    
-    # define regions
-    region_list <- list(
-      'dia_afr_horn' = 'dji+eri+eth+sdn+som+ssd+yem',
-      'dia_cssa-cod' = 'ago+caf+cog+gab+gnq+stp',
-      'dia_wssa-nga' = 'ben+bfa+civ+cmr+cpv+gha+gin+gmb+gnb+lbr+mli+mrt+ner+sen+sle+tcd+tgo',
-      'dia_name' = 'dza+egy+esh+lby+mar+tun',
-      'dia_sssa' = 'bwa+nam+zaf',
-      'dia_mcaca' = 'blz+cri+cub+dma+dom+grd+gtm+hnd+hti+jam+lca+mex+nic+pan+slv+vct',
-      'dia_s_america-bra' = 'bol+col+ecu+guf+guy+per+pry+sur+tto+ven',
-      'dia_central_asia' = 'kgz+tjk+tkm+uzb',
-      'dia_se_asia' = 'khm+lao+mmr+mys+tha+vnm',
-      'dia_malay' = 'idn+phl+png+tls',
-      'dia_south_asia-ind-pak' = 'bgd+btn+lka+npl',
-      'dia_mid_east' = 'afg+irn+irq+jor+pse+syr',
-      'dia_essa-zwe-ken' = 'bdi+com+lso+mdg+moz+mwi+rwa+swz+syc+tza+uga+zmb',
-      'PAK' = 'pak',
-      'KEN' = 'ken',
-      'NGA' = 'nga',
-      'COD' = 'cod',
-      'IND' = 'ind',
-      'ZWE' = 'zwe',
-      'MNG' = 'mng',
-      'dia_cssa' = 'ago+caf+cod+cog+gab+gnq+stp',
-      'dia_wssa' = 'ben+bfa+civ+cmr+cpv+gha+gin+gmb+gnb+lbr+mli+mrt+ner+nga+sen+sle+tcd+tgo',
-      'dia_s_america' = 'bol+bra+col+ecu+guf+guy+per+pry+sur+tto+ven',
-      'dia_chn_mng' = 'chn+mng',
-      'dia_south_asia' = 'bgd+btn+ind+lka+npl+pak',
-      'dia_south_asia-ind' = 'bgd+btn+lka+npl+pak',
-      'dia_essa' = 'bdi+com+ken+lso+mdg+moz+mwi+rwa+swz+syc+tza+uga+zmb+zwe'
-    )
-    # return region list
-    return(toupper(region_list[[modeling_region]]))
-  }
-    
-  # apply function
-  countries_not_to_rake <- get_region_isos(reg)
-  countries_not_to_subnat_rake <- get_region_isos(reg)
-  rake_subnational <- FALSE
-  
-} else {
-  
-  #rake all countries subnationally
-  rake_subnational <- TRUE
-  countries_not_to_subnat_rake <- NULL
-  
-}
+#rake all countries subnationally
+rake_subnational <- TRUE
+countries_not_to_subnat_rake <- NULL
 
 # Determine if a crosswalk is needed
 crosswalk <- ifelse(modeling_shapefile_version != raking_shapefile_version, T, F)
@@ -219,44 +142,11 @@ message('Countries not to rake subnationally: ', countries_not_to_subnat_rake)
 if(rake_countries) {
   if (new_gbd_estimates) {
     
-    source("/ihme/cc_resources/libraries/current/r/get_location_metadata.R")
-    source("/ihme/cc_resources/libraries/current/r/get_draws.R")
-    locations <- get_location_metadata(location_set_id = 35, gbd_round_id = 6, decomp_step = "step4") %>% as.data.table
-    loc_ids <- unique(locations$location_id)
-    
-    #pull the draws from 
-    #got this pull from Sarah Wozniak
-    #note that the age/sex IDs are arbitrary since this model doesnt vary over those params
-    #note, could also just pull the model from GPR, but the results are the same
-    #source("/ihme/code/st_gpr/central/stgpr/r_functions/utilities/utility.r")
-    #hap <- model_load(102800,"raked")
-    gbd <-
-    get_draws("rei_id", 87, source="exposure", status="best", year_id=1990:2019,
-              location_id=loc_ids, sex_id=2, age_group_id=11, gbd_round_id=6, decomp_step="step4",
-              num_workers=8) %>% 
-      .[parameter=='cat1'] #only want exposure, not the inverse
-    
-    #summarize
-    draw.cols <- paste0('draw_', 0:999) #i hate zero indexing
-    gbd[, lower := apply(.SD, 1, quantile, c(.025)), .SDcols=draw.cols]
-    gbd[, mean := apply(.SD, 1, mean), .SDcols=draw.cols]
-    gbd[, upper := apply(.SD, 1, quantile, c(.975)), .SDcols=draw.cols]
-    gbd[, (draw.cols) := NULL] #no longer need
-    
-    #format for MBG
-    setnames(gbd, c('location_id', 'year_id'), c('name', 'year'))
-  
-    write.csv(gbd, 
-              file=file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
-              paste0('gbd_2019_best_', indicator, '_', measure, '.csv')),
-              row.names=F)
+    #REDACTED
   
   } else {
-  
-    #kw_gbd <- as.data.table(read.csv(paste0(rake_to_path, 'gbd_',  measure, '.csv'), stringsAsFactors = FALSE))
-    
-    gbd <- file.path('/share/geospatial/jfrostad', indicator_group, 'data', 
-                              paste0('gbd_2019_best_', indicator, '_', measure, '.csv')) %T>% 
+
+    gbd <- file.path('REDACTED') %T>% 
       message('reading GBD best estimates from this path\n', .) %>% 
       fread 
   
@@ -312,9 +202,7 @@ if (rake_countries) {
 
   # Load populations
   message('Loading populations')
-  gbd_pops <- prep_gbd_pops_for_fraxrake(pop_measure = pop_measure, reg = reg, year_list = year_list, 
-                                         gbd_round_id = 6,
-                                         decomp_step='step4')
+  #REDACTED
 #***********************************************************************************************************************
 
 # ---RAKE/AGG-----------------------------------------------------------------------------------------------------------
@@ -406,13 +294,6 @@ message("Saving results...")
 ## save RF
 save_post_est(rf, "csv", paste0(reg, "_rf"))
 
-# TODO remove - preds are saved during function
-# ## save raked cell preds
-# save(raked_cell_pred, file = paste0(
-#   sharedir, "/output/", run_date, "/",
-#   indicator, "_raked_cell_draws_eb_bin0_", reg, "_0.RData"
-# ))
-
 # make and save summaries
 
 save_cell_pred_summary <- function(summstat, raked, ...) {
@@ -469,7 +350,7 @@ for (r in rake_list) {
 }
 
 # Write a file to mark done
-output_dir <- paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date)
+output_dir <- paste0("/#REDACTED/", indicator_group, "/", indicator, "/output/", run_date)
 pathaddin <- paste0("_bin0_", reg, "_0") # To allow us to use waitformodelstofinish()
 write(NULL, file = paste0(output_dir, "/fin_", pathaddin))
 
@@ -531,162 +412,4 @@ stack <- aggregate_child_stackers(reg,
                                   modeling_shapefile_version,
                                   pop_measure=pop_measure,
                                   build=T)
-
-stop('done for now')
-
-# ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
-# holdouts <- 0
-
-
-#TODO need to rewrite these functions to return just one region instead of only saving the final file
-#write your own versions of them in post_estimation/_lib/summarize.R
-## Combine and summarize aggregated results --------------------------
-
-# # combine unraked results
-# message('Combining unraked aggregated results')
-# combine_aggregation(rd       = run_date,
-#                     indic    = indicator,
-#                     ig       = indicator_group,
-#                     ages     = 0,
-#                     regions  = Regions,
-#                     holdouts = holdouts,
-#                     raked    = raked,
-#                     delete_region_files = F)
-# 
-# # summarize admins
-# summarize_admins(ad_levels = c(0,1,2), raked = F, measure = measure, metrics = 'rates')
-# 
-# # # combine raked results
-# message('Combining raked aggregated results')
-# if (raked) {
-#   combine_aggregation(rd       = run_date,
-#                       indic    = indicator,
-#                       ig       = indicator_group,
-#                       ages     = 0,
-#                       regions  = Regions,
-#                       holdouts = holdouts,
-#                       raked    = raked,
-#                       delete_region_files = F)
-#   
-#   # summarize admins
-#   summarize_admins(ad_levels = c(0,1,2), raked = T, measure = measure, metrics = 'rates')
-# }
-
-
-# ## Combine data and stackers with summary results ------------------------------------------
-# 
-# # Load and combine estimates
-# mbg <- list(
-#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv') %>% 
-#     fread %>%
-#     .[, lvl := 'adm0'],
-#   paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv') %>% 
-#     fread %>%
-#     .[, lvl := 'adm1']
-# )  %>% 
-#   rbindlist(use.names=T, fill=T)
-# 
-# # raked results
-# if (raked) {
-#   mbg_raked <- list(
-#     paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_0_raked', measure, '_summary.csv')) %>% 
-#       fread %>%
-#       .[, lvl := 'adm0'],
-#     paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_1_raked', measure, '_summary.csv')) %>%
-#       fread %>%
-#       .[, lvl := 'adm1']
-#   )  %>% 
-#     rbindlist(use.names=T, fill=T)
-# }
-# 
-# # Combine all
-# # raked results
-# if (raked) {
-#   #modify colnames
-#   c('mean', 'upper', 'lower', 'cirange') %>% 
-#     setnames(mbg_raked, ., paste0(., '_raked'))
-#   
-#   mbg <- merge(mbg, mbg_raked, 
-#                by = names(mbg) %>% .[grep('ADM|region|year|pop|lvl', .)],
-#                all.x = T)
-# }
-# 
-# # stackers
-# mbg <- merge(mbg, stack,
-#              by =  names(mbg) %>% .[grep('CODE|year|lvl', .)],
-#              all.x = T)
-# 
-# # data
-# mbg <- merge(mbg, dat,
-#              by = names(mbg) %>% .[grep('CODE|year|lvl', .)],
-#              all.x = T)
-# 
-# # save
-# write.csv(mbg, paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers.csv' ))
-# 
-# ##classify datapoints based on HAP vetting
-# #update vetting sheet if necessary
-# #original authorization must be done locally (doesnt seem to work in IDE and must be interactively done)
-# if (new_vetting) {
-#   setwd(doc.dir) 
-#   #googledrive::drive_auth(cache='drive.httr-oauth')
-#   #googledrive::drive_auth(use_oob=T)
-#   googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)
-# }
-# #read in vetting sheet
-# vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='1. Vetting', skip=1) %>% 
-#   as.data.table %>% 
-#   .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] %>%  #subset to relevant columns
-#   unique(., by=names(.)) #TODO find out why there are duplicates in the sheet
-# 
-# #Fix name for bobby =)
-# vetting[vetting=='Not started', vetting := 'Adequate']
-# 
-# #merge onto data
-# mbg <- merge(mbg, vetting, by='nid', all.x=T)
-# 
-# #define colorscale
-# # build color scheme for the vetting sheet values
-# # TODO make this code more robust for people who do not have the same schema
-# vetting_colors <- c("Adequate"='grey4', 
-#                     "Problematic"='darkorange1',
-#                     "Completed"='forestgreen',
-#                     "Flagged"='purple1',
-#                     "Excluded"='gray71',
-#                     "In progress"='indianred2',
-#                     "Ready for Review"='indianred2')
-# 
-# ## Plot stackers and covariates ------------------------------------------------------
-# message('Making time series plots for stackers by admin unit')
-# dir.create(paste0(outputdir, '/diagnostic_plots/'))
-# 
-# if (use_stacking_covs) {
-#   
-#   # plot covariate weights
-#   # message('Making covariate weight plots')
-#   # get_cov_weights(indicator,
-#   #                 indicator_group,
-#   #                 run_date,
-#   #                 Regions,
-#   #                 outputdir)
-#   
-#   # plot stackers over time aggregated to admins
-#   message('Making time series plots for stackers by admin unit')
-#   lapply(Regions, function(x) 
-#     stacker_time_series_plots(reg=x,
-#                               dt=mbg,
-#                               indicator, 
-#                               indicator_group, 
-#                               run_date, 
-#                               raked=raked,
-#                               vetting_colorscale=vetting_colors,
-#                               label='config',
-#                               debug=F)
-#   )
-#   
-# }
-
-
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ FIN ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+##

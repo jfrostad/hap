@@ -41,14 +41,14 @@ get_cell_pred_for_aroc <- function(ind_gp,
   
     # Load the relevant pred object - loads an object named cell_pred
     # Try both rds file and rdata file until we standardize this
-    rds_file <- sprintf(paste0('/share/geospatial/mbg/%s/%s/output/%s/',
+    rds_file <- sprintf(paste0('#REDACTED',
                                matrix_pred_name), ind_gp, ind, rd, reg, measure)
     
     if (rk) {
-      rdata_file <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+      rdata_file <- paste0('#REDACTED/', ind_gp, '/', ind, '/output/', rd, '/',
                            ind, "_raked_cell_draws_eb_bin0_", reg, "_0.RData")
     } else {
-      rdata_file <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+      rdata_file <- paste0('#REDACTED/', ind_gp, '/', ind, '/output/', rd, '/',
                            ind, "_cell_draws_eb_bin0_", reg, "_0.RData")
     }
     
@@ -213,7 +213,7 @@ make_aroc <- function(ind_gp, ind, rd,
   if (debug) browser()
   
   # define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
+  share_dir <- paste0('#REDACTED', ind_gp, '/', ind, '/output/', rd, '/')
   output_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
   dir.create(output_dir, showWarnings=F, recursive = T)
   
@@ -348,10 +348,10 @@ make_aroc <- function(ind_gp, ind, rd,
       ## try two different locations until we standardize
       
       if (inputs$admin_2 %>% is.null) {
-        file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_', 
+        file_1 <- sprintf('#REDACTED', 
                           ifelse(raked, "raked", "unraked"), '.Rdata',
                           ind_gp, ind, rd, ind, measure)
-        file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+        file_2 <- paste0('#REDACTED', ind_gp, '/', ind, '/output/', rd, '/',
                          ind, '_', ifelse(raked, "raked", "unraked"),
                          '_admin_draws_eb_bin0_0.RData')
         
@@ -542,7 +542,7 @@ make_proj <- function(ind_gp, ind, rd,
   
   
   # define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
+  share_dir <- paste0('#REDACTED', ind_gp, '/', ind, '/output/', rd, '/')
   aroc_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
   output_dir <- paste0(share_dir, "/pred_derivatives/proj/")
   
@@ -639,10 +639,10 @@ make_proj <- function(ind_gp, ind, rd,
     ## load the admin objects
     ## try two different locations until we standardize
     message('- loading admin objects')
-    file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_', 
+    file_1 <- sprintf('#REDACTED', 
                       ifelse(raked, "raked", "unraked"), '.Rdata',
                       ind_gp, ind, rd, ind, measure)
-    file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+    file_2 <- paste0('#REDACTED', ind_gp, '/', ind, '/output/', rd, '/',
                      ind, '_', ifelse(raked, "raked", "unraked"), 
                      '_admin_draws_eb_bin0_0.RData')
     
@@ -816,14 +816,14 @@ compare_to_target <- function(ind_gp,
   
   ## load in regions used in this model and run_date
   if (regions %>% is.null) {
-    regions <- get_output_regions(in_dir = paste0('/share/geospatial/mbg/',
+    regions <- get_output_regions(in_dir = paste0('#REDACTED',
                                                   ind_gp, '/',
                                                   ind, '/output/',
                                                   rd))
   }
   
   # define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
+  share_dir <- paste0('#REDACTED', ind_gp, '/', ind, '/output/', rd, '/')
   aroc_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
   proj_dir <- paste0(share_dir, "/pred_derivatives/proj/")
   output_dir <- paste0(share_dir, "/pred_derivatives/target_probs/")
@@ -988,9 +988,9 @@ compare_to_target <- function(ind_gp,
           ## load the admin objects
           ## try two different locations until we standardize
           message('- loading admin objects')
-          file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_raked.Rdata',
+          file_1 <- sprintf('#REDACTED',
                             ind_gp, ind, rd, ind, measure)
-          file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
+          file_2 <- paste0('#REDACTED', ind_gp, '/', ind, '/output/', rd, '/',
                            ind, '_raked_admin_draws_eb_bin0_0.RData')
           
           if (file.exists(file_1)) {
@@ -1107,7 +1107,7 @@ prepare_aroc_proj_rasters <- function(regions='all',
   if (is.null(baseline_year)) baseline_year <- 2018
   
   # Define dir to search
-  input_dir <- file.path('/share/geospatial/mbg', indicator_group, indicator,
+  input_dir <- file.path('#REDACTED', indicator_group, indicator,
                          'output', run_date, 'pred_derivatives', pred_deriv, '/')
   
   message('searching for results in\n', input_dir)
@@ -1211,7 +1211,6 @@ prepare_aroc_proj_rasters <- function(regions='all',
     cell_pred <- matrix(cell_deriv,  ncol = yrs) %>% 
       as.data.table %>% 
       setnames('V1', 'mean')
-    #names(cell_pred) <- paste0('V',1:ncol(cell_pred))
     
     cell_pred[, cell_pred_id := .I] #cell_pred object ID
     cell_pred[, cell_id := rep(link_table[[2]], times = nrow(cell_pred) / length(link_table[[2]]))]  #cell id references the africa map
@@ -1276,15 +1275,6 @@ prepare_aroc_proj_rasters <- function(regions='all',
                       by_cols=c('ADM0_CODE', 'ADM2_CODE', 'year'), 
                       agg_cols=ind_cols)
 
-    #drop irrelevant columns and return
-    #TODO may be easier to keep columns instead =)
-    #' null_vars <- c('ID', 'ADM_CODE', 'NAME_0', 'NAME_1', 'NAME_2', 
-    #'                #'ADM0_NAME', 'ADM1_NAME', 'ADM2_NAME', 
-    #'                'geo_id', 'ad2_id', 'ad0_parent', 'ad1_parent', 'location_id',
-    #'                'start_area', 'end_area', 'total_area',
-    #'                'n', 'reg_id', 'simp_ras_val', 'total_frac', 'old_frac', 'rak_level')
-    #' cell_pred <- cell_pred[, -(null_vars), with=F] 
-    
     list('raster'=mean_deriv_raster,
          'ad0'=ad0,
          'ad2'=ad2) %>% 
@@ -1301,42 +1291,4 @@ prepare_aroc_proj_rasters <- function(regions='all',
   
   return(out)
   
-  # assign(paste0(reg, "_mean_", pred_deriv, "_raster"), mean_deriv_raster)
-  #   
-  # rm(cell_deriv); rm(mean_deriv_raster)
-  # 
-  # # combine Regions raster
-  # mean_aroc_raster_combined = do.call(raster::merge, list(get(paste0("noaf-esh-lby_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("sssa_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("wssa-cpv_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("essa-dji_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("cssa_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("mide_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("stan_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("eaas_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("soas-lka_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("seas_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("ocea-mys_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("caca_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("ansa-ecu-ven_mean_", pred_deriv, "_raster")),
-  #                                                         get(paste0("trsa-guf_mean_", pred_deriv, "_raster"))))
-  # 
-  # if (class(year_list) == "character") year_list <- eval(parse(text=year_list))
-  # 
-  # # save combined raster
-  # 
-  # if(pred_deriv %in% c("target_probs", "proj")){
-  #   save_post_est(mean_aroc_raster_combined, 
-  #                 filetype = 'raster', 
-  #                 filename = paste0(pred_deriv, "_", raking, "_", 
-  #                                   year_list[1], "_", target_yr))
-  # } else {
-  #   save_post_est(mean_aroc_raster_combined, 
-  #                 filetype = 'raster', 
-  #                 filename = paste0(pred_deriv, "_", raking, "_", 
-  #                                   year_list[1], "_", year_list[length(year_list)]))
-  # }
-  # 
-  # return("Rasters have been combined and saved!")
-  # 
 }

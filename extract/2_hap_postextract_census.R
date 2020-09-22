@@ -1,26 +1,10 @@
 rm(list=ls())
 
 #Define values
-topic <- "hap"
-extractor_ids <- c('jfrostad', 'qnguyen1', 'albrja')
-redownload <- F #update the codebook from google drive
-cluster <- TRUE #running on cluster true/false
-geos <- TRUE #running on geos nodes true/false
-cores <- 3
-#FOR THE CLUSTER:
-#qlogin -now n -pe multi_slot 5 -P proj_geospatial -l geos_node=TRUE
-#source('/homes/jfrostad/_code/lbd/hap/extract/2_hap_postextract_census.R')
+#Redacted
 
 #Setup
-h <- ifelse(Sys.info()[1]=="Windows", "H:/", file.path("/ihme/homes", Sys.info()["user"])) #Your username
-j <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j")
-l <- ifelse(Sys.info()[1]=="Windows", "L:/", "/ihme/limited_use/")
-folder_in <- file.path(l, "LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions", topic) #where your extractions are stored
-folder_out <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/", topic, "/census") #where you want to save the big csv of all your extractions together
-setwd(folder_in)
-
-# ####### YOU SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS LINE. SORRY IF YOU DO ##################################################
-
+#Redacted
 
 #Load packages
 package_lib    <- file.path(h, '_code/_lib/pkg')
@@ -28,7 +12,7 @@ package_lib    <- file.path(h, '_code/_lib/pkg')
 pacman::p_load(data.table, dplyr, haven, feather, fst, googledrive, magrittr, parallel, doParallel, readxl, stringr)
 
 #read stage document
-stages <- file.path(j, 'WORK/11_geospatial/10_mbg/stage_master_list.csv') %>% fread #read info about stages
+stages <- file.path('#Redacted/stage_master_list.csv') %>% fread #read info about stages
 
 #timestamp
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -36,13 +20,13 @@ today <- Sys.Date() %>% gsub("-", "_", .)
 message("Getting common column names")
 if (topic == "hap" & geos){
   #get the most recent pt and poly files and parse them for column names
-  pt_names <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% 
+  pt_names <- paste0(l, "#Redacted") %>% 
     list.files(pattern="points", full.names=T) %>% 
     grep(pattern=".fst$", value=T) %>% 
     .[length(.)] %>% 
     read_fst(., from = 1, to = 2) %>% 
     names
-  poly_names <- paste0(l, "LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/") %>% 
+  poly_names <- paste0(l, "#Redacted") %>% 
     list.files(pattern="poly", full.names=T) %>% 
     grep(pattern=".fst$", value=T) %>% 
     .[length(.)] %>% 
@@ -50,15 +34,14 @@ if (topic == "hap" & geos){
     names
   noms <- c(pt_names, poly_names) %>% unique
 } else{
-  message("The error you're about to get has to do with the fact that you're not running on geos and/or you're not prepping hap data.")
-  stop("I don't know how to parse .Rdata files for column headers in a timely way. Please figure something out and make a pull request.")
+  #Redacted
 }
 
 message("List IPUMS dtas")
 extractions <- list.files(folder_in, pattern="IPUMS", full.names=T)
 
-#Change to handle batch extractions by only reading in those IDs that have been extracted by Queenie
-if (redownload) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
+#Change to handle batch extractions by only reading in those IDs that have been extracted by #Redacted
+#Redacted
 codebook <- read_xlsx('hap.xlsx', sheet='codebook') %>% as.data.table
 #create output name, note that we need to remove the leading info on some of the survey names(take only str after /)
 codebook[, output_name := paste0(ihme_loc_id, '_', tools::file_path_sans_ext(basename(survey_name)), '_', year_start, '_', year_end, '_', nid, '.csv')]
@@ -67,14 +50,6 @@ codebook <- codebook[assigned %in% extractor_ids]
 #get the names of all the new files
 new.files <- codebook[, output_name] %>% unique %>% paste(., collapse="|")
 extractions <- grep(new.files, extractions, invert=F, value=T)
-
-# message("Read in IPUMS Geo Codebook")
-# geo <- read.csv(paste0(j, "/WORK/11_geospatial/05_survey shapefile library/codebooks/IPUMS_CENSUS.csv"), stringsAsFactors = F, encoding="windows-1252")
-# geo <- geo[, c("nid", "iso3", 'shapefile', 'location_code', 'lat', 'long', 'admin_level', 'point', 'geospatial_id', 'start_year', 'end_year')]
-
-
-#TODO add the same functionality in the regular post extract of saving a list of broken/problem extractions
-#needs to be setup within the loop to return this information serially
 
 #define function to merge IPUMS files with geographies
 ipums_merge <- function(file, geo, folder_out, noms){
@@ -90,7 +65,7 @@ ipums_merge <- function(file, geo, folder_out, noms){
   survey_module <- dt$survey_module[1] %>% as.character
   
   #use new geocodebook database 
-  source("/share/code/geospatial/lbd_core/data_central/geocodebook_functions.R")
+  source("#Redacted/geocodebook_functions.R")
   geo <- get_geocodebooks(nids = nid)
   
   #skip bad data
@@ -128,19 +103,16 @@ ipums_merge <- function(file, geo, folder_out, noms){
   }
 }
 
-# need_some_love <- "106512"
-# files <- grep(need_some_love, files, value=T)
-
 message("starting mclapply")
 bad_nids <- mclapply(extractions, ipums_merge, geo=geo, folder_out=folder_out, noms=noms, mc.cores=cores) %>% unlist
 write.csv(bad_nids, paste0(folder_out, "/fix_these_nids.csv"), row.names = F, na='')
-#write.csv(to_do, to_do_outpath, row.names=F)
+
 
 #####################################################################
 #######Find broken extractions###################
 #####################################################################
 
-files <- list.files('L:/LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap', pattern = 'IPUMS_CENSUS')
+files <- list.files('#Redacted', pattern = 'IPUMS_CENSUS')
 files <- substr(files, 1, nchar(files)-4)
 files <- strsplit(files,'_')
 files[6] #TODO jank

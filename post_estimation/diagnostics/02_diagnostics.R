@@ -1,32 +1,12 @@
 ##############################################################################
-## MBG diagnostics functions and plots for ORT
-## Written by Kirsten Wiens
-## Created 2018/09/17
-#source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/02_diagnostics.R", echo=T)
+## MBG diagnostics functions and plots
 ##############################################################################
-
-
 ## Setup -------------------------------------------------------------------------
 
 ## clear environment
 rm(list=ls())
 
-# runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  j_root <- "/home/j/"
-  h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
-  ## Load libraries and  MBG project functions.
-  .libPaths(package_lib)
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-}
+#REDACTED
 
 #load external packages
 #TODO request adds to lbd singularity
@@ -39,19 +19,7 @@ interactive <- F  %>% #manual override
 
 if (interactive) {
 
-  ## Set repo location, indicator group, and some arguments
-  user <- 'jfrostad'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap"
-  indicator_group <- 'cooking'
-  indicator <- 'cooking_fuel_solid'
-  holdout <- 0
-  age <- 0
-  run_date <- '2020_09_01_11_42_52'
-  measure <- 'prev'
-  reg <- 'essa'
-  config_par   <- 'hap_sp_fine'
-  cov_par <- paste(indicator_group, reg, sep='_')
-  my_repo <- "/homes/jfrostad/_code/lbd/hap"
+  #REDACTED
   
 } else {
   
@@ -71,23 +39,10 @@ new_vetting <- F
 #is this a raked model?
 raked <- T
 
-# #pull args from the job submission if !interactive
-# args <- ifelse(interactive %>% rep(., length(debug.args)), debug.args, commandArgs()) 
-# 
-# ## Set repo location, indicator group, and some arguments
-# user            <- args[4]
-# core_repo       <- args[5]
-# indicator_group <- args[6]
-# indicator       <- args[7]
-# config_par      <- args[8]
-# config_file     <- args[9]
-# cov_par         <- args[10]
-# cov_file        <- args[11]
-
 message(indicator)
 
 ## Load MBG packages
-package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+package_list <- c(t(read.csv(paste0(core_repo, '/#REDACTED/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -131,10 +86,10 @@ config <- set_up_config(repo            = my_repo,
 )
 
 ## Create output folder with the run_date
-outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
+outputdir      <- paste('/#REDACTED', indicator_group, indicator, 'output', run_date, '', sep='/')
 
 ## Assign dir to read vetting information
-doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
+doc.dir <- file.path(j_root, '#REDACTED')
 
 ## Create proper year list object
 if (class(year_list) == 'character') year_list <- eval(parse(text=year_list))
@@ -146,9 +101,6 @@ for (r in 1:length(Regions)) Regions[[r]] <- substr(Regions[[r]], start = 1, sto
 Regions <- unique(Regions)
 Regions <- Regions[Regions != '']
 message(paste0(Regions, '\n'))
-
-#TODO remove when debugged
-#Regions <- Regions %>% .[!(. %like% 'essa')]
 
 ## Set holdout to 0 because for now we'll just run the cleaning and stacker line plots on the full model
 holdouts <- 0
@@ -219,10 +171,10 @@ stack <- mclapply(Regions, function(x)
 
 # Load and combine estimates
 mbg <- list(
-  paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_0_unraked_summary.csv') %>% 
+  paste0(outputdir, '/#REDACTED/', indicator, '_admin_0_unraked_summary.csv') %>% 
     fread %>%
     .[, lvl := 'adm0'],
-  paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_admin_1_unraked_summary.csv') %>% 
+  paste0(outputdir, '/#REDACTED/', indicator, '_admin_1_unraked_summary.csv') %>% 
     fread %>%
     .[, lvl := 'adm1']
 )  %>% 
@@ -231,10 +183,10 @@ mbg <- list(
 # raked results
 if (raked) {
   mbg_raked <- list(
-    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_0_raked_', measure, '_summary.csv')) %>% 
+    paste0(outputdir, '/#REDACTED/', indicator, paste0('_admin_0_raked_', measure, '_summary.csv')) %>% 
       fread %>%
       .[, lvl := 'adm0'],
-    paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, paste0('_admin_1_raked_', measure, '_summary.csv')) %>%
+    paste0(outputdir, '/#REDACTED/', indicator, paste0('_admin_1_raked_', measure, '_summary.csv')) %>%
       fread %>%
       .[, lvl := 'adm1']
   )  %>% 
@@ -264,32 +216,23 @@ mbg <- merge(mbg, dat,
              all.x = T)
 
 # save
-write.csv(mbg, paste0(outputdir, '/pred_derivatives/admin_summaries/', indicator, '_mbg_data_stackers.csv' ))
+write.csv(mbg, paste0(outputdir, '/#REDACTED/', indicator, '_mbg_data_stackers.csv' ))
 
 ##classify datapoints based on HAP vetting
 #update vetting sheet if necessary
-#original authorization must be done locally (doesnt seem to work in IDE and must be interactively done)
-if (new_vetting) {
-  setwd(doc.dir) 
-  #googledrive::drive_auth(cache='drive.httr-oauth')
-  #googledrive::drive_auth(use_oob=T)
-  googledrive::drive_download(as_id('1nCldwjReSIvvYgtSF4bhflBMNAG2pZxE20JV2BZSIiQ'), overwrite=T)
-}
+#REDACTED
 #read in vetting sheet
 vetting <- file.path(doc.dir, 'HAP Tracking Sheet.xlsx') %>% readxl::read_xlsx(sheet='1. Vetting', skip=1) %>% 
   as.data.table %>% 
   .[, .(nid, vetting=`HAP Vetting Status`, svy_iso3=ihme_loc_id)] %>%  #subset to relevant columns
-  unique(., by=names(.)) #TODO find out why there are duplicates in the sheet
-
-#Fix name for bobby =)
-vetting[vetting=='Not started', vetting := 'Adequate']
+  unique(., by=names(.)) %>% 
+ .[vetting=='Not started', vetting := 'Adequate']
 
 #merge onto data
 mbg <- merge(mbg, vetting, by='nid', all.x=T)
 
 #define colorscale
 # build color scheme for the vetting sheet values
-# TODO make this code more robust for people who do not have the same schema
 vetting_colors <- c("Adequate"='grey4', 
                     "Problematic"='darkorange1',
                     "Completed"='forestgreen',
@@ -304,14 +247,6 @@ dir.create(paste0(outputdir, '/diagnostic_plots/'))
 
 if (use_stacking_covs) {
 
-  # plot covariate weights
-  # message('Making covariate weight plots')
-  # get_cov_weights(indicator,
-  #                 indicator_group,
-  #                 run_date,
-  #                 Regions,
-  #                 outputdir)
-  
   # plot stackers over time aggregated to admins
   message('Making time series plots for stackers by admin unit')
   mclapply(Regions %>% rev, function(x) 
@@ -345,153 +280,4 @@ plot_hyperparameters(indicator = indicator,
                      regs = Regions,
                      debug=F)
 
-stop("this is all so far")
-
-# Global diagnostics -------------------------------
-
-# if global model is finished
-if (length(Regions) == 14) {
-  
-  
-  # Make global results map --------------------------------------------------
-  
-  library('png')
-  library('gridExtra')
-  
-  message('Plotting global maps')
-  file.path(core_repo, 'diagnostics/06_plot_global_map.R') %>% source
-  
-  # set arguments
-  raked_map <- raked
-  raked_measure_map <- ifelse(raked, measure, NULL)
-  map_years <- c(2000, 2005, 2010, 2017)
-  map_levels <- c('admin1', 'admin2')
-  
-  # map mean model results
-  map_model_results(indicator,
-                    indicator_group,
-                    run_date,
-                    type = 'mean',
-                    raked = raked_map,
-                    lvl_years = map_years,
-                    lvl_colors = 'magma',
-                    lvl_limits = c(0, 1),
-                    include_diff = TRUE,
-                    geo_levels = map_levels,
-                    plot_by_year = TRUE,
-                    plot_combined = FALSE,
-                    file_type = 'png',
-                    raked_measure = raked_measure_map)
-  
-  # map uppper model results
-  map_model_results(indicator,
-                    indicator_group,
-                    run_date,
-                    type = 'upper',
-                    raked = raked_map,
-                    lvl_years = map_years,
-                    lvl_colors = 'magma',
-                    lvl_limits = c(0, 1),
-                    include_diff = TRUE,
-                    geo_levels = map_levels,
-                    plot_by_year = TRUE,
-                    plot_combined = FALSE,
-                    file_type = 'png',
-                    raked_measure = raked_measure_map)
-  
-  # map lower model results
-  map_model_results(indicator,
-                    indicator_group,
-                    run_date,
-                    type = 'lower',
-                    raked = raked_map,
-                    lvl_years = map_years,
-                    lvl_colors = 'magma',
-                    lvl_limits = c(0, 1),
-                    include_diff = TRUE,
-                    geo_levels = map_levels,
-                    plot_by_year = TRUE,
-                    plot_combined = FALSE,
-                    file_type = 'png',
-                    raked_measure = raked_measure_map)
-  
-  # function to combine mean, upper, and lower into one pdf
-  combine_plots <- function(ad, years) {
-    # setup plot
-    pdf(file = paste0(outputdir, 'results_maps/', indicator, if (raked_map) '_raked_' else '_unraked_', ad, '.pdf'), width = 8, height = 12)
-    # loop over years
-    for (yr in years) {
-      # load rasters
-      img1 <- readPNG(paste0(outputdir, 'results_maps/', indicator, '_upper', if (raked_map) '_raked_' else '_unraked_', ifelse(is.null(raked_measure), '', paste0(raked_measure, '_')), ad, '_', yr, '.png'))
-      img2 <- readPNG(paste0(outputdir, 'results_maps/', indicator, '_mean', if (raked_map) '_raked_' else '_unraked_', ifelse(is.null(raked_measure), '', paste0(raked_measure, '_')), ad, '_', yr, '.png'))
-      img3 <- readPNG(paste0(outputdir, 'results_maps/', indicator, '_lower', if (raked_map) '_raked_' else '_unraked_', ifelse(is.null(raked_measure), '', paste0(raked_measure, '_')), ad, '_', yr, '.png'))
-      img_list <- list(img1, img2, img3)
-      # arrange plot
-      gl = lapply(img_list, rasterGrob)
-      grid.arrange(grobs=gl)
-    }
-    # finish plot
-    dev.off()
-  } # end function
-  
-  # apply function to all admin levels
-  for (lvl in map_levels) {
-    combine_plots(ad = lvl, years = map_years)
-  }
-  
-  
-  # Make model fit statistics --------------------------------------------------
-  
-  # fit statistics for prevalence
-  if (measure == 'prevalence') {
-    
-    # Combine csv files
-    csvs <- list.files(outputdir, pattern = 'input_data_(.*).csv', full.names = T)
-    csv_master <- rbindlist(lapply(csvs, fread))
-    csv_master[, V1 := NULL]
-    write.csv(csv_master, file=paste0(outputdir, '/input_data.csv'))
-    
-    # Get in and out of sample draws
-    run_in_oos <- get_is_oos_draws(ind_gp        = indicator_group,
-                                   ind           = indicator,
-                                   rd            = run_date,
-                                   ind_fm        = 'binomial',
-                                   model_domain  = 'africa',
-                                   age           = 0,
-                                   nperiod       = length(year_list),
-                                   yrs           = year_list,
-                                   get.oos       = as.logical(makeholdouts),
-                                   year_col      = 'year',
-                                   write.to.file = TRUE,
-                                   shapefile_version = modeling_shapefile_version)
-    
-    # Set out_dir
-    dir.create(paste0(outputdir, '/summary_metrics/'), recursive = T, showWarnings = F)
-    
-    # Calculate and save PV summary statistics
-    draws.df <- fread(paste0(outputdir, '/output_draws_data.csv'))
-    pvtab <- rbindlist(lapply(list(c('oos'), c('oos', 'year'), c('oos', 'region')), function(results_by) {
-      pv <- get_pv_table(d               = draws.df,
-                         indicator_group = indicator_group,
-                         rd              = run_date,
-                         indicator       = indicator,
-                         aggregate_on    = c('country', 'ad1', 'ad2'),
-                         result_agg_over = results_by,
-                         coverage_probs  = c(25, 50, 75, 90, 95),
-                         plot_ci         = TRUE,
-                         draws           = as.numeric(samples),
-                         save_csv        = FALSE,
-                         out.dir         = paste0(outputdir, '/summary_metrics/'))
-      ldply(pv, .id = 'Level')
-    }), fill = T)
-    write.csv(pvtab, file = paste0(outputdir, '/summary_metrics/pv_metrics.csv'), row.names=F)
-    
-    # plot results
-    source(paste0(core_repo, 'diagnostics/07_plot_pv_results.R'))
-    plot_pv_results(indicator, 
-                    indicator_group, 
-                    run_dates = run_date,
-                    save_file = paste0(outputdir, '/summary_metrics/pv_metrics.pdf'))
-  }
-  
-}
+##

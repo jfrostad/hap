@@ -1,24 +1,17 @@
 ##############################################################################
-## MBG launch, aggregate results, and diagnostics launcher script for ORT
-## Indicators: ors, rhf, ors_or_rhf, zinc
-## Written by Kirsten Wiens
-## Created 2018/02/23
-##############################################################################
-#source('/homes/jfrostad/_code/lbd/hap/extract/2a_launcher.R') 
+## MBG launch, aggregate results, and diagnostics launcher script 
+#Redacted
 
 ## Setup -------------------------------------------------------------------------
 
 # clear environment
 rm(list = ls())
 
-# set general arguments
-user            <- Sys.info()['user']
-repo            <- file.path('/homes', user, '_code/lbd/hap/')
-indicator_group <- 'cooking'
+#Redacted
 
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
-package_list <- c(t(read.csv(paste0(repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+package_list <- c(t(read.csv(paste0('#Redacted/package_list.csv'), header=FALSE)))
 source(paste0(repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = repo)
 
@@ -40,10 +33,10 @@ for (s in stages) {
     mymem           <- '500G'
 
     # set up qsub
-    sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
+    sys.sub <- paste0('qsub -e #Redacted', 
                       '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                       '-l fthread=10 -l h_rt=00:16:00:00 -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-    r_shell <- file.path(repo, 'mbg_central/share_scripts/shell_sing.sh')
+    r_shell <- file.path(repo, '#Redacted.sh')
     script <- file.path(repo, 'extract/2b_postextract.R')
     args <- paste(s, repo, indicator_group)
 

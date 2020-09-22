@@ -1,5 +1,4 @@
 ###functions for stacking
-#Daniel Casey
 
 #Extract Covariates
 #About: Reads in a data table (with latitude and longitude) and a list of rasters/bricks/stacks and extracts the values at the points
@@ -17,46 +16,41 @@
 #return_only_results: return only the covariate columns? (better for cbinding)
 extract_covariates = function(df, covariate_list, id_col = NULL, reconcile_timevarying = T, period_var = NULL, return_only_results = F, centre_scale = F, period_map = NULL){
   #Load libraryd packages. Should be redundent
-
+  
   library('raster')
   library('data.table')
   df = copy(df) #data table does weird scoping things. Do this just in case
-
+  
   #create an id column
   if(is.null(id_col)){
     df[,rrrr := 1:nrow(df)]
     id_col = 'rrrr'
   }
-
+  
   # fill in standard 5-year period map if it's missing
   if(is.null(period_map)) period_map <- make_period_map(modeling_periods = c(2000,2005,2010,2015))
-
-  #the periods thing is kind of dumb. for now, confirm that the year variable is in four periods to match the raster bricks
-  # if(length(unique(df[,year]))!=4){
-  #   stop("Your input data frame's year column is not in the 4 period mode to match the 4 periods of likely raster bricks \n Please fix and rerun")
-  # }
-
-
+  
+  
   #if covariate list is not actually a list, convert it to a list
   if(class(covariate_list) != 'list'){
-
+    
     #if a brick or a stack, extract the basename
     if(class(covariate_list) %in% c('RasterBrick', 'RasterStack')){
       #get the list of brick names
       #find the prefixes, remove the .### at the end of the brick
       brick_names = unique(gsub("(\\.[0-9]+)$","",names(covariate_list)))
-
+      
       #convert the brick into a list the rest of the function expects (e.g. time varying vs. single)
       #assuming I've done this properly, this will convert the raster brick into a list where items in the list are seperated by the prefix
       #(assumes a .### at the end of the name in the raster brick object refers to the period)
-
+      
       covariate_list = setNames(lapply(brick_names, function(x) covariate_list[[grep(x, names(covariate_list), value =T )]]),brick_names)
-
-
+      
+      
     }
-
+    
   }
-
+  
   #rename the raster bricks
   #borrowed from some of the covariate functions
   #converts the time varying covariate names into something that places nicer with the extract function
@@ -66,99 +60,97 @@ extract_covariates = function(df, covariate_list, id_col = NULL, reconcile_timev
       tv_cov_names = append(tv_cov_names, lll)
       if (nrow(period_map) > 1)  names(covariate_list[[lll]]) = paste0('XXX',1:length(names(covariate_list[[lll]]))) #use XXX as a place holder
     }
-
+    
   }
-
+  
+  
+  
   #extract the rasters by points
   locations = SpatialPoints(coords = as.matrix(df[,.(longitude,latitude)]), proj4string = CRS(proj4string(covariate_list[[1]])))
-
+  
   cov_values = as.data.frame(lapply(covariate_list, function(x) raster::extract(x, locations)))
-
+  
   #fix the names of the time varying covariates
   if (nrow(period_map) > 1)  names(cov_values) = sub('XXX', '', names(cov_values))
-
+  
   #right now 4 periods are assumed-- make more flexible later
-
+  
   #reconcile time varying covariates
   #start by converting the year variable into periods
   #if period is empty -- infer
   if(is.null(period_var)){
-
+    
     year_map = as.data.frame(sort(unique(df[,year])))
     year_map$period_hold = 1:nrow(year_map)
     names(year_map) = c('year','period_hold')
-
+    
     df = merge(df, year_map, by = 'year', sort =F) #sorting screws up things relative to cov values
     period_var = 'period_hold'
   }
-
+  
   #sort the dataset by rid
-
+  
   setorderv(df, cols = c(id_col))
-
-
+  
+  
   if(return_only_results){
     df = df[, c(id_col, 'longitude', 'latitude', period_var), with = F]
   }
-
+  
   #combine the dataset with the covariate extractions
   df = cbind(df, cov_values)
-
+  
   #reshape to fill out the columns-- these just get the tv cov names in a way that is needed for two different efforts
   #make this less likey to cause a hiccup
   tv_cov_colnames = grep(paste(tv_cov_names, collapse = "|"), names(df), value = T) #unlisted
   tv_cov_colist = lapply(tv_cov_names, function(x) grep(x, names(df), value = T))
-
+  
   #Keep only where period of the data matches the period of the covariate for time varying covariates
   if(reconcile_timevarying){
     #reshapes the time varying covariates long
     df = melt(df, id.vars = names(df)[!names(df) %in% tv_cov_colnames], measure = tv_cov_colist, value.name = tv_cov_names, variable.factor =F)
-
+    
     #melt returns different values of variable based on if its reshaping 1 or 2+ columns.
     #enforce that it must end with the numeric after the period
     df <- df[,variable:= as.numeric(substring(variable,regexpr("(\\.[0-9]+)$", variable)[1]+1))]
-
-    #if(length(tv_cov_colist)==1 & (packageVersion("data.table") < package_version("1.10.0"))){
-    #  setnames(df,paste0(tv_cov_names[[1]],'1'), tv_cov_names)
-    #}
-
+    
     #keep only where the periods match
     df <- merge(df, period_map, by.x = period_var, by.y = 'data_period')
     df = df[period_id == variable, ]
-
+    
     #clean up
     df = df[,variable := NULL]
-
+    
   }
-
+  
   #clean up
   if(period_var=='period_hold'){
     df = df[,period_hold := NULL]
   }
-
+  
   #centre_scale the results
   if(centre_scale){
     design_matrix = data.frame(df[,names(covariate_list)[!grepl('gaul', names(covariate_list))], with =F])
     cs_df <- getCentreScale(design_matrix)
     design_matrix <- centreScale(design_matrix, df = cs_df)
-
+    
     #replace the df columns with the design matrix
     df[, names(covariate_list)[!grepl('gaul', names(covariate_list))] := NULL]
     df = cbind(df, design_matrix)
-
+    
   }
-
+  
   df <- df[, year := NULL]
-
+  
   #return the data frame with the year-location specific covariates
   if(return_only_results & reconcile_timevarying){
     df = df[, names(df)[!names(df) %in% c('latitude','longitude')], with = F]
   }
-
+  
   #sort df just to be sure
   setorderv(df, cols = c(id_col))
   if(id_col == 'rrrr') df[,rrrr := NULL]
-
+  
   if(centre_scale){
     ## add on rows to covs_cs_df for the gaul_codes
     to.add <- colnames(df)[grepl("gaul_code_", colnames(df))]
@@ -176,7 +168,6 @@ extract_covariates = function(df, covariate_list, id_col = NULL, reconcile_timev
 
 
 #for parsing gams string functions
-#stolen from the seeg stuff
 parseArgsS <- function(l) {
   # parse a list of additional arguments to smoothers in gamTrans
   stopifnot(is.list(l))
@@ -267,7 +258,7 @@ fit_gam = function(df, covariates = all_fixed_effects, additional_terms = NULL, 
 
 #a wrapper function for fitting gam/bam models in the stacking framework. It'll run 1+k times internally
 #arguments are the same as fit gam above.
-#basically a wrapper function for the fit_gam function (which is its own wrapper function-- hooray for rabbit holes)
+#basically a wrapper function for the fit_gam function 
 fit_gam_child_model = function(df, model_name = 'gam', fold_id_col = 'fold_id', covariates = all_fixed_effects,
                                additional_terms = NULL, weight_column = NULL, bam =F, spline_args = list(bs = 'ts', k = 3),
                                auto_model_select =T, indicator = indicator, indicator_family = 'binomial', cores = 'auto'){
@@ -321,144 +312,6 @@ fit_gam_child_model = function(df, model_name = 'gam', fold_id_col = 'fold_id', 
   #print(return_cols)
   #set up with for the return call
   return(setNames(list(df[,return_cols,with = F], full_model),c('dataset',paste0(model_name))))
-}
-
-# fit_gbm ---------------------------------------------------------------------------------------------------------------------------
-#
-#adapted from Roy's BRT covs function-- took away the year specific bit. GBMs==BRTs
-#df: a data table (post extract covariates)
-#covariates: rhs of formula specifying the covariates/columns to be used to help fit the model
-#weight_column: column in the data table that specifies the weight
-#tc: tree complexity
-#lr: learning rate
-#bf: bag fraction
-#cv: cross-validation folds
-#indicator: dependant variable.
-#indicator_family: Binomial models assume N as the # of trials and are actually modelled with poission with N as the offset
-
-fit_gbm= function(df, covariates = all_fixed_effects, additional_terms = NULL, weight_column = NULL, tc = gbm_tc, lr = gbm_lr, bf = gbm_bf, cv = gbm_cv, nminobs = gbm_nminobs, ntrees = gbm_ntrees,
-                  indicator, indicator_family = 'binomial', plot.main = F){
-  
-  library(dismo)
-  
-  # check to see if its a vector of characters or a psudo-formula
-  covariates = format_covariates(add_additional_terms(covariates,additional_terms))
-  
-  df = copy(df)
-  
-  # format weights
-  if(!is.null(weight_column)){
-    df[,data_weight := get(weight_column)]
-  } else{
-    df[,data_weight := 1]
-  }
-  weight_column = 'data_weight' #specify the column
-  
-  # BRT
-  message(paste('Fitting GBM/BRT with tc:',tc,'lr:',lr,'bf:',bf,'cv:',cv))
-  
-  # create gbm formula
-  df <- as.data.table(df)
-  df[, response := round(get(indicator), 0)]
-  df[, log_n  := log(N)]
-  cov_names <- paste(covariates, collapse = ' + ')
-  gbm_formula <- formula(paste0('response ~ offset(log_n) + ', cov_names))
-  
-  # run gbm model a la Josh Osborne
-  mod <- gbm(gbm_formula,
-             distribution      = 'poisson',
-             data              = df, 
-             n.trees           = ntrees, 
-             interaction.depth = tc,
-             shrinkage         = lr,
-             n.minobsinnode    = nminobs,
-             weights           = df[,get(weight_column)],
-             bag.fraction      = bf,
-             train.fraction    = 1-(1/cv),
-             verbose           = F)
-  
-  if(is.null(mod)) stop('BRT ATTEMPT FAILED')
-  
-  return(mod)
-}
-
-# fit_gbm_child_model ---------------------------------------------------------------------------------------------------
-#
-#a function to fit the GBMs for stacking
-#basically a wrapper function for the fit_gam function (which is its own wrapper function-- hooray for rabbit holes)
-#model_name = what do you want the full fit model to be called upon the return. Must sync with subsquent functions
-
-fit_gbm_child_model = function(df, model_name = 'gbm', fold_id_col = 'fold_id', covariates = all_fixed_effects, additional_terms = NULL, weight_column = NULL,
-                               tc = gbm_tc, lr = gbm_lr, bf = gbm_bf, cv = gbm_cv, nminobs = gbm_nminobs, ntrees = gbm_ntrees, indicator = indicator, indicator_family = indicator_family, cores = 'auto'){
-  
-  #######The function#######
-  library(parallel)
-  
-  #prevent df scoping
-  df = copy(df)
-  
-  #fit the baby trees in parallel
-  folds = unique(df[,get(fold_id_col)])
-  
-  message('Fitting baby gbm models in parallel')
-  # Set multithreading to serial for `mclapply()`:
-  set_serial_threads()
-  # Determine appropriate number of cores to use in `mclapply()`
-  if(cores == 'auto') cores <- get_max_forked_threads(nobjs = length(folds))
-  baby_models = mclapply(folds, function(fff)
-    fit_gbm(df = df[get(fold_id_col) != fff,],
-            covariates = covariates,
-            additional_terms   = additional_terms,
-            weight_column      = weight_column,
-            tc                 = tc,
-            lr                 = lr,
-            bf                 = bf,
-            cv                 = cv,
-            nminobs            = nminobs,
-            ntrees             = ntrees,
-            indicator          = indicator,
-            indicator_family   = indicator_family,
-            plot.main = F), mc.cores = cores)
-  # Return to multithreading (if any):
-  set_original_threads()
-  
-  for(fff in folds){
-    #use the data fit on K-1 of the folds to fit on the help out fold
-    df[get(fold_id_col)==fff, paste0(model_name,'_cv_pred') := predict(baby_models[[fff]], df[get(fold_id_col)==fff,], n.trees=baby_models[[fff]]$n.trees, type='response')]
-  }
-  
-  
-  #fit GBM
-  message('Fitting Full GBM')
-  full_model = fit_gbm(df = df,
-                       covariates = covariates,
-                       additional_terms   = additional_terms,
-                       weight_column      = weight_column,
-                       tc                 = tc,
-                       lr                 = lr,
-                       bf                 = bf,
-                       cv                 = cv,
-                       nminobs            = nminobs,
-                       ntrees             = ntrees,
-                       indicator          = indicator,
-                       indicator_family   = indicator_family)
-  
-  
-  #add a model name slot
-  full_model$model_name = model_name
-  
-  #predict the main BRT
-  print(summary(full_model))
-  print(str(full_model))
-  print(full_model)
-  df[,paste0(model_name,'_full_pred') := predict(full_model, df, n.trees = full_model$n.trees, type = 'response')]
-  
-  suffixes = c('_full_pred', '_cv_pred')
-  return_cols = paste0(model_name, suffixes)
-  #print(return_cols)
-  #set up with for the return call
-  return(setNames(list(df[,return_cols,with = F], full_model),c('dataset',paste0(model_name))))
-  
 }
 
 ## fit xgboost child model function ###################################################
@@ -647,14 +500,12 @@ fit_xgboost_child_model <- function(df,
     #return the results for each model/fold
     results <- preds[, .(Resample, model_id, cor, pooled_cor, RMSE, pooled_rmse, delta_rmse, pooled_delta_rmse)] %>% 
       unique(., by=key(.))
-    #results[, pooled_rmse_2 := sqrt(sum(RMSE^2, na.rm=T)/5), by=model_id] #calculate the pooled rmse
     
     #choose the best model based on having lowest pooled rmse below the pooled cor cutoff
     results[, second_best := 0]
     second_best_model_id <- NA
     
     #use instead, the best model that is below the 10% pooled correlation value
-    #TODO make the .1 a fx argument
     xg_ensemble_corr <- quantile(results$pooled_cor, probs=.1)
     results[pooled_delta_rmse == results[pooled_cor < xg_ensemble_corr, pooled_delta_rmse %>% min], 
             `:=` (second_best=1, label=model_id)]
@@ -663,23 +514,7 @@ fit_xgboost_child_model <- function(df,
     message('Found second best tune: #', second_best_model_id, '\ndelta RMSE=',
             results[second_best==1, pooled_delta_rmse %>% max] %>% round(2), 
             '\n-->model had ', xg_ensemble_corr %>% round(2), ' correlation w/ best')
-    
-    # #look for a second best model that satisfies the selected correlation cutoff
-    # while (second_best_model_id %>% is.na) {
-    #   
-    #   message('Searching for second best model using correlation cutoff of ', xg_ensemble_corr)
-    #   min_rmse <- results[pooled_cor<xg_ensemble_corr, min(pooled_rmse)]
-    #   
-    #   # if the min_rmse is >150% of avg. or there is none below cutoff (=is inf.), look again w/ +.05 corr
-    #   if (min_rmse > mean(results$pooled_rmse)*1.5 | is.infinite(min_rmse)) xg_ensemble_corr <- xg_ensemble_corr + 0.05
-    #   else {
-    #     results[pooled_rmse == min_rmse, `:=` (second_best=1, label=model_id)]
-    #     second_best_model_id <- results[second_best==1, model_id %>% max]
-    #     message('Found second best tune: #', second_best_model_id, '\nRMSE=',min_rmse)
-    #   }
-    #   
-    # }
-    
+
     #extract the tune settings from the selected second best model
     second_best_tune <- preds[model_id==second_best_model_id, names(best_tune), with=F][1]
     message('Second best tune, has parameters: \n')
@@ -818,248 +653,6 @@ fit_xgboost_child_model <- function(df,
   
 }
 
-
-#fetch covariate layer
-#given a raster-like object and a period, returns the appropriate layer, assuming chronological order
-fetch_covariate_layer = function(ras, period = 1){
-  if(class(ras) == 'RasterBrick' | class(ras) == "RasterStack"){
-    return(ras[[period]])
-  } else{
-    return(ras)
-  }
-}
-
-# fit_xgb_child_models <- function(df,
-#                                  indicator = indicator,
-#                                  indicator_family = "binomial",
-#                                  outputdir,
-#                                  region,
-#                                  covariates = all_fixed_effects,
-#                                  weight_column = 'weight',
-#                                  xg_model_tune = TRUE,
-#                                  xg_ensemble_corr = .6,
-#                                  hyperparameter_filepath = NULL){
-#   
-#   load_R_packages(c("xgboost", "caret", 'ggrepel'))
-#   #load_R_packages(c("xgboost", "caret", 'caretEnsemble'))
-#   
-#   # Create stacking directory to save results
-#   stack_dir <- paste0(outputdir, "stackers/")
-#   dir.create(stack_dir, showWarnings = F)
-#   
-#   # Create model formula
-#   df <- as.data.table(df)
-#   setnames(df, indicator, "indicator")
-#   form <- as.formula(paste0('indicator ~ ', covariates))
-#   
-#   # Create custom weight column for xgboost, weight * sample size
-#   df[, xg_weight := get(weight_column) * N]
-#   
-#   # Make sure to model in prevalence space if binomial
-#   if (indicator_family == "binomial"){
-#     df[, indicator := indicator / N]
-#     objective_function = "reg:logistic"
-#   }
-#   
-#   # If gaussian indicator make objective function linear
-#   if (indicator_family == "gaussian") objective_function = "reg:linear"
-#   
-#   if (xg_model_tune == F & is.null(hyperparameter_filepath)) {
-#     stop("If you are not tuning xgboost you must provide a filepath to chosen hyperparameters./n
-#          Look at the hyperparameter_filepath argument to this function")
-#   }
-#   
-#   if (xg_model_tune == T) {
-#     message("Model tuning xgboost")
-#     
-#     # Set grid search as default unless filepath is provided
-#     if(is.null(hyperparameter_filepath)) message("Tuning with default hyperparameter settings")
-#     else {
-#       message("Selecting pre-specified hyperparameter grid")
-#       hyperparam <- fread(hyperparameter_filepath)
-#       
-#       # Define grid search from the pre-specified hyperparameter settings
-#       xg_grid <- expand.grid(nrounds = hyperparam$nrounds,
-#                              max_depth = eval(parse(text=hyperparam$max_depth)),
-#                              eta = eval(parse(text=hyperparam$eta)),
-#                              colsample_bytree = .5,
-#                              min_child_weight = 1,
-#                              subsample = 1,
-#                              gamma = 0)
-#       
-#     }
-#     
-#     # Specify the training folds using NID to account for dependence and prevent overfitting
-#     folds <- groupKFold(df$nid, k = 5) 
-#     
-#     # Set cross validation options, default to 5 times repeated 5-fold cross validation
-#     # Selection function is "oneSE" to pick simplest model within one standard error of minimum
-#     train_control <- trainControl(selectionFunction = "oneSE",
-#                                   method = "repeatedcv",
-#                                   number = 5,
-#                                   repeats = 5,
-#                                   index = folds,
-#                                   returnResamp = 'all',
-#                                   savePredictions = 'all')
-#     
-#     # Fit model
-#     xg_fit <- train(form,
-#                            data = df,
-#                            trControl = train_control,
-#                            verbose = F,
-#                            tuneGrid = xg_grid,
-#                            metric = "RMSE",
-#                            method = "xgbTree",
-#                            objective = objective_function,
-#                            weights = df$xg_weight)
-#     
-#     # find the 2nd best model (balance between lowest correlation to best and highest RMSE)
-#     # first pull out the relevant objects from the tuning object
-#     best_tune <- xg_fit$bestTune %>% as.data.table %>% setkey
-#     message('Found best tune, with parameters: \n')
-#     summary(best_tune)
-#     
-#     tune_cols <- key(best_tune) #capture all the tuning params as a col vector
-#     preds <- xg_fit$pred %>% as.data.table %>% setkeyv(., tune_cols)
-#     samps <- xg_fit$resample %>% as.data.table %>% setkeyv(., c(tune_cols, 'Resample'))
-#     
-#     #pull out the best preds
-#     best_preds <- preds[best_tune] %>% setkeyv(., key(samps)) # isolate the predictions from best model
-#     preds <- preds[!best_tune] %>% setkeyv(., key(samps))  # all other predictions
-#     
-#     #merge on the preds and calculate the correlation to the best model
-#     preds <- merge(preds, best_preds[, .(rowIndex, Resample, best_pred=pred)], by=c('rowIndex', 'Resample'))
-#     preds[, model_id := .GRP, by=tune_cols]
-#     setkey(preds, model_id, Resample) #key on the model ID and fold
-#     preds[, cor := corSpearman(pred, best_pred), by=key(preds)]
-#     preds[, pooled_cor := corSpearman(pred, best_pred), by=model_id]
-#     
-#     #add the samp scores to the preds
-#     preds <- merge(preds, samps, by=key(samps)) 
-#     
-#     #return the results for each model/fold
-#     results <- preds[, .(Resample, model_id, cor, pooled_cor, RMSE)] %>% unique(., by=key(.))
-#     results[, pooled_rmse := sqrt(sum(RMSE^2)/5), by=model_id] #calculate the pooled rmse
-#     
-#     #choose the best model based on having lowest pooled rmse below the pooled cor cutoff
-#     results[, second_best := 0]
-#     second_best_model_id <- NA
-#     
-#     #look for a second best model that satisfies the selected correlation cutoff
-#     while (second_best_model_id %>% is.na) {
-#       
-#       message('Searching for second best model using correlation cutoff of ', xg_ensemble_corr)
-#       min_rmse <- results[pooled_cor<xg_ensemble_corr, min(pooled_rmse)]
-#       
-#       # if the min_rmse is >150% of avg. or there is none below cutoff (=is inf.), look again w/ +.05 corr
-#       if (min_rmse > mean(results$pooled_rmse)*1.5 | is.infinite(min_rmse)) xg_ensemble_corr <- xg_ensemble_corr + 0.05
-#       else {
-#         results[pooled_rmse == min_rmse, `:=` (second_best=1, label=model_id)]
-#         second_best_model_id <- results[second_best==1, model_id %>% max]
-#         message('Found second best tune: #', second_best_model_id, '\nRMSE=',min_rmse)
-#       }
-#       
-#     }
-#     
-#     #extract the tune settings from the selected second best model
-#     second_best_tune <- preds[model_id==second_best_model_id, names(best_tune), with=F][1]
-#     message('Second best tune, has parameters: \n')
-#     summary(second_best_tune)
-#     
-#     #rbind the aggregated results too for graphing
-#     agg_results <- results[, .(Resample='pooled', model_id=model_id,
-#                                cor=pooled_cor, RMSE=pooled_rmse, second_best=second_best, label=label)] %>% 
-#       unique(., by='model_id') %>% 
-#       list(., results) %>% 
-#       rbindlist(use.names = T, fill = T)
-#     
-#     #graph the results
-#     plot <- ggplot(agg_results, aes(x=cor, y=RMSE, label=label)) +
-#       geom_point() +
-#       geom_vline(xintercept = xg_ensemble_corr, color='red') +
-#       geom_text_repel(nudge_y = .25, nudge_x=.75) +
-#       facet_wrap(~Resample) +
-#       theme_minimal()
-#     
-#     ggsave(filename = paste0(stack_dir, region, '_xg_ensemble.png'),
-#            plot = plot)
-#     
-#     # Save model fit objects for future use
-#     saveRDS(xg_fit, paste0(outputdir, 'stackers/xg_fit_', region, ".RDS"))
-#     
-#     # Save the best parameters to csv file
-#     write.csv(best_tune, paste0(stack_dir, 'xgboost_best_tune_', region, '.csv'))
-#     write.csv(second_best_tune, paste0(stack_dir, 'xgboost_second_best_tune_', region, '.csv'))
-#     
-#   }
-#   
-#   # 
-#   #   if (xg_model_tune == T) {
-#   #     # Extract best parameters
-#   #     xg_best_tune <- read.csv(paste0(stack_dir, 'xgboost_best_tune_', region, '.csv'))
-#   #   } else {
-#   #     # Extract best parameters from filepath
-#   #     xg_best_tune <- read.csv(hyperparameter_filepath)
-#   #   }
-#   
-#   # Define grid search and
-#   # xg_grid_final <- expand.grid(nrounds = xg_best_tune$nrounds,
-#   #                              max_depth = xg_best_tune$max_depth,
-#   #                              eta = xg_best_tune$eta,
-#   #                              colsample_bytree = .5,
-#   #                              min_child_weight = 1,
-#   #                              subsample = 1,
-#   #                              gamma = 0)
-#   
-#   train_control_final <- trainControl(method = "cv",
-#                                       number = 5,
-#                                       savePredictions = "final")
-# 
-#   message("Fitting xgboost on final tuned hyperparameters")
-#   xg_fit_final <- train(form,
-#                                data = df,
-#                                trControl = train_control_final,
-#                                verbose = F,
-#                                tuneGrid = best_tune,
-#                                metric = "RMSE",
-#                                method = "xgbTree",
-#                                objective = objective_function,
-#                                weights = df$xg_weight)
-#   xg_fit_final_2 <- train(form,
-#                                  data = df,
-#                                  trControl = train_control_final,
-#                                  verbose = F,
-#                                  tuneGrid = second_best_tune,
-#                                  metric = "RMSE",
-#                                  method = "xgbTree",
-#                                  objective = objective_function,
-#                                  weights = df$xg_weight)
-#   
-#   # Plot variable importance ---------------------------------------------
-#   # pdf(file=paste0(stack_dir, region, '_covariate_importance.pdf'),
-#   #     height=8, width=12)
-#   #   lapply(greedy_ensemble$models, function(x) varImp(x) %>% plot)
-#   # dev.off()
-#   
-#   # Extract out of sample and in sample predictions
-#   df[, 'xgboost_cv_pred'   := arrange(xg_fit_final$pred, rowIndex)[,"pred"]]
-#   df[, 'xgboost_full_pred' := predict(xg_fit_final, df)]
-#   df[, 'xgboost2_cv_pred'   := arrange(xg_fit_final_2$pred, rowIndex)[,"pred"]]
-#   df[, 'xgboost2_full_pred' := predict(xg_fit_final_2, df)]
-#   
-#   # Name model for later use in making stack rasters
-#   xg_fit_final$model_name <- "xgboost"
-#   xg_fit_final_2$model_name <- "xgboost2"
-#   
-#   
-#   xgboost <- list(dataset = df[, c('xgboost_cv_pred', 'xgboost_full_pred', 'xgboost2_cv_pred', 'xgboost2_full_pred')],
-#                   xgboost = xg_fit_final,
-#                   xgboost2 = xg_fit_final_2)
-#   return(xgboost)
-# 
-# }
-
-
 #fetch covariate layer
 #given a raster-like object and a period, returns the appropriate layer, assuming chronological order
 fetch_covariate_layer = function(ras, period = 1){
@@ -1080,25 +673,26 @@ produce_stack_rasters = function(covariate_layers = all_cov_layers, #raster laye
                                  period = 1, #period of analysis
                                  child_models = list(),
                                  indicator_family = 'binomial',
-                                 centre_scale_df = NULL){ 
-
+                                 return_children = F,
+                                 centre_scale_df = NULL){ #stacker model
+  
   message(paste0('The Period is ', period))
-
+  
   #fetch the covariates appropriate for the period
   period_covs =brick(lapply(covariate_layers, function(x) fetch_covariate_layer(x,period)))
-
+  
   #create constants -- only flexible for year/period
   year = data.frame(year = (1995 +period*5))
-
+  
   #predict the various models. This is super strict with variable names (and beware scoping issues with the names)
   #brick the results
-  stacker_predictors = brick(lapply(child_models, function(x) predict_model_raster(x,
-                                                                                   period_covs,
-                                                                                   constants = year,
-                                                                                   indicator_family = indicator_family,
-                                                                                   centre_scale_df = centre_scale_df)))
-
-
+  stacker_predictors <- brick(lapply(child_models, function(x) predict_model_raster(x,
+                                                                                    period_covs,
+                                                                                    constants = year,
+                                                                                    indicator_family = indicator_family,
+                                                                                    centre_scale_df = centre_scale_df
+  )))
+  
   return(stacker_predictors)
 }
 
@@ -1108,7 +702,7 @@ produce_stack_rasters = function(covariate_layers = all_cov_layers, #raster laye
 make_stack_rasters <- function(covariate_layers = all_cov_layers,
                                period = NULL,
                                child_models = list(),
-                               indicator_family = "binomial",
+                               indicator_family = 'binomial',
                                rd = run_date,
                                re = reg,
                                ind_gp = indicator_group,
@@ -1118,37 +712,23 @@ make_stack_rasters <- function(covariate_layers = all_cov_layers,
                                ...) {
   
   ## first, save child_models for use in get.cov.wts in post_estiamtion if not other places too
-  save(child_models, file = sprintf(
-    "/share/geospatial/mbg/%s/%s/output/%s/child_model_list_%s_%i.RData",
-    ind_gp, ind, rd, re, ho
-  ))
+  save(child_models, file='<<<< FILEPATH REDACTED >>>>')
   
-  if (is.null(period)) {
-    period <- 1:4
+  if(is.null(period)){
+    period = 1:4
   }
   
-  ## Create rasters from the child models
-  res <- lapply(period, function(the_period) produce_stack_rasters(
-    covariate_layers = covariate_layers, # raster layers and bricks. Covariate rasters essentially
-    period = the_period, # period of analysis. Fed in from the lapply
-    child_models = child_models, # a list of model objects for the child learners
-    indicator_family = indicator_family,
-    centre_scale_df = centre_scale_df
-  ))
-  
+  res = lapply(period, function(the_period) produce_stack_rasters(covariate_layers = covariate_layers, #raster layers and bricks. Covariate rasters essentially
+                                                                  period = the_period, #period of analysis. Fed in from the lapply
+                                                                  child_models = child_models, #a list of model objects for the child learners
+                                                                  indicator_family = indicator_family,
+                                                                  centre_scale_df = centre_scale_df))
   
   ## Prep the rasters to be ordered in the following order:
   ## raster_brick[[child_models]][[period]]
- ret_obj <- lapply(names(child_models), function(x_cn) {
+  ret_obj <- lapply(names(child_models), function(x_cn) {
     raster::brick(lapply(period, function(x_t) res[[x_t]][[x_cn]]))
   })
-  
-  ## Fix for single period (rename with suffix ".1")
-  if(length(period) == 1) {
-    for(i in 1:length(ret_obj)) {
-      names(ret_obj[[i]]) <- paste0(names(child_models)[i], ".1")
-    }
-  }
   
   ## Set names of the output raster list
   names(ret_obj) <- names(child_models)
@@ -1156,46 +736,43 @@ make_stack_rasters <- function(covariate_layers = all_cov_layers,
   # Make sure that the raster brick dimensions and names are all correct
   stopifnot(assertthat::are_equal(length(ret_obj), length(names(child_models))))
   
-
-  
   j <- 0
   for (x_t in ret_obj) {
     j <- j + 1
     stopifnot(assertthat::are_equal(names(x_t), paste0(names(child_models)[j], ".", period)))
   }
   
-  
-  # return!
   return(ret_obj)
 }
 
-
+# predict_model_raster -----------------------------------------------------------------------------------
+#
 #predict model raster: given a model object and some covariates, predict out the results in raster form
 #model call: the model object you want to create rasters from
 #covariate_layers: a list of raster-like objects named identically to the models fit on the tabular data
 #constants: do any constants need to be fed to the prediction step?
 #indicator_family: model family. Specifies what sorts of transformations need doing
 #to do: add a transform switch
+
 predict_model_raster = function(model_call,
                                 covariate_layers,
                                 constants = NULL,
                                 indicator_family = 'binomial',
                                 centre_scale_df = NULL){
-
-
-  message(paste0('predicting out:', model_call$model_name))
   
+  
+  message(paste0('predicting out:', model_call$model_name))
   #convert the raster objects into a named matrix
   dm = as.data.frame(stack(covariate_layers),xy =T)
-
+  
   #apply centre scaling
   if(!is.null(centre_scale_df)){
     cs_dm = centreScale(dm[,names(covariate_layers)], df = centre_scale_df)
     dm = cbind(dm[,c('x','y')], cs_dm)
   }
-
+  
   orig_names = names(dm)
-
+  
   #add constants(if present) to the raster
   if(!is.null(constants)){
     dm = cbind(dm, constants)
@@ -1203,63 +780,70 @@ predict_model_raster = function(model_call,
   #create a template
   dm$rid = 1:nrow(dm)
   template = dm[,c('rid','x','y')]
-
+  
   #drop rows with NA data
   dm = na.omit(dm)
-
+  
+  
   #if a gam or a bam
+  #class(model_call)
   if(inherits(model_call, 'gam') | inherits(model_call, 'bam')){
-
-    ret_obj = predict(model_call, newdata =dm, type = 'response')
-
-  } else if(inherits(model_call, 'gbm')){
-
-        ret_obj = predict(model_call, newdata=dm, n.trees = model_call$n.trees, type = 'response')
-
-  } else if(inherits(model_call, 'glmnet')){
     
+    ret_obj = predict(model_call, newdata =dm, type = 'response')
+    
+  } else if(inherits(model_call, 'gbm')){
+    
+    ret_obj = predict(model_call, newdata=dm, n.trees = model_call$n.trees, type = 'response')
+    
+  } else if(inherits(model_call, 'glmnet')){
     #glmnet is dumb and wants a matrix for new data
+    
+    
     dm_n = names(dm)
     dm = as.matrix(dm)
     colnames(dm) = dm_n
-
+    
+    #predict(object, newx, s = NULL, type=c("link","response","coefficients","nonzero","class"), exact = FALSE, offset, ...)
+    
     ret_obj = predict(model_call, newx = data.matrix(dm[,rownames(model_call$beta)]), s=model_call$cv_1se_lambda, type = 'link')
-
+    
     #backtransform into probability/percentage space
     if( indicator_family=='binomial'){
       ret_obj = invlogit(ret_obj)
     }
-
-
+    
+    
     #return dm to its data frame form
     dm = data.frame(dm)
     colnames(ret_obj) = 'ret_obj'
   } else if(inherits(model_call, 'randomForest')){
-
+    
     ret_obj = predict(model_call, newdata=dm, type = 'response')
-
+    
     #back transform if binomial
     if( indicator_family=='binomial'){
       ret_obj = invlogit(ret_obj)
     }
-
+    
   } else if(inherits(model_call, 'earth')){
     ret_obj = predict(model_call, newdata=dm, type = 'response')
     colnames(ret_obj) ='ret_obj'
-
-  } else if (inherits(model_call, c('train', 'caretEnsemble', 'caretStack'))) {
+    
+  } else if (inherits(model_call, 'train')) {
     # All caret objects use this framework
     ret_obj = predict(model_call, newdata = dm)
-  } 
+  }
   
   #convert back to a raster
+  
+  #rasterFromXYZ(xyz, res=c(NA,NA), crs=NA, digits=5)
   ret_obj = cbind(data.frame(rid = dm[,c('rid')]), ret_obj = ret_obj)
-
+  
   #restore to former glory
   ret_obj= merge(template, ret_obj, by = 'rid', all.x =T)
   setorder(ret_obj, rid)
   ret_obj = rasterFromXYZ(ret_obj[,c('x','y','ret_obj')], res = res(covariate_layers[[1]]), crs=crs(covariate_layers[[1]]))
-
+  
   #return the object
   return(setNames(ret_obj,model_call$model_name))
 }
@@ -1274,41 +858,41 @@ glm_stacker = function(df, #the dataset in data table
                        indicator = indicator, #the indicator of analysis
                        indicator_family = indicator_family){ #indicator family (e.g. binomial)
   ##start function##
-
+  
   #copy dataset to avoid weird data table scoping issues
   df = copy(df)
-
+  
   #format the outcome variable depending on the family
   if(indicator_family == 'binomial'){
     df[, failures := N-get(indicator)] #failures in the sense they didn't get sick
     outcome = df[, .(get(indicator),failures)]
     names(outcome)[1] = indicator
   } else{
-
+    
     outcome = df[,.(get(indicator))]
     names(outcome)[1] = indicator
   }
-
+  
   outcome = as.matrix(outcome)
-
+  
   #format the child model results into the glm format
   #create new columns to hold the cv results, which are then replaced with the full results upon prediction
   df[, (model_names) := lapply(model_names, function(mn) get(paste0(mn,'_cv_pred')))]
-
+  
   #collapse the model names to a basic formula
   glm_formula = as.formula(paste0('outcome~',paste(model_names, collapse = '+')))
   stacker = glm(glm_formula, family = indicator_family, data = df)
-
+  
   #predict the results as fit from the crossvalidated stuff
   df[,stacked_cv_pred := predict(stacker, df, type = 'response')]
-
+  
   #overwrite the columns to work on the full fit child modules
   df[, (model_names) := lapply(model_names, function(mn) get(paste0(mn,'_full_pred')))]
   df[,stacked_pred := predict(stacker, df, type = 'response')]
-
+  
   #return the dataframe and the stacker model
   return(setNames(list(df[,stacked_pred], stacker),c('dataset','stacker_model'))) #[,.(stacked_pred)]
-
+  
 }
 
 #Stack models using GAM/BAM
@@ -1326,27 +910,27 @@ gam_stacker = function(df, #the dataset in data table
                        indicator_family = indicator_family,
                        cores = 'auto'){
   ##start function##
-
+  
   #copy dataset to avoid weird data table scoping issues
   df = copy(df)
-
+  
   #format the outcome variable depending on the family
   if(indicator_family == 'binomial'){
     df[, failures := N-get(indicator)] #failures in the sense they didn't get sick
     outcome = df[, .(get(indicator),failures)]
     names(outcome)[1] = indicator
   } else{
-
+    
     outcome = df[,.(get(indicator))]
     names(outcome)[1] = indicator
   }
-
+  
   outcome = as.matrix(outcome)
-
+  
   #format the child model results into the glm format
   #create new columns to hold the cv results, which are then replaced with the full results upon prediction
   df[, (model_names) := lapply(model_names, function(mn) get(paste0(mn,'_cv_pred')))]
-
+  
   #Fit the gam as the stacker
   stacker = fit_gam(df = df,
                     covariates = paste(model_names, collapse = ' + '),
@@ -1358,28 +942,28 @@ gam_stacker = function(df, #the dataset in data table
                     indicator = indicator,
                     indicator_family = indicator_family,
                     cores = cores)
-
+  
   stacker$model_name = 'gam_stacker'
-
+  
   #predict the results as fit from the crossvalidated stuff
   df[,stacked_cv_pred := predict(stacker, df, type = 'response')]
-
+  
   #overwrite the columns to work on the full fit child modules
   df[, (model_names) := lapply(model_names, function(mn) get(paste0(mn,'_full_pred')))]
   df[,stacked_pred := predict(stacker, df, type = 'response')]
-
+  
   #return the dataframe and the stacker model
   return(setNames(list(df[,stacked_pred], stacker),c('dataset','stacker_model'))) #[,.(stacked_pred)]
-
+  
 }
 
 #fit random forests
 fit_rf = function(df, covariates = all_fixed_effects, additional_terms = NULL, ntree = 1000, indicator, indicator_family = 'binomial'){
   df = copy(df)
-
+  
   #add additional terms if requested
   the_covs = format_covariates(add_additional_terms(covariates,additional_terms))
-
+  
   #random forest doesn't have a binomial or possion option. Use emperical logit (this also keeps it consistent with other methods that return logit probabilities)
   #create outcome variable
   if(indicator_family == 'binomial' | indicator_family == 'poisson'){
@@ -1389,15 +973,15 @@ fit_rf = function(df, covariates = all_fixed_effects, additional_terms = NULL, n
   } else{
     df[,y:= get(indicator)]
   }
-
-
+  
+  
   #fit a random forest
   message(paste0('Fitting Random Forest with ntree: ', ntree))
   model = randomForest(x = df[, the_covs, with = F] ,y = df[,y] , ntree = ntree)
-
+  
   return(model)
-
-
+  
+  
 }
 #fit a random forest model for stacking
 #df: data table
@@ -1413,22 +997,22 @@ fit_rf_child_model = function(df,model_name = 'rf', fold_id_col = 'fold_id', cov
   library(parallel)
   df = copy(df)
   message('Fitting the Full Random Forest')
-
+  
   #format covariate string
   the_covs = format_covariates(add_additional_terms(covariates,additional_terms))
-
+  
   full_model = fit_rf(df,
                       covariates = covariates,
                       additional_terms = additional_terms,
                       ntree = ntree,
                       indicator = indicator,
                       indicator_family = indicator_family)
-
+  
   full_model$model_name = model_name
-
+  
   #fit the child/cv rfs
   folds = unique(df[,get(fold_id_col)])
-
+  
   message("Fitting baby forests in parallel")
   # Set multithreading to serial for `mclapply()`:
   set_serial_threads()
@@ -1450,20 +1034,20 @@ fit_rf_child_model = function(df,model_name = 'rf', fold_id_col = 'fold_id', cov
     #le_preds = predict(baby_forests[[fff]], newdata = sub_data, type = 'response')
     df[get(fold_id_col)==fff, paste0(model_name,'_cv_pred') := predict(baby_models[[fff]], newdata = df[get(fold_id_col)==fff,the_covs, with = F], type = 'response')]
   }
-
+  
   #predict using full model fit earlier
   df[,paste0(model_name,'_full_pred') := predict(full_model,df[,the_covs, with = F],type = 'response')]
-
+  
   #return a subset of the columns. Full pred denotes the fit from the full model. CV pred is the OOS stuff
   suffixes = c('_full_pred', '_cv_pred')
   return_cols = paste0(model_name, suffixes)
-
+  
   #if binomial, take the invlogit
   if( indicator_family=='binomial'){
     df[,return_cols[1] := invlogit(get(return_cols[1]))]
     df[,return_cols[2] := invlogit(get(return_cols[2]))]
   }
-
+  
   #print(return_cols)
   #set up with for the return call
   return(setNames(list(df[,return_cols,with = F], full_model),c('dataset',paste0(model_name))))
@@ -1485,16 +1069,16 @@ emplogit = function(success, N, epsilon = NULL) {
   #http://stats.stackexchange.com/questions/109702/empirical-logit-transformation-on-percentage-data
   #squeeze in the edges
   tform = success/N
-
+  
   #if epsilon is null, follow the instructions from the attached link
   if(is.null(epsilon)){
     epsilon = min(tform[tform >0 & tform <1])/2
   }
-
+  
   tform[tform==0] = tform[tform == 0] + epsilon
   tform[tform==1] = tform[tform==1] - epsilon
   tform = log(tform/(1-tform))
-
+  
   return(tform)
 }
 
@@ -1506,21 +1090,21 @@ emplogit = function(success, N, epsilon = NULL) {
 #parallel: TRUE/FALSE to turn on/off parallelization
 #offset: is there an offset, valid only for poission models. Not fully implemented
 fit_glmnet = function(df, covariates = all_fixed_effects, additional_terms = NULL, weight_column = NULL, alpha = 1, indicator, indicator_family = 'binomial', parallel = FALSE){
-
+  
   library(glmnet)
   library(doParallel)
   df = copy(df)
-
+  
   #add additional terms if requested
   the_covs = format_covariates(add_additional_terms(covariates,additional_terms))
-
+  
   #format weights
   if(!is.null(weight_column)){
     data_weights = df[,get(weight_column)]
   } else {
     data_weights = rep(1,nrow(df))
   }
-
+  
   #create outcome object
   #specifying a binomial object is annoyingly difficult in glmnet. Use emplogit instead.
   if(indicator_family == 'binomial'){
@@ -1535,26 +1119,26 @@ fit_glmnet = function(df, covariates = all_fixed_effects, additional_terms = NUL
   } else {
     response_var = df[,get(indicator)]
   }
-
-
+  
+  
   #create design matrix
   dm = as.matrix(df[,the_covs, with = F])
   colnames(dm) = the_covs
-
+  
   #search for lambda
   #these models are run as gaussian because of the prior transformation.
   message(paste0('Fitting glmnet with alpha: ', alpha))
-
+  
   cv_res = cv.glmnet(x = dm , y= response_var, family = indicator_family, alpha = alpha, weights = data_weights, parallel = parallel)
-
+  
   #fit full model using selected lambdas
   model = glmnet(x = dm , y= response_var, family = indicator_family, lambda = cv_res$lambda, alpha = alpha, weights = data_weights)
-
+  
   #preserve the cv_1se_lambda
   model$cv_1se_lambda = cv_res$lambda.1se
-
+  
   return(model)
-
+  
 }
 
 #Fit a glmnet child model
@@ -1572,9 +1156,9 @@ fit_glmnet_child_model = function(df,model_name = 'glmnet', fold_id_col = 'fold_
   library(doParallel)
   df = copy(df)
   message('Fitting the Full GLMNET')
-
+  
   the_covs = format_covariates(add_additional_terms(covariates, additional_terms))
-
+  
   # glmnet has it's own internal parallelization that we don't have much control
   # over. It is either on or off and is parallel over each fold supplied by the
   # 'nfolds' argument to `cv.glmnet()`. Since we use the default of 10 for
@@ -1582,7 +1166,7 @@ fit_glmnet_child_model = function(df,model_name = 'glmnet', fold_id_col = 'fold_
   # in an 'nfolds' argument), we have to make sure we at least have 10 cores to
   # use before we turn the parallel option on. See this:
   # https://www.rdocumentation.org/packages/glmnet/versions/2.0-16/topics/cv.glmnet
-
+  
   # Also, `cv.glmnet()` has caused multithreaded operations to hang similar to
   # `mclapply()`, so we set multithreaded operations to serial here
   set_serial_threads()
@@ -1596,7 +1180,7 @@ fit_glmnet_child_model = function(df,model_name = 'glmnet', fold_id_col = 'fold_
     # `fit_glmnet()` call.
     registerDoParallel(cores = cores)
   } else parallel <- FALSE
-
+  
   #fit the full model
   full_model = fit_glmnet(df,
                           covariates = covariates,
@@ -1606,12 +1190,12 @@ fit_glmnet_child_model = function(df,model_name = 'glmnet', fold_id_col = 'fold_
                           indicator = indicator,
                           indicator_family = indicator_family,
                           parallel = parallel)
-
+  
   full_model$model_name = model_name
-
+  
   #fit the child/cv rfs
   folds = unique(df[,get(fold_id_col)])
-
+  
   for(fff in folds){
     #message(paste0('Fitting and Predicting Fold: ', fff))
     baby_model = fit_glmnet(df[get(fold_id_col) != fff,],
@@ -1622,42 +1206,42 @@ fit_glmnet_child_model = function(df,model_name = 'glmnet', fold_id_col = 'fold_
                             indicator = indicator,
                             indicator_family = indicator_family,
                             parallel = parallel)
-
+    
     new_data = df[get(fold_id_col)==fff,the_covs, with = F]
-
+    
     n_nd = names(new_data)
     new_data = as.matrix(new_data)
     names(new_data) = n_nd
-
+    
     df[get(fold_id_col)==fff, paste0(model_name,'_cv_pred') := predict(baby_model, newx = new_data, s = baby_model$cv_1se_lambda, type = 'link')]
-
+    
   }
-
+  
   #stop the cluster just in case
   stopImplicitCluster()
-
+  
   # Return to multithreading (if any):
   set_original_threads()
-
+  
   #predict using full model fit earlier
   new_data = df[,the_covs, with = F]
-
+  
   n_nd = names(new_data)
   new_data = as.matrix(new_data)
   names(new_data) = n_nd
   df[,paste0(model_name,'_full_pred') := predict(full_model,newx = new_data, s = full_model$cv_1se_lambda, type = 'link')]
-
+  
   #return a subset of the columns. Full pred denotes the fit from the full model. CV pred is the OOS stuff
   suffixes = c('_full_pred', '_cv_pred')
   return_cols = paste0(model_name, suffixes)
-
+  
   #if binomial, undo the logit
   if( indicator_family=='binomial'){
     df[,return_cols[1] := invlogit(get(return_cols[1]))]
     df[,return_cols[2] := invlogit(get(return_cols[2]))]
   }
-
-
+  
+  
   #set up with for the return call
   return(setNames(list(df[,return_cols,with = F], full_model),c('dataset',paste0(model_name))))
 }
@@ -1674,15 +1258,15 @@ fit_earth = function(df, covariates = all_fixed_effects, additional_terms = NULL
   library(earth)
   library(data.table)
   #also requires seeg
-
+  
   df = copy(df) #in case data table scoping gets wonky
-
+  
   the_covs = format_covariates(add_additional_terms(covariates, additional_terms))
-
+  
   #set response variable
   if(indicator_family=="binomial") response <- cbind(success = df[, get(indicator)], failure = df[, N] - df[, get(indicator)])
   if(indicator_family=="gaussian") response <- cbind(outcome = df[, get(indicator)])
-
+  
   #sort out weights
   #format weights
   if(!is.null(weight_column)){
@@ -1691,15 +1275,15 @@ fit_earth = function(df, covariates = all_fixed_effects, additional_terms = NULL
     df[,data_weight := 1]
   }
   weight_column = 'data_weight'
-
+  
   #fit the earth
   message(paste0('Fitting earth'))
-
+  
   model = earth(x = df[,the_covs,with = F], y = response, weights = df[,get(weight_column)], glm = list(family =indicator_family))
-
+  
   #return the earth object
   return(model)
-
+  
 }
 
 #fit_earth_child_model: a function to fit a multivariate adaptive regression splines, with the kfold crossval
@@ -1716,12 +1300,12 @@ fit_earth_child_model = function(df, model_name = 'earth', fold_id_col = 'fold_i
                                  additional_terms = NULL, weight_column = NULL, indicator = indicator, indicator_family = 'binomial', cores = 'auto'){
   library(earth) #load the earth!
   library(parallel)
-
+  
   #remove scoping surprises
   df = copy(df)
-
+  
   the_covs = format_covariates(add_additional_terms(covariates, additional_terms))
-
+  
   #start by fitting the full gam
   message('Fitting the Full earth model')
   full_model = fit_earth(df = df,
@@ -1730,15 +1314,15 @@ fit_earth_child_model = function(df, model_name = 'earth', fold_id_col = 'fold_i
                          weight_column = weight_column,
                          indicator = indicator,
                          indicator_family = indicator_family)
-
+  
   #add a name to the game object
   full_model$model_name = model_name
-
+  
   #fit the child/cv gams
   message("Fitting baby earth")
   #fit the child/cv rfs
   folds = unique(df[,get(fold_id_col)])
-
+  
   # Set multithreading to serial for `mclapply()`:
   set_serial_threads()
   # Determine appropriate number of cores to use in `mclapply()`
@@ -1751,15 +1335,15 @@ fit_earth_child_model = function(df, model_name = 'earth', fold_id_col = 'fold_i
                                                         indicator_family = indicator_family), mc.cores = cores)
   # Return to multithreading (if any):
   set_original_threads()
-
+  
   for(fff in folds){
     #use the data fit on K-1 of the folds to fit on the help out fold
     df[get(fold_id_col)==fff, paste0(model_name,'_cv_pred') := predict(baby_models[[fff]], df[get(fold_id_col)==fff,the_covs, with = F],type='response')]
   }
-
+  
   #predict using full model fit earlier
   df[,paste0(model_name,'_full_pred') := predict(full_model,df[,the_covs,with = F],type = 'response')]
-
+  
   #return a subset of the columns. Full pred denotes the fit from the full model. CV pred is the OOS stuff
   suffixes = c('_full_pred', '_cv_pred')
   return_cols = paste0(model_name, suffixes)
@@ -1798,12 +1382,12 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
                                       regions, year_list, pop_measure, stackers_logit_transform,
                                       predictor_logit_transform, results_file = NULL,
                                       shapefile_version = 'current') {
-
+  
   # Loop over regions
   all_regions <- lapply(regions, function(reg) {
     message(paste("Working on", reg, "\n"))
     pathaddin <- paste0('_bin', age, '_', reg, '_', holdout)
-
+    
     # Get simple polygon and simple raster
     poly <- load_simple_polygon(gaul_list = get_adm0_codes(reg, shapefile_version = shapefile_version),
                                 buffer = 0.4, subset_only = FALSE,
@@ -1812,7 +1396,7 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
     simple_polygon <- poly[[2]]
     simple_raster <- build_simple_raster_pop(subset_shape)[["simple_raster"]]
     pixel_id <- seegSDM:::notMissingIdx(simple_raster)
-
+    
     # Get population
     pop <- load_and_crop_covariates_annual(covs = 'worldpop', measures = pop_measure, simple_polygon = simple_polygon,
                                            start_year = min(year_list), end_year = max(year_list), interval_mo = 12, agebin=1)
@@ -1822,9 +1406,9 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
     pop <- melt(pop, id.vars = "pixel_id", variable.name = "year", value.name = "pop")
     pop[, year := min(year_list) + as.numeric(year) - 1]
     pop[is.na(pop), pop:=0]
-
+    
     # Get stackers
-    load(paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/model_image_history/", run_date, pathaddin, ".RData"))
+    load(paste0("<<<< FILEPATH REDACTED >>>>", run_date, pathaddin, ".RData"))
     cov_list <- cov_list[child_model_names]
     cov_list <- lapply(cov_list, function(x) raster::extract(x, pixel_id))
     cov_list <- data.table(do.call("cbind", cov_list))
@@ -1832,9 +1416,9 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
     cov_list <- melt(cov_list, id.vars = "pixel_id", measure=patterns(child_model_names),
                      variable.name = "year", value.name = child_model_names)
     cov_list[, year := min(year_list) + as.numeric(year) - 1]
-
+    
     # Get combined stackers result based on INLA coefficients
-    load(paste0("/share/geospatial/mbg/", indicator_group, "/", indicator, "/output/", run_date, "/", indicator, "_model_eb", pathaddin, ".RData"))
+    load(paste0("<<<< FILEPATH REDACTED >>>>", indicator, "_model_eb", pathaddin, ".RData"))
     if ("sdrep" %in% names(res_fit)) { # TMB, w/ stackers as fixed effects
       coef <- res_fit$sdrep$par.fixed[names(res_fit$sdrep$par.fixed) == "alpha_j"]
       names(coef) <- res_fit$fenames
@@ -1849,25 +1433,25 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
       names(coef) <- child_model_names
       int <- res_fit$summary.fixed["int", "mean"]
     }
-
+    
     if (stackers_logit_transform) {
       cov_list[, combined := int + Reduce('+', lapply(child_model_names, function(x) logit(cov_list[[x]]) * coef[x]))]
     } else {
       cov_list[, combined := int + Reduce('+', lapply(child_model_names, function(x) cov_list[[x]] * coef[x]))]
     }
-
+    
     if (predictor_logit_transform) cov_list[, combined := inv.logit(combined)]
-
+    
     # Merge simple_raster, stackers, and population
     admin0 <- data.table(pixel_id = pixel_id, ADM0_CODE = raster::extract(simple_raster, pixel_id))
     admin0 <- merge(admin0, cov_list, by="pixel_id")
     admin0 <- merge(admin0, pop, by=c("pixel_id", "year"))
     if (nrow(admin0) != nrow(pop) | nrow(admin0) != nrow(cov_list)) stop("dimension mismatch")
-
+    
     # Calculate population-weighted national averages
     admin0[, lapply(.SD, function(x) weighted.mean(x, pop, na.rm=T)), by='ADM0_CODE,year', .SDcols = c(child_model_names, "combined")]
   })
-
+  
   # Save or return results for all regions
   all_regions <- rbindlist(all_regions)
   if (!is.null(results_file)) {
@@ -1876,162 +1460,4 @@ aggregate_stackers_admin0 <- function(indicator, indicator_group, run_date, age,
   } else {
     return(all_regions)
   }
-}
-
-
-#' @title Fitting child stackers
-#' @description
-#' Parallelization in stackers is a little bit complicated. Some of the stackers
-#' rely on packages like "mgcv" and "glmnet" which have their own internal
-#' parallelization which we have to make sure plays nice with the MKL.
-#' \code{mclapply()} is used heavily in stackers as well which will hang with
-#' multithreaded operations like OpenMP or MKL.
-
-#' Those stacking functions which have a "cores" argument have an "auto" option
-#' (default) where the stacker function has code to properly determine how many
-#' cores to give each operation based on how it is parallelized, how many cores
-#' are available for the job based on slots, etc. It is highly recommended that
-#' the "auto" option be used. Otherwise, you may pass in an integer argument for
-#' the number of cores. The only value that is known to work generally on all
-#' stackers is 1, or serial operation.
-#'
-#' @param models a vector of sub-models to run
-#' @param input_data the data frame with the input data, defaulted to \code{the_data} from the global environment
-#'
-#' @return A list of sub-model predictions and model objects where the first element of each list member are the predictions,
-#' and the second element the model statistics and summary
-#'
-#' @rdname run_child_stackers
-#'
-#' @importFrom raster extent crop mask
-#'
-#' @export
-run_child_stackers <- function(models, input_data = the_data) {
-  if ("gam" %in% models) {
-    tic("Stacking - GAM")
-    gam_child <- fit_gam_child_model(
-      df = input_data,
-      model_name = "gam",
-      fold_id_col = "fold_id",
-      covariates = all_fixed_effects,
-      additional_terms = NULL,
-      weight_column = "weight",
-      bam = FALSE,
-      spline_args = list(bs = "ts", k = 3),
-      auto_model_select = TRUE,
-      indicator = indicator,
-      indicator_family = indicator_family,
-      cores = "auto"
-    )
-    
-    toc(log = T)
-  }
-  
-  # Fit a GBM/BRT model
-  if ("gbm" %in% models) {
-    tic("Stacking - GBM")
-    gbm_child <- fit_gbm_child_model(
-      df = input_data,
-      model_name = "gbm",
-      fold_id_col = "fold_id",
-      covariates = all_fixed_effects_brt,
-      weight_column = "weight",
-      tc = as.numeric(gbm_tc),
-      lr = as.numeric(gbm_lr),
-      bf = as.numeric(gbm_bf),
-      indicator = indicator,
-      indicator_family = indicator_family,
-      cores = "auto"
-    )
-    toc(log = T)
-  }
-  
-  # Fit a BRT model with Xgboost (faster than GBM)
-  if ("xgboost" %in% models) {
-    tic("Stacking - Xgboost")
-    
-    if (!exists("xg_model_tune")) {
-      message("xg_model_tune not found in config. Will be set to true, and model will be tuned with default grid search")
-      xg_model_tune <- TRUE
-      hyperparameter_filepath <- NULL
-    }
-    
-    if (xg_model_tune == T & !exists("hyperparameter_filepath")) {
-      message("Tuning xgboost on default grid search")
-      hyperparameter_filepath <- NULL
-    }
-    xgboost_child <- fit_xgboost_child_model(
-      df = input_data,
-      covariates = all_fixed_effects,
-      weight_column = "weight",
-      indicator = indicator,
-      indicator_family = indicator_family,
-      outputdir = outputdir,
-      region = reg,
-      xg_model_tune = xg_model_tune,
-      hyperparameter_filepath = hyperparameter_filepath
-    )
-    toc(log = T)
-  }
-  
-  # fit some nets
-  # lasso
-  if ("lasso" %in% models) {
-    tic("Stacking - lasso")
-    lasso_child <- fit_glmnet_child_model(
-      df = input_data,
-      model_name = "lasso",
-      covariates = all_fixed_effects,
-      fold_id_col = "fold_id",
-      additional_terms = NULL,
-      indicator_family = indicator_family,
-      indicator = indicator,
-      alpha = 0,
-      weight_column = "weight",
-      cores = "auto"
-    )
-    toc(log = T)
-  }
-  
-  # ridge
-  if ("ridge" %in% models) {
-    tic("Stacking - ridge")
-    ridge_child <- fit_glmnet_child_model(
-      df = input_data,
-      model_name = "ridge",
-      covariates = all_fixed_effects,
-      fold_id_col = "fold_id",
-      additional_terms = NULL,
-      indicator_family = indicator_family,
-      indicator = indicator,
-      alpha = 1,
-      weight_column = "weight",
-      cores = "auto"
-    )
-    toc(log = T)
-  }
-  
-  # enet
-  if ("enet" %in% models) {
-    tic("Stacking - enet")
-    enet_child <- fit_glmnet_child_model(
-      df = input_data,
-      model_name = "enet",
-      covariates = all_fixed_effects,
-      fold_id_col = "fold_id",
-      additional_terms = NULL,
-      indicator_family = indicator_family,
-      indicator = indicator,
-      alpha = 0.5,
-      weight_column = "weight",
-      cores = "auto"
-    )
-    toc(log = T)
-  }
-  
-  ## Get all child ones
-  child_models <- lapply(paste0(models, "_child"), function(x) get(x))
-  
-  ## Return the list of child stacker (pred and model)
-  return(child_models)
 }

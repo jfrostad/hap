@@ -1,11 +1,5 @@
 # ---------------------------------------------------------------------------------------------
-# plot_stackers_by_adm01
-#
-# Written by Dan Casey
-# Modified by Kirsten Wiens
-# Modified by JF
-#
-# 08/28/2018
+#REDACTED
 # Function that pulls in aggregated results, data, and stackers
 # and plots them for admin 0 and admin 1 over time
 #
@@ -21,7 +15,7 @@
 # N_breaks - breaks you'd like to use to plot points in proportion to N
 # admin_data - optional
 #              if NULL:
-#                will aggregate data pulled from /share/geospatial/mbg/input_data/
+#                will aggregate data pulled from #REDACTED
 #              if proivded, must be:
 #                list of aggregated admin 0 and admin 1 data with data.table/data.frame 
 #                elements named ad0 and ad1, respectively, and the following collumns:
@@ -31,7 +25,7 @@
 #
 # Outputs:
 # plots of data, stackers, mean unraked estimates with upper and lower credible intervals,
-# and mean raked estimates (optionally) over time saved in /share/ mbg output folder
+# and mean raked estimates (optionally) over time saved in #REDACTED
 # corresponding to indicator and run date in file /diagnositc_plots/
 # ---------------------------------------------------------------------------------------------
 
@@ -56,84 +50,13 @@ plot_stackers_by_adm01 <- function(admin_data,
   pacman::p_load(data.table, ggplot2, ggthemes, ggrepel, magrittr, raster, rgeos, rgdal, sp)
   # --------------------------
   
-  # # ------------------------------------------------------------------------------------------------------------------------
-  # # Load functions
-  # 
-  # # Get outputs
-  # source('/home/j/temp/central_comp/libraries/current/r/get_outputs.R')
-  # 
-  # # Get model information from RData objects
-  # fetch_from_rdata <- function(file_location, item_name, use_grep = F){
-  #   
-  #   load(file_location)
-  #   
-  #   if (use_grep) ret_obj <- lapply(item_name, function(x) mget(grep(x, ls(), value=T)))
-  #   else ret_obj <- lapply(item_name, function(x) get(x))
-  #   
-  #   if (length(item_name)==1) ret_obj <- ret_obj[[1]]
-  # 
-  #   return(ret_obj)
-  #   
-  # }
-  # 
-  # # Summarize model results by admin
-  # summarize_admin <- function(outputdir, measure, admin_level, admin_data, draws, raked, credible_interval) {
-  #   
-  #   if (raked) admin <- paste0(outputdir, indicator,'_raked_', measure, '_admin_draws_eb_bin0_0.RData')
-  #   else admin <- paste0(outputdir, indicator,'_unraked_admin_draws_eb_bin0_0.RData')
-  #   
-  #   load(admin)
-  #   
-  #   admin <- paste0('admin_',admin_level) %>% get %>% copy
-  #   
-  #   draw_cols <- grep('V[0-9]*', names(admin), value = T)
-  #   
-  #   # subset by region
-  #   admin <- admin[region == reg]
-  #   
-  #   #create counts
-  #   #get rates
-  #   admin[, paste0('mean_rate') := rowMeans(.SD, na.rm = T), .SDcols = draw_cols]
-  #   admin[, paste0('lower_rate') := apply(.SD[,draw_cols,with=F], 1, quantile, probs = (1-credible_interval)/2, na.rm = T)]
-  #   admin[, paste0('upper_rate') := apply(.SD[,draw_cols,with=F], 1, quantile, probs = 1-(1-credible_interval)/2, na.rm = T)]
-  #   
-  #   setnames(admin,draw_cols, paste0(draw_cols,'_rate'))
-  #   
-  #   #get counts
-  #   admin[, paste0(c('mean','lower','upper',draw_cols), '_count') := lapply(c('mean','lower','upper', draw_cols), function(x)
-  #     get(paste0(x,'_rate')) * pop)]
-  #   
-  #   admin[, measure := measure]
-  #   
-  #   dcs <- c(paste0(draw_cols, '_rate'), paste0(draw_cols,'_count'))
-  #   ndcs <- names(admin) %>% .[!. %in% dcs]
-  #   
-  #   setcolorder(admin,c(ndcs, dcs))
-  #   
-  #   if (!draws) admin[,(dcs):=NULL] 
-  #   
-  #   # add admin names
-  #   link <- admin_data[['ad1']]
-  #   kcols <- expand.grid(adlev = 0:admin_level, type = c('NAME','CODE'))
-  #   kcols <- paste0('ADM',kcols$adlev,'_',kcols$type)
-  #   link <- link[,kcols, with = F] %>% unique
-  #   
-  #   merge_vars <- intersect(names(admin), names(link))
-  #   
-  #   admin <- merge(admin, link, by = merge_vars) %>% 
-  #     return
-  # 
-  # }
-  # # ------------------------------------------------------------------------------------------------------------------------
-  
-  
   # ------------------------------------------------------------------------------------------------------------------------
   # Load and clean data and model information
   
   # set model output directories
   message('Loading and cleaning model information')
-  outputdir = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
-  imagedir = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/')
+  outputdir = paste0('#REDACTED', indicator_group, '/', indicator, '/output/', run_date, '/')
+  imagedir = paste0('#REDACTED', indicator_group, '/', indicator, '/model_image_history/')
   
   # loop over regions
   for (reg in regions) {
@@ -225,9 +148,7 @@ plot_stackers_by_adm01 <- function(admin_data,
     # create pdf to write to
     dir.create(paste0(outputdir, 'diagnostic_plots/'))
     pdf(paste0(outputdir, 'diagnostic_plots/admin_stacker_line_plots_', reg, '.pdf'), height = 10, width =14)
-    
-    #TODO repetitive coding structure, apply function over admin_data list instead of using 2 data.tables??
-    
+
     # load and clean the aggregated data that went into the model
     ad0_dat = ad0_data[!is.na(input_mean)]
     setnames(ad0_dat, c('input_mean', 'input_ss'), c('outcome', 'N'))

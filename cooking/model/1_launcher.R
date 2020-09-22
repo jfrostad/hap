@@ -1,27 +1,17 @@
 ##############################################################################
-## MBG launch, aggregate results, and diagnostics launcher script for ORT
-## Indicators: ors, rhf, ors_or_rhf, zinc
-## Written by Kirsten Wiens
+## MBG launch, aggregate results, and diagnostics launcher script 
 ## Created 2018/02/23
 ##############################################################################
-#source('/homes/jfrostad/_code/lbd/hap/cooking/model/1_launcher.R') 
-
 ## Setup -------------------------------------------------------------------------
 
 # clear environment
 rm(list = ls())
 
-# set general arguments
-user            <- Sys.info()['user']
-core_repo            <- file.path('/homes', user, '_code/lbd/lbd_core/')
-core_repo            <- file.path('/homes', user, '_code/lbd/hap/')
-my_repo            <- file.path('/homes', user, '_code/lbd/hap/')
-indicator_group <- 'cooking'
-parallel_script <- file.path('model/3_orbit')
+#REDACTED
 
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
-package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+package_list <- c(t(read.csv(paste0(core_repo, '/#REDACTED/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -111,7 +101,7 @@ for (i in indics) {
     if(use_old_run_date == TRUE & old_run_date_input == '') stop('You indicated using an old run date; please provide an old run date')
     
     # set up qsub
-    sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ', 
+    sys.sub <- paste0('qsub -e /#REDACTED/', user,'/errors -o /#REDACTED/', user, '/output ', 
                       '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                       '-l fthread=1 -l h_rt=', ifelse(use_geos_nodes, '16:00:00:00', '3:00:00:00'),
                       ' -v sing_image=default -N ', jname, ' -l archive=TRUE ')

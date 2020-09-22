@@ -1,6 +1,5 @@
 # --------------------------------------------------------------------------------------------------
-# Kirsten Wiens
-# 2018/09/24
+#REDACTED
 #
 # Script designed to facilitate covariate selection using variance inflation factor (VIF) analysis
 # The purpose of the VIF analysis is to test for multicollinearity in covariates
@@ -15,7 +14,7 @@
 # Faraway's Linear Models in R, Chapter 4: Diagnostics
 # https://beckmw.wordpress.com/2013/02/05/collinearity-and-stepwise-vif-selection/
 # --------------------------------------------------------------------------------------------------
-#source('/homes/jfrostad/_code/lbd/hap/modules/covariate_selection/02_vif_selection_script.R') 
+#REDACTED
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Setup
@@ -23,22 +22,7 @@
 # clear memory
 rm(list=ls())
 # runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  j_root <- "/home/j/"
-  h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
-  ## Load libraries and  MBG project functions.
-  .libPaths(package_lib)
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-}
-
+#REDACTED
 #load external packages
 pacman::p_load(assertthat, data.table, dplyr, mgsub, raster, sf, fasterize, fst, fmsb)
 
@@ -49,24 +33,7 @@ interactive <- F  %>% #manual override
 
 if (interactive) {
   
-  ## Set repo location, indicator group, and some arguments
-  user <- 'jfrostad'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap/"
-  indicator_group <- 'cooking'
-  indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_sp_fine'
-  config_file <- "cooking/model/configs/"
-  cov_par <- 'hap_standard'
-  cov_file <- "cooking/model/configs/"
-  run_date <- '2020_08_09_11_24_01'
-  measure <- 'prev'
-  reg <- 'ERI+DJI+YEM'
-  threshold_min   <- 2
-  threshold_max   <- 5
-  threshold_step  <- 1
-  individual_countries <- F
-  recrop_covs <- TRUE
-  cropped_covs_file <- ''
+  #REDACTED
 
   
 } else {
@@ -95,20 +62,20 @@ if (interactive) {
 message(indicator)
 
 # set additional arguments
-cov_repo <- paste0(core_repo, '/3_modeling/vif_selected_covs/')
+cov_repo <- paste0(core_repo, '#REDACTED/')
 age <- 0
 holdout <- 0
 threshold <-  c(seq(as.numeric(threshold_min), as.numeric(threshold_max), by = as.numeric(threshold_step)))
 
 # create directories to save results in
-save_dir <- file.path('/share/geospatial/mbg/', indicator_group, indicator, 'covariate_selection', run_date, '/')
+save_dir <- file.path('#REDACTED/', indicator_group, indicator, 'covariate_selection', run_date, '/')
 dir.create(save_dir)
 mbg_input_dir <- paste0(save_dir, 'mbg_inputs/')
 dir.create(mbg_input_dir)
 
 # Load MBG packages and functions
 message('Loading in required R packages and MBG functions')
-package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
+package_list <- c(t(read.csv('#REDACTED.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -199,7 +166,7 @@ if (recrop_covs == TRUE) {
   
   ## Remove any data outside of region for ORS
   if (indicator != 'had_diarrhea') {
-    reg_list <- fread('/share/geospatial/kewiens/custom_regions/dia_region_iso.csv')
+    reg_list <- fread('#REDACTED.csv')
     reg_list[, gadm_adm0_code := get_adm0_codes(iso3, shapefile_version = modeling_shapefile_version), by = V1]
     iso3_list <- filter(reg_list, gadm_adm0_code %in% gaul_list)
     iso3_list <- unique(iso3_list$iso3)
@@ -208,7 +175,7 @@ if (recrop_covs == TRUE) {
   }
   
   # remove unecessary folder and data file
-  unlink(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/', run_date, '/'), recursive = TRUE)
+  unlink(paste0('#REDACTED', indicator_group, '/', indicator, '/', run_date, '/'), recursive = TRUE)
   
   ## Some built in data checks that cause known problems later on
   if(indicator_family=='binomial' & any(df[,get(indicator)]/df$N > 1))

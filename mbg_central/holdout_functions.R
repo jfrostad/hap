@@ -1,9 +1,3 @@
-## this file contains functions to make different types of holdouts for spatio-temporal data
-## some of the holdout methods are spatial, some temporal, and some do both
-## written by aoz
-## last editted on OCT 27 2016
-
-
 ## USAGE NOTES:
 
 ## 1) all of these options takes in data that is already cleaned and processed
@@ -19,71 +13,6 @@
 ##
 ## 6) make_folds() returns a named list. each item is a data strata and will have a folds
 ##    column in it. the name of the list element tells you the strata
-
-##  here are some examples which I've tested - may take a while (30-60min?):
-
-#df <- fread('J:/temp/geospatial/U5M_africa/data/clean/fully_processed.csv',
-#            stringsAsFactors = FALSE)
-## clean the df
-#df$long <- as.numeric(as.character(gsub(",", "", df$long)))
-#df$lat  <- as.numeric(as.character(gsub(",", "", df$lat)))
-#df <- df[-which(df$lat > 90), ]
-#data <- df
-#data <- data[-which(data$year == 2011), ]
-#data <- data[, fold:= NULL]
-#dim(data)
-
-## with quad_tree
-#system.time(
-#stratum_qt <- make_folds(data = data, n_folds = 5, spat_strat = 'qt',
-#                         temp_strat = "prop", strat_cols = "age_bin",
-#                         ts = 1e5, mb = 10, lat_col = 'lat', long_col = 'long',
-#                         ss_col = 'exposed', yr_col = 'year')
-#)
-#str(stratum_qt)
-
-## pdf("C:/Users/azimmer/Documents/U5M_africa/Holdouts/qt_tests.pdf")
-## for(i in 1:length(stratum_qt)){
-##   library(scales)
-##   d  <- stratum_qt[[i]]
-##   for(yr in sort(unique(d$year))){
-##     r <- which(d$year == yr)
-##     x <- d$long[r]
-##     y <- d$lat[ r]
-##     col <- d$fold[r]
-##     main <- paste0("Strata: ", names(stratum_qt)[i], " Year: ", yr)
-##     plot(x, y, col = alpha(col, alpha = 0.25), pch = ".", main = main)
-##   }
-## }
-## dev.off()
-
-## ## with ad2
-## stratum_ad2 <- make_folds(data = data, n_folds = 5, spat_strat = 'poly',
-##                           temp_strat = "prop", strat_cols = "age_bin",
-##                           admin_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad2_raster.grd',
-##                           shape_ident="gaul_code",
-##                           admin_shps='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp',
-##                           mask_shape='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_simple.shp',
-##                           mask_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad0_raster',
-##                           lat_col = 'lat', long_col = 'long',
-##                           ss_col = 'exposed', yr_col = 'year')
-
-## ad2 <- shapefile('J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp')
-## pdf("C:/Users/azimmer/Documents/U5M_africa/Holdouts/ad2_tests.pdf")
-## for(i in 1:length(stratum_ad2)){
-##   library(scales)
-##   d  <- stratum_ad2[[i]]
-##   for(yr in sort(unique(d$year))){
-##     r <- which(d$year == yr)
-##     x <- d$long[r]
-##     y <- d$lat[ r]
-##     col <- d$fold[r]
-##     main <- paste0("Strata: ", names(stratum_ad2)[i], " Year: ", yr)
-##     plot(x, y, col = alpha(col, alpha = 0.25), pch = ".", main = main)
-##     plot(ad2, add = T)
-##   }
-## }
-## dev.off()
 
 
 #######################
@@ -130,29 +59,6 @@
 
 ## all the combos of the space time sets!
 
-
-#####################
-#####################
-### CODING STARTS ### ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#####################
-#####################
-
-## ## load packages
-## library(raster)
-## library(seegSDM)
-## library(seegMBG)
-## library(rgdal)
-## library(rgeos)
-## library(foreach)
-## library(doParallel)
-## library(data.table)
-
-## ## codeloc
-## j="J:"
-## codeloc = sprintf('%s/temp/geospatial/U5M_africa/',j)
-
-## ## load miscellaneous functions
-## source(paste0(codeloc,'code/functions.R'))
 
 ####################
 ## TOTALLY RANDOM ##
@@ -228,27 +134,6 @@ rand_folds <- function(data,
   }
 }
 
-## just a little testing
-## f <- rand_folds(data=data
-## d <- cbind(data, f[[1]])
-## d1 <- d[which(d[,1]==1),]
-## d2 <- d[which(d[,1]==2),]
-## d3 <- d[which(d[,3]==3),]
-## table(d1[,4])
-## table(d2[,4])
-## table(d3[,4])
-
-
-## f <- rand_folds(data=data, strat_cols=c("A", "B"))
-## d <- cbind(data, f[[1]])
-## for(i in 1:nrow(f[[2]])){
-##     message("On strata:  ", f[[2]][i,])
-
-##     rows <- which(d[,1]==f[[2]][i, 1] &
-##                   d[,2]==f[[2]][i, 2])
-
-##     print(table(d[rows,4]))
-## }
 
 ##############
 ## IN SPACE ##
@@ -263,10 +148,6 @@ rand_folds <- function(data,
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ## (2) small aggregates in space - QUADTREE
 ##
-## INPUTS:
-##
-## OUTPUTS:
-##
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 quadtree_folds <- function(xy, ## 2 col matrix of xy locs
                            ss, ## vector of sample size at each loc - if all 1s, it aggregates by # of points
@@ -279,8 +160,6 @@ quadtree_folds <- function(xy, ## 2 col matrix of xy locs
                            ...,
                            t_folds = 1, ## if multiple t_folds. to save shapefiles
                            stratum = 1 ## for multiple stratum to save shapefiles
-#                           pathaddin = ""   ## file path addin to specifiy specifis of model run
-#                           run_date = run_date
                            ){
 
   ## this function segregates data into spatial regions. it splits
@@ -326,7 +205,6 @@ quadtree_folds <- function(xy, ## 2 col matrix of xy locs
   ids <- na.omit(ids) ## qt alg adds a few NA rows sometimes...
 
   ## now we match ids to our original dataset
-  ## TODO: make this faster somehow... Roy suggested a forwardfill option
   dt_xy[, row:=1:nrow(dt_xy) ]
   setkey(dt_xy, long, lat)
   dt_xy[, qt_id:= -1.0]
@@ -374,11 +252,8 @@ quadtree_folds <- function(xy, ## 2 col matrix of xy locs
 
   ## save quadtree rectangles to shapefile if desired
   if(save_qt){
-#    if(time_stamp==TRUE) output_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date)
-#    if(time_stamp==FALSE) output_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/scratch')
-#    dir.create(output_dir, showWarnings = FALSE)
-    output_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date)
-    qt_shape_dir <- paste0(output_dir, '/holdout_shapefiles/')
+    output_dir <- '<<<< FILEPATH REDACTED >>>>'
+    qt_shape_dir <- '<<<< FILEPATH REDACTED >>>>'
     dir.create(qt_shape_dir)
 
     xylim <- cbind(x=c(min(un_xy[,2]), max(un_xy[,2])), y=c(min(un_xy[,3]), max(un_xy[,3])))
@@ -392,32 +267,9 @@ quadtree_folds <- function(xy, ## 2 col matrix of xy locs
   return(cbind(fold_vec, ho_id))
 }
 
-## ## example
-## df <- fread('J:/temp/geospatial/U5M_africa/data/clean/fully_processed.csv',
-##            stringsAsFactors = FALSE)
-## clean the df
-## df$long <- as.numeric(as.character(gsub(",", "", df$long)))
-## df$lat  <- as.numeric(as.character(gsub(",", "", df$lat)))
-## df <- df[-which(df$lat > 90), ]
-## data <- df
-## shp_full <- plot_shp <- shapefile('J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp')
-## xy <- data[,c('long', 'lat')]
-## ss <- data$exposed
-## ts <- 1e6
-## plot_fn <- 'quadtree.png'
-
-##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
-## (2) small aggregates in space - WEIGHTED K-MEANS
-## not yet (or ever?) implemented. quadtree looks pretty good
-##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
-
 
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ## (3) admin2 in space
-##
-## INPUTS:
-##
-## OUTPUTS:
 ##
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ad2_folds <- function(admin_raster,
@@ -450,15 +302,15 @@ ad2_folds <- function(admin_raster,
   library(raster)
 
   ## make a mask for ther region we care about
-  mask <- rasterize_check_coverage(shapefile(mask_shape), raster(mask_raster), field=names(shapefile(mask_shape))[1])*0
+  mask <- rasterize_check_coverage(mask_shape, mask_raster, field=names(mask_shape)[1])*0
 
   ## get raster cells in mask
   cell_idx <- cellIdx(mask)
 
   ## load raster and shapefile for admin units
-  rast      <- raster(admin_raster)
+  rast      <- admin_raster
   rast_cell <- extract(rast, cell_idx)
-  shp_full  <- shapefile(admin_shps)
+  shp_full  <- admin_shps
   shp       <- shp_full@data[shape_ident]
   ## plot(shp_full, col=1:length(shp_full))
 
@@ -485,47 +337,9 @@ ad2_folds <- function(admin_raster,
                ho_id))
 }
 
-## ## example
-## df <- read.csv('J:/temp/geospatial/U5M_africa/data/clean/fully_processed.csv',
-##                stringsAsFactors = FALSE)
-
-## df$long <- as.numeric(as.character(gsub(",", "", df$long)))
-## df$lat  <- as.numeric(as.character(gsub(",", "", df$lat)))
-## df <- df[-which(df$lat>90), ]
-## data <- df
-
-## shp_full <- shapefile('J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp')
-## folds <- ad2_folds(admin_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad2_raster.grd',
-##                   shape_ident="gaul_code",
-##                   admin_shps='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp',
-##                   data=df,
-##                   strat_cols=NULL,
-##                   ss=data$exposed,
-##                   xy=cbind(data$long, data$lat)
-##                   n_folds=5,
-##                   mask_shape='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_simple.shp',
-##                   mask_raster='J:/temp/geospatial/U5M_africa/data/clean/shapefiles/ad0_raster')
-
-## library(scales)
-## cols <- folds
-## cols[which(cols==1)] <- "cyan"
-## cols[which(cols==2)] <- "red"
-## cols[which(cols==3)] <- "blue"
-## cols[which(cols==4)] <- "green"
-## cols[which(cols==5)] <- "magenta"
-
-## png("~/check_folds_plot.png", width=1080, height=1080)
-## plot(shp_full)
-## points(df$long, df$lat, col=alpha(cols, alpha=0.01), pch=16)
-## dev.off()
-
 
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ## (4) countries in space
-##
-## INPUTS:
-##
-## OUTPUTS:
 ##
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ct_folds <- function(xy,   ## xy location matrix
@@ -560,31 +374,9 @@ ct_folds <- function(xy,   ## xy location matrix
   return(fold_vec)
 }
 
-## ## example
-## df <- read.csv('J:/temp/geospatial/U5M_africa/data/clean/fully_processed.csv',
-##                stringsAsFactors = FALSE)
-## shp_full <- shapefile('J:/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad2.shp')
-
-## df$long <- as.numeric(as.character(gsub(",", "", df$long)))
-## df$lat  <- as.numeric(as.character(gsub(",", "", df$lat)))
-## df$country <- gsub(pattern='Guinea-Bissau\\"',replacement="Guinea-Bissau", df$country)
-## df <- df[-which(df$lat>90), ]
-## data <- df
-
-## xy <- data[,c('long', 'lat')]
-## ss <- data$exposed
-## ct <- data$country
-## folds <- ct_folds(xy, ct, ss)
-## plot(shp_full)
-## library(scales)
-## points(xy, col=alpha(folds, alpha=0.25), pch=".")
 
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ## (4) random folds in space
-##
-## INPUTS:
-##
-## OUTPUTS:
 ##
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 rand_s_folds <- function(xy,   ## xy location matrix
@@ -734,10 +526,6 @@ proptime_folds_combine <- function(yr, n_folds, ss, ts, ...) {
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ## 3) full years, randomly selected across the duration of data
 ##
-## INPUTS:
-##
-## OUTPUTS:
-##
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 yr_folds <- function(xy,   ## xy location matrix
                      yr,   ## yr vec
@@ -833,10 +621,7 @@ make_folds <- function(data,
                        spat_strat = NULL,
                        temp_strat = NULL,
                        spte_strat = NULL,
-                       save.file = paste0('/share/geospatial/mbg/',
-                                          indicator_group, '/',
-                                          indicator, '/output/',
-                                          run_date, '/stratum.rds'), ## place to save the final object from the function
+                       save.file = paste0('<<<< FILEPATH REDACTED >>>>/stratum.rds'), ## place to save the final object from the function
                        ...,
     #                   long_col,   ## needed for any spat_strat
     #                   lat_col,    ## needed for any spat_strat
@@ -846,28 +631,6 @@ make_folds <- function(data,
                        strat_cols, ## needed for stratifying
                        seed
                        ){
-
-  ## setup for testing purposes
-  ## n_folds = 5
-  ## spat_strat = "qt"
-  ## temp_strat = "prop"
-  ## spte_strat = NULL
-  ## strat_cols = "age_bin"
-  ## yr_col = "yr"
-  ## ss_col = "exposed"
-  ## lat_col = "lat"
-  ## long_col = "long"
-  ## ts = 1000
-  ## mb = 5
-
-
-  ## ## make a dataset
-  ## n = 10000
-  ## data = data.frame(lat  = runif(n, 10, 30),
-  ##                   long = runif(n, 0, 40),
-  ##                   yr   = sample(rep(c(1995, 2000, 2005, 2010), n / 4), n),
-  ##                   age_bin = sample(1:4, n, replace = T),
-  ##                   exposed = sample(25:35, n, replace = T))
 
   ##~#####################
   ## Prepare for battle ##
@@ -1117,20 +880,6 @@ make_folds <- function(data,
   ## FINISH w/ post-processing ##
   ## ############################
 
-  ## recombine temporal stratification if needed (i.e. if )
-
-  ## check it.
-  ## table(data$fold,data$age_bin,dnn=list('fold','age_bin'))
-
-  ## ## clean it up
-  ## data=data[order(as.numeric(row.names(data))),]
-  ## data$elig=NULL
-
-  ## ## save to disk
-  ## write.csv(data,
-  ##           file = paste0('data/clean/mortality_combined.csv'),
-  ##           row.names = FALSE)
-
   ## name the folds
   names(stratum) <- name_strata(all_strat = all_strat)
 
@@ -1244,9 +993,11 @@ get_sample_counts <- function(ss = 1,
   ## they get randomly assigned to folds at the end
   ## TODO: map these to nearest polys somehow
   if(sum(is.na(row_shapes)) > 0 ){
-    message("Warning!! Some of your pts don't fall into any of the polygon shapes!!")
+    message(paste0("Warning!! Some of your pts don't fall into any of the polygon shapes!!"))
     message("They will get randomly assigned to folds")
-    png("~/pts_outside_polys.png", width=1080, height=1080)
+    dir.create('<<<< FILEPATH REDACTED >>>>')
+    t_fold_num <- length(list.files('<<<< FILEPATH REDACTED >>>>')) + 1
+    png(paste0("<<<< FILEPATH REDACTED >>>>/pts_outside_polys_", Regions, "_", t_fold_num, ".png"), width=1080, height=1080)
     plot(shapes)
     points(data[which(is.na(row_shapes)), ],col="red", pch=3)
     dev.off()
@@ -1413,7 +1164,6 @@ name_strata  <-  function(all_strat){
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
 ## quadtree functions ##
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
-## hacked from:
 ## http://gis.stackexchange.com/questions/31236/how-can-i-generate-irregular-grid-containing-minimum-n-points
 
 ## quadtree by points
@@ -1438,7 +1188,7 @@ quadtree <- function(xy, k=1) {
   quad(xy, 1)
 }
 
-## my hacked version. quadtree by sum of value at each point.
+## quadtree by sum of value at each point.
 ## is ss=1 for all points you get back to original quadtree
 quadtree_ct <- function(xy, ss, target_ss, min_in_bin=5, rand = T) {
   ## this function quadtrees by sample size
@@ -1548,104 +1298,6 @@ id.quadtree.leaf <- function(q, ...) {
                y  = q$value[, 2])
   }
 }
-
-## quadtree example
-## n <- 25000         # Points per cluster
-## n_centers <- 40  # Number of cluster centers
-## sd <- 1/2        # Standard deviation of each cluster
-## set.seed(17)
-## centers <- matrix(runif(n_centers*2, min=c(-90, 30), max=c(-75, 40)), ncol=2, byrow=TRUE)
-## xy <- matrix(apply(centers, 1, function(x) rnorm(n*2, mean=x, sd=sd)), ncol=2, byrow=TRUE)
-## k <- 5
-## system.time(qt <- quadtree(xy, k))
-##
-## xylim <- cbind(x=c(min(xy[,1]), max(xy[,1])), y=c(min(xy[,2]), max(xy[,2])))
-## plot(xylim, type="n", xlab="x", ylab="y", main="Quadtree")
-## lines(qt, xylim, col="Gray")
-## points(qt, pch=16, cex=0.5)
-
-## quadtree_ct example
-## ## test it out on some simulated data with different sample sizes at each point
-## n <- 20          # Points per cluster
-## n_centers <- 10  # Number of cluster centers
-## sd <- 1/2        # Standard deviation of each cluster
-## set.seed(17)
-## centers <- matrix(runif(n_centers*2, min=c(-90, 30), max=c(-75, 40)), ncol=2, byrow=TRUE)
-## xy <- matrix(apply(centers, 1, function(x) rnorm(n*2, mean=x, sd=sd)), ncol=2, byrow=TRUE)
-## ss <- c(rep(1, n*n_centers/2), rep(5, n*n_centers/2))
-## n <- 1           # Points per cluster
-## n_centers <- 5   # Number of cluster centers
-## sd <- 1/2        # Standard deviation of each cluster
-## centers <- matrix(runif(n_centers*2, min=c(-90, 30), max=c(-75, 40)), ncol=2, byrow=TRUE)
-## xy <- rbind(xy,
-##             matrix(apply(centers, 1, function(x) rnorm(n*2, mean=x, sd=sd)), ncol=2, byrow=TRUE))
-## ss <- c(ss, rep(20, n*n_centers))
-## k <- 5
-## system.time(qt <- quadtree_ct(xy, ss, 20, min_in_bin=1))
-
-## ## plot
-## xylim <- cbind(x=c(min(xy[,1]), max(xy[,1])), y=c(min(xy[,2]), max(xy[,2])))
-## png("qt_test.png")
-## plot(xylim, type="n", xlab="x", ylab="y", main="Quadtree w/ max SS = 20")
-## lines(qt, xylim, col="Gray")
-## points(qt, pch=16, cex=0.5, alpha=0.9)
-## points(xy, col=as.factor(ss), pch=16)
-## legend('bottomright', legend=c('1', '5', '20'), col=1:3, pch=16)
-## dev.off()
-
-
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## done
-
-
-## example for discussion only. can delete later
-## t1 <- function(t1, t2, t11, t12, ...){...}
-## t2 <- function(t1, t2, t21, t22, ...){...}
-
-## s1 <- function(s1, s2, s11, s12, ...){...}
-## s2 <- function(s1, s2, s21, s22, ...){...}
-
-## wrapper <- function(t_fun, s_fun, t1, t2, s1, s2, ...){
-##   ## t_fun: either '1' or '2'
-##   ## s_fun: either '1' or '2'
-
-##   ## dictionary to match choice to function
-##   t_dict <- list('1' = t1,
-##                  '2' = t2)
-##   t_use  <- s_dict[[t_fun]]
-##   ## run t function
-##   t_res  <- t_use(t1, t2, ...)
-
-##   ## dictionary to match choice to function
-##   s_dict <- list('1' = s1,
-##                  '2' = s2)
-##   s_use  <- s_dict[[s_fun]]
-##   ## run s function
-##   s_res  <- s_use(s1, s2, ...)
-## }
-
-
-#sneaky guy for roy :)
-rename_aarons_shapefiles<-function(len=(length(Regions)*4),prefix){
-  for(i in 1:len)
-   for(f in list.files(paste0(sharedir,'/output/',run_date,'/'),pattern= paste0("spat_holdout_stratum_",i,"_t")))
-    file.rename(paste0(sharedir,'/output/',run_date,'/',f),paste0(sharedir,'/output/',run_date,'/',prefix,'_',gsub(paste0("spat_holdout_stratum_",i),names(stratum_qt)[[i]],f)))
-}
-
-
-## simulate some data
-## n <- 500
-## yr <- c(2000, 2005, 2010, 2015)
-## xy <- matrix(runif(n * length(yr) * 2), ncol = 2)
-## ss <- sample(1:100, size = n * length(yr), replace = TRUE)
-## age <- sample(1:4, size=n*length(yr), replace=TRUE)
-## yrs <- sample(yr, size = n * length(yr), replace = TRUE)
-## df <- as.data.frame(cbind(xy, ss, yrs, age))
-## colnames(df) <- c("longitude", "latitude", "ss", "year", "age")
-## ss_col   = "ss"  ;     yr_col = 'year'     ; spat_strat = 'rand'; temp_strat = 'prop'
-## long_col = 'longitude'; lat_col = 'latitude'; n_folds = 5; strat_cols = 'age'
-## folds = make_folds(data = df, n_folds = 5, spat_strat = 'rand', temp_strat = 'prop',
-##                    long_col = 'longitude', lat_col = 'latitude', strat_cols = 'age')
 
 # holdout strategy based on randomly dropping NIDs
 nid_folds <- function(nids, yr, ss, n_folds) {

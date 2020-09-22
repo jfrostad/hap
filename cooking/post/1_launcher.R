@@ -1,26 +1,17 @@
   ##############################################################################
-  ## MBG launch, aggregate results, and diagnostics launcher script for ORT
-  ## Indicators: ors, rhf, ors_or_rhf, zinc
-  ## Written by Kirsten Wiens
+  ## MBG launch, aggregate results, and diagnostics launcher script 
   ## Created 2018/02/23
   ##############################################################################
-  #source('/homes/jfrostad/_code/lbd/hap/cooking/post/1_launcher.R') 
-  
   ## Setup -------------------------------------------------------------------------
   
   # clear environment
   rm(list = ls())
   
-  # set general arguments
-  user            <- Sys.info()['user']
-  core_repo            <- file.path('/homes', user, '_code/lbd/hap/')
-  my_repo            <- file.path('/homes', user, '_code/lbd/hap/')
-  indicator_group <- 'cooking'
-  parallel_script <- file.path(indicator_group, 'model/parallel_hap')
+  #REDACTED
   
   # Load MBG packages and functions
   message('Loading in required R packages and MBG functions')
-  package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
+  package_list <- c(t(read.csv('/#REDACTED/package_list.csv',header=FALSE)))
   source(paste0(core_repo, '/mbg_central/setup.R'))
   mbg_setup(package_list = package_list, repos = core_repo)
   
@@ -46,13 +37,7 @@
   } else {
     run_date <- old_run_date_input
   }
-  
-  # list all regions or countries
-  # standard regions
-  regions <- c('dia_afr_horn', 'dia_cssa', 'dia_wssa', 'dia_name-ESH', 'dia_name', 'dia_sssa', 
-               'dia_mcaca', 'dia_s_america-GUF', 'dia_s_america', 'dia_central_asia', 'dia_chn_mng', 
-               'dia_se_asia', 'dia_malay', 'dia_south_asia', 'dia_mid_east', 'dia_essa')
-  
+
   # custom region list
   regions <- c('essa-ERI-DJI-YEM', "ERI+DJI+YEM",
                'sssa-ZAF', 'ZAF',
@@ -66,20 +51,8 @@
                'ocea-MYS',
                'seas',
                'mide+TKM', 'soas')
-  
-  regions <- c('CHN')
-  #regions <- c('AGO', 'ERI+DJI+YEM', 'NGA', 'sssa-ZAF')
-  
-  ## Set repo location, indicator group, and some arguments
-  user <- 'jfrostad'
-  indicator_group <- 'cooking'
-  indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_sp_fine'
-  holdout <- 0
-  age <- 0
-  measure <- 'prev'
 
-
+  #REDACTED
 
 if(!skip_entry) {  
   for (reg in regions) {
@@ -97,11 +70,11 @@ if(!skip_entry) {
         cov_par <- paste(indicator_group, reg, sep='_')
   
         # set up qsub
-        sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ',
+        sys.sub <- paste0('qsub -e #REDACTED/', user,'/errors -o #REDACTED/', user, '/output ',
                           '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                           '-l fthread=1 -l h_rt=', ifelse(use_geos_nodes, '16:00:00:00', '3:00:00:00'),
                           ' -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-        r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+        r_shell <- file.path(core_repo, '#REDACTED/shell_sing.sh')
         script <- file.path(my_repo, indicator_group, 'post/2_entry.R')
         args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
   
@@ -129,11 +102,11 @@ if(!skip_entry) {
       cov_par <- paste(indicator_group, reg, sep='_')
       
       # set up qsub
-      sys.sub <- paste0('qsub -e /share/temp/sgeoutput/', user,'/errors -o /share/temp/sgeoutput/', user, '/output ',
+      sys.sub <- paste0('qsub -e /#REDACTED', user,'/errors -o /#REDACTED', user, '/output ',
                         '-l m_mem_free=', mymem, ' -P ', proj_arg, ifelse(use_geos_nodes, ' -q geospatial.q ', ' -q all.q '),
                         '-l fthread=1 -l h_rt=', ifelse(use_geos_nodes, '16:00:00:00', '3:00:00:00'),
                         ' -v sing_image=default -N ', jname, ' -l archive=TRUE ')
-      r_shell <- file.path(core_repo, 'mbg_central/share_scripts/shell_sing.sh')
+      r_shell <- file.path(core_repo, '#REDACTED/shell_sing.sh')
       script <- file.path(my_repo, indicator_group, 'post/3_descent.R')
       args <- paste(user, core_repo, indicator_group, indicator, config_par, cov_par, reg, run_date, measure, holdout, my_repo)
   

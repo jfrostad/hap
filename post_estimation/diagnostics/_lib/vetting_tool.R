@@ -1,36 +1,14 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
-# Author: JF
+# Author:#REDACTED
 # Date: 07/12/2019
 # Purpose: Function to help vet data for a given problem NID
-# source("/homes/jfrostad/_code/lbd/hap/post_estimation/diagnostics/_lib/vetting_tool.R", echo=T)
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
 # clear memory
 rm(list=ls())
 
-# runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  
-  j_root <- "/home/j/"
-  h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  l_root <- "/share/limited_use/"
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
-  ## Load libraries and  MBG project functions.
-  #.libPaths(c( .libPaths(), package_lib))
-  .libPaths(package_lib)
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  
-  j_root <- "J:"
-  h_root <- "H:"
-  l_root <- 'L:'
-  
-}
+#REDACTED
 
 #load packages
 require(ggwordcloud)
@@ -58,35 +36,11 @@ use.sf <- T #set T if you are not having issues with the sf package
 
 # ----IN/OUT------------------------------------------------------------------------------------------------------------
 ###Input###
-#raw data
-data.dir <- file.path('/share/geospatial/mbg/input_data/')
-raw.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/ubCov_extractions/hap/')
-gbd.dir <- '/ihme/covariates/ubcov/model/st_gpr_library/databases/outliers/air_hap/'
-pe.dir <- file.path('/share/limited_use/LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/')
-geog.dir <- file.path(j_root, 'WORK/11_geospatial/05_survey shapefile library/codebooks')
-census.dir <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/geo_matched/hap/census')
-doc.dir <- file.path(j_root, 'WORK/11_geospatial/hap/documentation')
-  package_list <- file.path(doc.dir, 'package_list.csv') %>% fread %>% t %>% c
-def.file <- file.path(doc.dir, 'definitions.xlsx')
-collapse.dir  <- file.path(l_root, 'LIMITED_USE/LU_GEOSPATIAL/collapse/hap/')
-model.dir  <- file.path(j_root, 'WORK/11_geospatial/10_mbg/input_data/hap')
-share.dir <- file.path('/share/geospatial/jfrostad')
-
-#borders file for plotting admin2 borders
-if (use.sf) ad1.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_1_simplified.shp') %>% read_sf
-if (use.sf) ad2.borders <- file.path(j_root, 'WORK/11_geospatial/admin_shapefiles/current/lbd_standard_admin_2_simplified.shp') %>% read_sf
-
-###output###
-graph.dir <- file.path(j_root, 'WORK/11_geospatial/hap/graphs/vetting')
-
-##Refresh google sheets##
-setwd(doc.dir)
-if(redownload.hap) drive_download(as_id('1Nd3m0ezwWxzi6TmEh-XU4xfoMjZLyvzJ7vZF1m8rv0o'), overwrite=T)
-if(redownload.wash) drive_download(as_id('10CLKgyLLzssrWeuyw3US59gTydfYuLreduzdOZWDunQ'), overwrite=T)
+#REDACTED
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
-lbd.shared.function.dir <- file.path(h_root, "_code/lbd/hap/mbg_central")
+lbd.shared.function.dir <- file.path(h_root, "_#REDACTED")
 file.path(lbd.shared.function.dir, 'setup.R') %>% source
 suppressMessages(mbg_setup(repo=lbd.shared.function.dir, package_list = package_list))
 
@@ -417,12 +371,9 @@ names(type.colors) <- type.order
 
 #save plots
 plot_list <- list() #initialize list
-if (remote) {pdf(file = paste0(graph.dir, '/', problem.nid, '_vetting_tool.pdf'), height=8, width=11)
-} else if (imgur & imgur_refresh) {tkn <- imgur_login(); file.path(doc.dir, 'imgur_tkn.RDS') %>% saveRDS(tkn, file=.)
-} else if (imgur & !imgur_refresh) tkn <- file.path(doc.dir, 'imgur_tkn.RDS') %>% readRDS
+#REDACTED
 
 #create wordcloud using internal function based on ggwordcloud#
-#TODO setup scale for all vars
 if (plot.wordcloud) plot_list[[1]] <- wordCloud(str.dt= info[['str']], order=fuel.order, colors=fuel.colors)
 
 #check out spatial patterns#

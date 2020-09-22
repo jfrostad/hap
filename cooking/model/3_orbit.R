@@ -1,32 +1,10 @@
 #####################################################################
 ## Generic parallel script for running MBG models                  ##
-## Roy Burstein, Nick Graetz, Aaron Osgood-Zimmerman, Jon Mosser   ##
 #####################################################################
-# source('/homes/jfrostad/_code/lbd/hap/cooking/model/3_orbit.R') 
-
-#***********************************************************************************************************************
-
 # ---SETUP-------------------------------------------------------------------------------------------------------------
 
 ## clear environment
 rm(list=ls())
-
-# runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  j_root <- "/home/j/"
-  h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
-  ## Load libraries and  MBG project functions.
-  .libPaths(package_lib)
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-}
 
 #load external packages
 #TODO request adds to lbd singularity
@@ -40,24 +18,14 @@ interactive <- F  %>% #manual override
 ## if running interactively, set arguments
 if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
-  
-  ## set arguments
-  reg                      <- 'noaf-ESH'
-  age                      <- 0
-  run_date                 <- "2020_08_20_22_14_35"
-  test                     <- 0
-  holdout                  <- 0
-  indicator                <- 'cooking_fuel_solid'
-  indicator_group          <- 'cooking'
-  
-  ## make a pathaddin that gets used widely
-  pathaddin <- paste0('_bin',age,'_',reg,'_',holdout)
+
+  #REDACTED
   
   ## set output directory
-  outputdir <- file.path('/share/geospatial/mbg',indicator_group,indicator,'output',run_date,'/')
+  outputdir <- file.path('#REDACTED',indicator_group,indicator,'output',run_date,'/')
   
   ## load an image of the main environment
-  load(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/pre_run_tempimage_', run_date, pathaddin,'.RData'))
+  load(paste0('#REDACTED/', indicator_group, '/', indicator, '/model_image_history/pre_run_tempimage_', run_date, pathaddin,'.RData'))
   
   ## Set BRT parameters from optimizer sheet
   if (any(grepl('gbm', stacked_fixed_effects))) {
@@ -107,7 +75,7 @@ if (interactive) {
   pathaddin <- paste0('_bin',age,'_',reg,'_',holdout)
   
   ## load an image of the main environment
-  load(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/pre_run_tempimage_', run_date, pathaddin,'.RData'))
+  load(paste0('#REDACTED/', indicator_group, '/', indicator, '/model_image_history/pre_run_tempimage_', run_date, pathaddin,'.RData'))
   
   ## In case anything got overwritten in the load, reload args
   reg                      <- as.character(commandArgs()[4])
@@ -119,7 +87,7 @@ if (interactive) {
   indicator_group          <- as.character(commandArgs()[10])
   
   pathaddin <- paste0('_bin',age,'_',reg,'_',holdout)
-  outputdir <- file.path('/share/geospatial/mbg',indicator_group,indicator,'output',run_date,'/')
+  outputdir <- file.path('#REDACTED',indicator_group,indicator,'output',run_date,'/')
   
 } 
 
@@ -135,7 +103,7 @@ sessionInfo()
  
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
 ## Load MBG packages
-package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+package_list <- c(t(read.csv(paste0(core_repo, '#REDACTED/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -487,15 +455,7 @@ if (as.logical(skiptoinla) == FALSE) {
   if(as.logical(use_stacking_covs)){
     message('Fitting Stackers')
     # sourcing this script will run the child stackers:
-    source(paste0(my_repo, '/mbg_central/share_scripts/run_child_stackers.R'))
-    
-    #add in the second best xgboost model to ensemble
-    #TODO this is janky but needs to be done w/o more rewriting the next couple of functions
-    if ('xgboost' %in% child_model_names & !as.logical(xg_ensemble) & as.logical(xg_second_best)) {  
-        child_model_names <- c(child_model_names, 'xgboost2')
-        xgboost2 <- xgboost[[2]]
-        xgboost <- xgboost[[1]]
-    }
+    source(paste0(my_repo, '/#REDACTED/run_child_stackers.R'))
 
     ## combine the children models
     the_data  <- cbind(the_data, do.call(cbind, lapply(lapply(child_model_names, 'get'), function(x) x[['dataset']])))
@@ -547,10 +507,7 @@ if (as.logical(skiptoinla) == FALSE) {
   if(as.logical(use_stacking_covs) & as.logical(use_raw_covs) & as.logical(use_inla_country_fes)){
     all_fixed_effects <- paste(stacked_fixed_effects, fixed_effects, paste(names(gaul_code)[2:length(names(gaul_code))], collapse = " + "), sep = " + ")
   }
-  
-  #TODO currently janky but necessary to implement the second xgboost child in the current framework
-  if(xg_second_best %>% as.logical) all_fixed_effects <- paste(all_fixed_effects, 'xgboost2', sep = " + ")
-  
+
   ## copy things back over to df
   df <- copy(the_data)
   
@@ -605,12 +562,7 @@ if (as.logical(skiptoinla) == FALSE) {
   #produce covariate interrogation plots for 5 random pixels
   #sourced from cov_interrogation_functions.R
   covInterrogation(pixel_count=5) 
-  
-  #TODO make a more stable fix
-  #test to see if rounding the ind will fix this issue
-  df[, N := round(N)]
-  df[, (indicator) := get(indicator) %>% round]
-  
+
   ## Save all inputs for MBG model into correct location on /share
   cov_list <- lapply(cov_list, readAll)
   save_mbg_input(indicator         = indicator,
@@ -632,8 +584,8 @@ if (as.logical(skiptoinla) == FALSE) {
   message(paste0('You have chosen to skip directly to INLA. Picking up objects from run_date ',skiptoinla_from_rundate))
   message('Now copying saved MBG inputs from that chosen run_date.')
   
-  file.copy(from = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', skiptoinla_from_rundate, pathaddin, '.RData'),
-            to = paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
+  file.copy(from = paste0('#REDACTED/', indicator_group, '/', indicator, '/model_image_history/', skiptoinla_from_rundate, pathaddin, '.RData'),
+            to = paste0('#REDACTED/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
   
   ## also need to load the simple_raster2 for subnational RE models
   message('Prepping for subnational REs')
@@ -666,7 +618,7 @@ if (as.logical(skiptoinla) == FALSE) {
 }
 
 ## reload data an prepare for MBG
-load(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
+load(paste0('#REDACTED/', indicator_group, '/', indicator, '/model_image_history/', run_date, pathaddin, '.RData'))
 
 ## convert stackers to transform space, if desired
 ## NOTE: we do this here to ensure that the stacker rasters are saved in prevalence/untransformed space
@@ -813,7 +765,7 @@ if(!as.logical(skipinla)) {
                          intstrat         = intstrat,
                          verbose_output   = TRUE,
                          fe_sd_prior      = 1 / 9, ## this actually sets precision!. prec=1/9 -> sd=3
-                         pardiso_license  = '/ihme/homes/jfrostad/licenses/pardiso.lic',
+                         pardiso_license  = '/#REDACTED',
                          omp_strat        = 'pardiso.parallel'
                          ) 
   }
@@ -824,7 +776,7 @@ if(!as.logical(skipinla)) {
     
     # save RDS file of input data for replication
     saveRDS(object = input_data, ## save this here in case predict dies
-            file = sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_TMB_data_input_list_%s_holdout_%i_agebin_%i.RDS',
+            file = sprintf('#REDACTED',
                            indicator_group, indicator, run_date, ifelse(fit_with_tmb,'tmb','inla'), reg, holdout, age))
     # run the model
     system.time(
@@ -843,13 +795,13 @@ if(!as.logical(skipinla)) {
   }
   
   saveRDS(object = model_fit, ## save this here in case predict dies
-          file = sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_model_fit_pre_preds_%s_holdout_%i_agebin_%i.RDS',
+          file = sprintf('#REDACTED',
                          indicator_group, indicator, run_date, ifelse(fit_with_tmb,'tmb','inla'), reg, holdout, age))
   
   
 }else{
   ## skipped fitting INLA so just load model and move to predict
-  model_fit <- readRDS( file = sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_model_fit_pre_preds_%s_holdout_%i_agebin_%i.RDS',
+  model_fit <- readRDS( file = sprintf('#REDACTED',
                                        indicator_group, indicator, run_date, ifelse(fit_with_tmb,'tmb','inla'), reg, holdout, age))
   
 }
@@ -995,11 +947,7 @@ write.csv(df_timer,file = output_file, row.names = FALSE)
 
 # ---LAUNCH_AGG---------------------------------------------------------------------------------------------------------
 #save necessary objects
-# rake_transform <- 'logit' #TODO move to config
-# prep_postest(indicator = indicator,
-#              indicator_group = indicator_group,
-#              run_date = run_date,
-#              save_objs = c("core_repo", "gbd", "year_list", "summstats", "rake_transform", "config"))
+
 
 #dont launch aggregation if we are modelling kerosene
 if(indicator%in%c('cooking_fuel_solid', 'cooking_fuel_dirty')) {

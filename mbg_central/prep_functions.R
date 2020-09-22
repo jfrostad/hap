@@ -14,70 +14,6 @@
     return(run_date)
 
   }
-
-## Load parameters from config file into memory
-#   Arguments:
-#     repo            = Location where you've cloned "mbg" repository.
-#     indicator_group = Category of indicator, i.e. "education"
-#     indicator       = Specific outcome to be modeled within indicator category, i.e. "edu_0"
-################ THIS FUNCTION HAS BEEN DEPRECATED IN FAVOR OF SET_UP_CONFIG ###################
-  load_config <- function(repo, indicator_group, indicator, config_name=NULL, covs_name = NULL, post_est_only=FALSE, run_date = '') {
-
-    # Pull from config .csv file
-    if (is.null(config_name)) {
-      ## If new model run, pull config from /share repo
-      if(post_est_only==FALSE) config <- fread(paste0(repo, '/', indicator_group, '/config_', indicator, '.csv'), header=FALSE)
-      ## If running analysis on existing model, use config from that model's outputs folder
-      if(post_est_only==TRUE) config <- fread(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/config.csv'))
-    } else {
-      config <- fread(paste0(repo, '/', indicator_group, '/', config_name, '.csv'), header=FALSE)
-    }
-
-    # If a covariate .csv file exists, use that instead
-    if (!is.null(covs_name)) {
-
-      # Grab fixed effects & measures (and gbd fixed effects & measures) from CSV if present
-      covs <- fread(paste0(repo, '/', indicator_group, '/', covs_name, '.csv'), header = TRUE)
-      # After update to data.table 1.11.4, "T" and "F" are not read in as
-      # logical, but as characters, which we need to remedy here. We are
-      # assuming that the "covs.csv" has an "include" and "gbd" column here
-      covs[, gbd := as.logical(gbd)]
-      covs[, include := as.logical(include)]
-      covs <- subset(covs, include == T) # Use only those where include flag set to true
-      fe <- subset(covs, gbd == F)
-      gbd <- subset(covs, gbd == T)
-      gbd[measure != "output", measure := "covariate"] # FIXME: This is a hack for backwards compatability -- basically it assumes you meant 'covariate' if you specified anything other than 'outcome' (eg, mean or NA)
-      fixed_effects <- paste0(fe$covariate, collapse = " + ")
-      fixed_effects_measures <- paste0(fe$measure, collapse = " + ")
-      gbd_fixed_effects <- paste0(gbd$covariate, collapse = " + ")
-      gbd_fixed_effects_measures <- paste0(gbd$measure, collapse = " + ")
-
-      # Remove any other versions from original config
-      config <- subset(config, !(V1 %in% c("fixed_effects", "fixed_effects_measures", "gbd_fixed_effects", "gbd_fixed_effects_measures")))
-      config <- config %>%
-        rbind(., list("fixed_effects", fixed_effects)) %>%
-        rbind(., list("fixed_effects_measures", fixed_effects_measures)) %>%
-        rbind(., list("gbd_fixed_effects", gbd_fixed_effects)) %>%
-        rbind(., list("gbd_fixed_effects_measures", gbd_fixed_effects_measures))
-    }
-
-    # Assign all the covariates to the environment
-    for (param in config[, V1]) {
-      assign(param, config[V1==param, V2], envir=globalenv())
-    }
-
-    return(config)
-  }
-
-  
-##### Overloading load_config to point to set_up_config in misc_functions
-load_config <- function(...) {
-  warning("load_config() and check_config() will be deprecated in favor of set_up_config()")
-  set_up_config(...)
-  
-}
-
-  
   
 ## Create directory structure
 #   Arguments:
@@ -85,13 +21,13 @@ load_config <- function(...) {
 #     indicator       = Specific outcome to be modeled within indicator category, i.e. "edu_0"
   create_dirs <- function(indicator_group, indicator) {
 
-    dir.create(paste0('/share/geospatial/mbg/', indicator_group))
-    dir.create(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator))
+    dir.create(paste0('<<<< FILEPATH REDACTED >>>>'))
+    dir.create(paste0('<<<< FILEPATH REDACTED >>>>'))
 
-    indicator_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator)
+    indicator_dir <- paste0('<<<< FILEPATH REDACTED >>>>')
 
     for(dir in c('output','model_image_history')) {
-      dir.create(paste0(indicator_dir,'/',dir), showWarnings = FALSE)
+      dir.create(paste0('<<<< FILEPATH REDACTED >>>>'), showWarnings = FALSE)
     }
 
   }
@@ -100,21 +36,20 @@ load_config <- function(...) {
 #   Arguments:
 #     simple = Single polygon that defines boundaries of the entire area you want to model over.
 #   Returns: Empty raster over modeling area. To be used for cropping covariates quickly and projecting model.
-get_template_raster <- function(simple) {
+  get_template_raster <- function(simple) {
 
-  message('Creating rasters of admin units')
-  root <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j/")
+    message('Creating rasters of admin units')
 
-  # Centrally controlled folder of analysis shapefiles
-  analysis_raster_dir <- paste0(root,'/WORK/11_geospatial/10_mbg/central_spatial_files/analysis_integer_rasters/')
+    # Centrally controlled folder of analysis shapefiles
+    analysis_raster_dir <- '<<<< FILEPATH REDACTED >>>>'
 
-  # Load empty raster for largest analysis area, mask/crop to selected analysis area
-  template_raster <- raster(paste0(analysis_raster_dir, 'stage2_analysis.tif'))
-  template_raster <- mask(crop(template_raster,simple),simple)
+    # Load empty raster for largest analysis area, mask/crop to selected analysis area
+    template_raster <- raster(paste0(analysis_raster_dir, 'stage2_analysis.tif'))
+    template_raster <- mask(crop(template_raster,simple),simple)
 
-  return(template_raster)
+    return(template_raster)
 
-}
+  }
 
 
 ## Load input data from required location
@@ -122,167 +57,130 @@ get_template_raster <- function(simple) {
 #     indicator = Specific outcome to be modeled within indicator category, i.e. "edu_0"
 #     simple    = Single polygon that defines boundaries of the entire area you want to model over.
 #   Returns: Input data subset to modeling area.
-load_input_data <- function(indicator, agebin = 0, removeyemen = FALSE, pathaddin = "",
-                            withdate=FALSE, date='', years='five_year',range=5, update_run_date = FALSE,
-                            withtag=FALSE, datatag='', use_share=FALSE, yl = year_list, region=NULL,
-                            poly_ag = use_global_if_missing("poly_ag"),
-                            zcol_ag = use_global_if_missing("zcol_ag")) {
-  
-  # Ensure str_match loaded
-  str_match <- stringr::str_match
-  
-  if(withdate){
-    if(date=='')
-      rd=run_date
-    if(date!='')
-      rd=date
-  } else {
-    rd = run_date
-  }
-  
-  # Load input data by indicator
-  root <- ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j/")
-  if(use_share==FALSE) load_dir <- paste0(root,'/WORK/11_geospatial/10_mbg/input_data/')
-  if(use_share==TRUE) load_dir  <- '/share/geospatial/mbg/input_data/'
-  
-  if(!withdate & !withtag) filename <- paste0(load_dir, indicator)
-  if(withtag)              filename <- paste0(load_dir, indicator, datatag)
-  if(withdate)             filename <- paste0(root,'/WORK/11_geospatial/10_mbg/input_data/dated/',rd,'/', indicator)
-  
-  # try to see if an RDS exists, if so use that, if not use a csv
-  if(file.exists(paste0(filename,'.RDS'))){
-    message('READING INPUT DATA FROM RDS FILE')
-    d <- readRDS(paste0(filename,'.RDS'))
-  } else {
-    message('READING INPUT DATA FROM CSV FILE')
-    d <- read.csv(paste0(filename,'.csv'))
-  }
-  
-  d$latitude  <- as.numeric(as.character(d$latitude))
-  d$longitude <- as.numeric(as.character(d$longitude))
-  message(nrow(d))
-  
-  # Remove odd long/lats for point data (when not using polygon resampling)
-  if(!"point" %in% names(d)) {
-    # assume only point data
-    d$point = 1
-  }
-  
-  d=d[d$latitude<=90 | (d$point == 0 & as.logical(poly_ag)),]
-  d=d[d$latitude>=-90 | (d$point == 0 & as.logical(poly_ag)),]
-  d=d[d$longitude<=180 | (d$point == 0 & as.logical(poly_ag)),]
-  d=d[d$longitude>=-180 | (d$point == 0 & as.logical(poly_ag)),]
-  d <- subset(d, !is.na(latitude) | (d$point == 0 & as.logical(poly_ag)))
-  d <- subset(d, latitude!=0 | (d$point == 0 & as.logical(poly_ag)))
-  message(nrow(d))
-  
-  # Check for necessary columns
-  if(!(indicator %in% names(d))) stop(paste0("Your input data does not contain a column for your indicator: ", indicator))
-  
-  d <- as.data.table(d)
-  
-  # Change all "country" assignments to national level (in case subnational in the input data)
-  if (nrow(d[grepl("[A-Z]*_[.]*", country),]) > 0) {
-    subnat_countries <- unique(d[grepl("[A-Z]*_[.]*", country), country])
-    warning(paste0("Changing subnational to national country codes for the following: ",
-                   paste0(subnat_countries, collapse = ",")))
-    d[grepl("[A-Z]*_[.]*", country), country := str_match(country,"([A-Z]*)_[.]*")[,2]]
-  }
-  
-  d$keep <- F
-  # Subset to within regions
-  if(!is.null(region)) {
-    adm0_list <- get_adm0_codes(region, shapefile_version = modeling_shapefile_version)
-    # get GAUL to iso mapping
-    loc_codes <- get_location_code_mapping(shapefile_version=modeling_shapefile_version)
-    loc_codes <- loc_codes[ADM_CODE %in% adm0_list, ]
-    regs      <- loc_codes$ihme_lc_id
-    d[country %in% regs, "keep"] <- T
-  } else {
-    warning("Missing region information. Will keep all data")
-    d$keep <- T
-  }
-  
-  message(paste0(round(mean(d$keep), 2)*100, '% of input data in specified template'))
-  d <- d[d$keep, ]
-  
-  if(agebin!=0)   d = d[age%in%agebin,]
-  if(removeyemen) d = d[country!='Yemen' & country!='YEM',]
-  
-  # remap any years as needed
-  if(years=='five_year') {
-    d <- d[year >= 1998 & year <= 2002, year := 2000]
-    d <- d[year >= 2003 & year <= 2007, year := 2005]
-    d <- d[year >= 2008 & year <= 2012, year := 2010]
-    d <- d[year >= 2013 & year <= 2017, year := 2015]
-  }
-  
-  if (nrow(subset(d, year < min(yl))) > 0) {
-    warning(paste0("Dropping all data before min(year_list) = ", min(yl), "..."))
-    d <- subset(d, year >= min(yl))
-  }
-  if (nrow(subset(d, year > max(yl))) > 0) {
-    warning(paste0("Dropping all data after max(year_list) = ", max(yl), "..."))
-    d <- subset(d, year <= max(yl))
-  }
-  
-  # add in a weight column if it does not exist
-  if(!"weight" %in% names(d)) {
-    warning("A 'weight' column does not exists so one is added with all 1s.")
-    d[,weight := 1]
-  }
-  
-  # creaste a weighted SS to base QTs on
-  if(sum(c('N','weight') %in% colnames(d)) == 2) d[,weighted_n := N*weight]
-  
-  # check that there is some non aggregate data
-  if(!is.null(zcol_ag)) {
-    if(all( (d$point==0 & as.logical(poly_ag)) | !is.na(d[[zcol_ag]]))) {
-      stop("There is only aggregate data. Currently the pipeline does not support modeling without some disaggregated data.")
-    }
-  } else {
-    if(all(d$point == 0 & as.logical(poly_ag))) {
-      stop("There is only aggregate data. Currently the pipeline does not support modeling without some disaggregated data.")
-    }
-  }
-  
-  # Save a copy
-  if(update_run_date == TRUE) {
-    if(dir.exists(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, "/output/", run_date)) == TRUE) {
-      existing_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, "/output/", run_date)
-      new_try <- existing_dir
-      index <- 0
-      while(dir.exists(new_try)) {
-        index <- index + 1
-        new_try <- paste0(existing_dir, '_', index)
-      }
-      run_date <- paste0(run_date, '_', index)
-      dir.create(new_try, showWarnings = FALSE)
-      run_date_dir <- new_try
-    }
-    if(dir.exists(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, "/output/", run_date)) == FALSE) {
-      run_date_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, "/output/", run_date)
-      dir.create(run_date_dir, showWarnings = FALSE)
-    }
-    write.csv(d, file=paste0(run_date_dir, "/input_data", pathaddin, ".csv"))
-    return(list(d, run_date))
-  }
-  
-  if(update_run_date == FALSE) {
-    if(agebin==0){
-      run_date_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, "/output/", run_date)
-      dir.create(run_date_dir, showWarnings = FALSE)
-      write.csv(d, file=paste0(run_date_dir, "/input_data", pathaddin, ".csv"))
-    } else {
-      run_date_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, "_age",agebin,"/output/", run_date)
-      dir.create(run_date_dir, showWarnings = FALSE)
-      write.csv(d, file=paste0(run_date_dir, "/input_data", pathaddin, ".csv"))
-    }
-    return(d)
-  }
-  
-}
+   load_input_data <- function(indicator, simple = NULL, agebin = 0, removeyemen = FALSE, pathaddin = "",
+                               withdate=FALSE, date='', years='five_year',range=5, update_run_date = FALSE,
+                               withtag=FALSE, datatag='', use_share=FALSE, yl = year_list) {
 
+    # Ensure str_match loaded
+    str_match <- stringr::str_match
+
+    if(withdate){
+      if(date=='')
+        rd=run_date
+      if(date!='')
+        rd=date
+    } else {
+      rd = run_date
+    }
+
+    # Load input data by indicator
+    if(use_share==FALSE) load_dir <- '<<<< FILEPATH REDACTED >>>>'
+    if(use_share==TRUE) load_dir  <- '<<<< FILEPATH REDACTED >>>>'
+
+    if(!withdate & !withtag) filename <- paste0(load_dir, indicator)
+    if(withtag)              filename <- paste0(load_dir, indicator, datatag)
+    if(withdate)             filename <- paste0('<<<< FILEPATH REDACTED >>>>', indicator)
+
+    # try to see if an RDS exists, if so use that, if not use a csv
+    if(file.exists(paste0(filename,'.RDS'))){
+      message('READING INPUT DATA FROM RDS FILE')
+      d <- readRDS(paste0(filename,'.RDS'))
+    } else {
+      message('READING INPUT DATA FROM CSV FILE')
+      d <- read.csv(paste0(filename,'.csv'))
+    }
+
+    d$latitude  <- as.numeric(as.character(d$latitude))
+    d$longitude <- as.numeric(as.character(d$longitude))
+    message(nrow(d))
+    d=d[d$latitude<=90,]
+    d=d[d$latitude>=-90,]
+    d=d[d$longitude<=180,]
+    d=d[d$longitude>=-180,]
+    d <- subset(d, !is.na(latitude))
+    d <- subset(d, latitude!=0)
+    message(nrow(d))
+
+    # Check for necessary columns
+    if(!(indicator %in% names(d))) stop(paste0("Your input data does not contain a column for your indicator: ", indicator))
+
+    # Subset to within modeling area
+    if(!is.null(simple)){
+      coordinates(d) <- c("longitude", "latitude")
+      proj4string(d) <- proj4string(simple)
+      d$keep <- !is.na(over(d, as(simple, "SpatialPolygons")))
+      message(paste0(round(mean(d$keep), 2)*100, '% of input data in specified template'))
+      d <- d[d$keep==TRUE,]
+    }
+    d <- as.data.table(d)
+
+    if(agebin!=0)   d = d[age%in%agebin,]
+    if(removeyemen) d = d[country!='Yemen' & country!='YEM',]
+
+    # remap any years as needed
+    if(years=='five_year') {
+      d <- d[year >= 1998 & year <= 2002, year := 2000]
+      d <- d[year >= 2003 & year <= 2007, year := 2005]
+      d <- d[year >= 2008 & year <= 2012, year := 2010]
+      d <- d[year >= 2013 & year <= 2017, year := 2015]
+    }
+
+    if (nrow(subset(d, year < min(yl))) > 0) {
+      warning(paste0("Dropping all data before min(year_list) = ", min(yl), "..."))
+      d <- subset(d, year >= min(yl))
+    }
+    if (nrow(subset(d, year > max(yl))) > 0) {
+      warning(paste0("Dropping all data after max(year_list) = ", max(yl), "..."))
+      d <- subset(d, year <= max(yl))
+    }
+
+    # Change all "country" assignments to national level (in case subnational in the input data)
+    if (nrow(d[grepl("[A-Z]*_[.]*", country),]) > 0) {
+      subnat_countries <- unique(d[grepl("[A-Z]*_[.]*", country), country])
+      warning(paste0("Changing subnational to national country codes for the following: ",
+                     paste0(subnat_countries, collapse = ",")))
+      d[grepl("[A-Z]*_[.]*", country), country := str_match(country,"([A-Z]*)_[.]*")[,2]]
+    }
+
+    # creaste a weighted SS to base QTs on
+    if(sum(c('N','weight') %in% colnames(d)) == 2) d[,weighted_n := N*weight]
+
+    # Save a copy
+    if(update_run_date == TRUE) {
+      if(dir.exists('<<<< FILEPATH REDACTED >>>>') == TRUE) {
+        existing_dir <- '<<<< FILEPATH REDACTED >>>>'
+        new_try <- existing_dir
+        index <- 0
+        while(dir.exists(new_try)) {
+          index <- index + 1
+          new_try <- paste0(existing_dir, '_', index)
+        }
+        run_date <- paste0(run_date, '_', index)
+        dir.create(new_try, showWarnings = FALSE)
+        run_date_dir <- new_try
+      }
+      if(dir.exists('<<<< FILEPATH REDACTED >>>>') == FALSE) {
+        run_date_dir <- '<<<< FILEPATH REDACTED >>>>'
+        dir.create(run_date_dir, showWarnings = FALSE)
+      }
+      write.csv(d, file=paste0(run_date_dir, "/input_data", pathaddin, ".csv"))
+      return(list(d, run_date))
+    }
+
+    if(update_run_date == FALSE) {
+      if(agebin==0){
+        run_date_dir <- '<<<< FILEPATH REDACTED >>>>'
+        dir.create(run_date_dir, showWarnings = FALSE)
+        write.csv(d, file=paste0(run_date_dir, "/input_data", pathaddin, ".csv"))
+      } else {
+        run_date_dir <- '<<<< FILEPATH REDACTED >>>>'
+        dir.create(run_date_dir, showWarnings = FALSE)
+        write.csv(d, file=paste0(run_date_dir, "/input_data", pathaddin, ".csv"))
+      }
+      return(d)
+    }
+
+  }
 
 ## Read in shapefile and dissolve to single polygon for creating one big mesh (no admin1 boundaries)
 #   gaul_list = any
@@ -296,6 +194,7 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
                                 subset_only = F, makeplots = F, use_premade = F,
                                 custom_shapefile_path = NULL, custom_shapefile = NULL,
                                 raking = F, shapefile_version = 'current') {
+
   # Logic check
   if (!is.null(custom_shapefile_path) & !is.null(custom_shapefile)) stop("You cannot specify both a custom shapefile and a custom shapefile path")
 
@@ -306,7 +205,7 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
     # Check for common gaul lists so we can query premade simple polygons
     if(identical(gaul_list, c(29, 42, 45, 47, 50, 66, 90, 94, 106, 105, 144, 155, 159, 181, 182, 214, 217, 221, 243))) {
       message("Your GAUL list matches WSSA, loading premade simple_polygon and assigning subset_shape to global environment...")
-      load('/share/geospatial/simple_polygons/wssa.RData')
+      load('<<<< FILEPATH REDACTED >>>>/wssa.RData')
       assign("subset_shape", subset_shape, envir=globalenv())
       if(makeplots) plot(spoly_spdf)
       if(makeplots) plot(subset_shape, add = TRUE, border = grey(0.5))
@@ -314,7 +213,7 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
     }
     if(identical(gaul_list, c(8,49,59,68,76,89))) {
       message("Your GAUL list matches CSSA, loading premade simple_polygon and assigning subset_shape to global environment...")
-      load('/share/geospatial/simple_polygons/cssa.RData')
+      load('<<<< FILEPATH REDACTED >>>>/cssa.RData')
       assign("subset_shape", subset_shape, envir=globalenv())
       if(makeplots) plot(spoly_spdf)
       if(makeplots) plot(subset_shape, add = TRUE, border = grey(0.5))
@@ -322,7 +221,7 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
     }
     if(identical(gaul_list, c(43,58,70,77,79,133,150,152,170,205,226,74,257,253,270))) {
       message("Your GAUL list matches ESSA, loading premade simple_polygon and assigning subset_shape to global environment...")
-      load('/share/geospatial/simple_polygons/essa.RData')
+      load('<<<< FILEPATH REDACTED >>>>/essa.RData')
       assign("subset_shape", subset_shape, envir=globalenv())
       if(makeplots) plot(spoly_spdf)
       if(makeplots) plot(subset_shape, add = TRUE, border = grey(0.5))
@@ -330,7 +229,7 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
     }
     if(identical(gaul_list, c(4,40762,40765,145,169,6,248))) {
       message("Your GAUL list matches NAME, loading premade simple_polygon and assigning subset_shape to global environment...")
-      load('/share/geospatial/simple_polygons/name.RData')
+      load('<<<< FILEPATH REDACTED >>>>/name.RData')
       assign("subset_shape", subset_shape, envir=globalenv())
       if(makeplots) plot(spoly_spdf)
       if(makeplots) plot(subset_shape, add = TRUE, border = grey(0.5))
@@ -338,7 +237,7 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
     }
     if(identical(gaul_list, c(35,142,172,227,235,271))) {
       message("Your GAUL list matches SSSA, loading premade simple_polygon and assigning subset_shape to global environment...")
-      load('/share/geospatial/simple_polygons/sssa.RData')
+      load('<<<< FILEPATH REDACTED >>>>/sssa.RData')
       assign("subset_shape", subset_shape, envir=globalenv())
       if(makeplots) plot(spoly_spdf)
       if(makeplots) plot(subset_shape, add = TRUE, border = grey(0.5))
@@ -350,7 +249,7 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
                               226,235,243,248,253,268,270,271,40762,40765,
                               227,257,133,269))) {
       message("Your GAUL list matches AFRICA, loading premade simple_polygon and assigning subset_shape to global environment...")
-      load('/share/geospatial/simple_polygons/africa.RData')
+      load('<<<< FILEPATH REDACTED >>>>/africa.RData')
       assign("subset_shape", subset_shape, envir=globalenv())
       if(makeplots) plot(spoly_spdf)
       if(makeplots) plot(subset_shape, add = TRUE, border = grey(0.5))
@@ -479,164 +378,6 @@ load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
     # add projection information
     projection(spoly_spdf) <- projection(master_shape)
 
-    return(list(subset_shape=subset_shape,spoly_spdf=spoly_spdf))
-  }
-}
-
-#update the simple polygon fx to remove unnecessary pieces and use SF to speedup process
-load_simple_polygon <- function(gaul_list, buffer, tolerance = 0.2,
-                                subset_only = F, makeplots = F, use_premade = F,
-                                custom_shapefile_path = NULL, custom_shapefile = NULL, #TODO eventually remove these args
-                                raking = F, shapefile_version = 'current', testing=F) {
-  
-  #TODO should be standard
-  require(sf)
-  require(magrittr)
-
-  # Make a new simple_poly
-  # count the vertices of a SpatialPolygons object, with one feature
-  # TODO can be supplanted by mapview::npts() for sf
-  vertices <- function(x) sum(sapply(x@polygons[[1]]@Polygons, function(y) nrow(y@coords)))
-  
-  if (testing) {
-    message("Opening master shapefile...")
-    master_shape_old <- readOGR(get_admin_shapefile(
-      admin_level = 0, raking = raking,
-      version = shapefile_version
-    ))
-    master_shape_old@data$ADM0_CODE <- as.numeric(as.character(master_shape_old@data$ADM0_CODE))
-    subset_shape_old <- master_shape_old[master_shape_old@data$ADM0_CODE %in% gaul_list, ]
-  }
-  
-  # ~~~~~~~~~~~~~~~~~
-  # load data
-  message("Opening master shapefile...")
-  master_shape <- get_admin_shapefile(admin_level = 0, raking = raking, version = shapefile_version) %>% read_sf
-
-
-    if (is.null(custom_shapefile_path) & is.null(custom_shapefile)) {
-    message("Opening master shapefile...")
-    master_shape <- get_admin_shapefile(admin_level = 0, raking = raking, version = shapefile_version) %>% read_sf
-    #TODO learn how to shift entire fx to sf paradigm
-    subset_shape <- master_shape[master_shape$ADM0_CODE %in% gaul_list,] %>% as_Spatial #for now, just convert it back into SPDF
-  } else if (!is.null(custom_shapefile_path) & is.null(custom_shapefile)) {
-    message("Opening custom shapefile...")
-    master_shape <- read_sf(custom_shapefile_path)
-    subset_shape <- master_shape
-  } else if (is.null(custom_shapefile_path) & !is.null(custom_shapefile)) {
-    master_shape <- custom_shapefile
-    subset_shape <- master_shape
-  }
-  
-  
-
-  if (subset_only) {
-    
-    list(subset_shape=subset_shape,spoly_spdf=NULL) %>% return
-    
-  } else {
-    
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    
-    message('Making a super-low-complexity map outline for INLA mesh creation')
-    
-
-    message('Full polygon vertices: ', vertices(subset_shape))
-    #message('Full polygon vertices: ', npts(subset_shape))
-    
-    if (testing) vertices(subset_shape_old) == npts(subset_shape)
-
-    # Merge everything together (where intersecting)
-    af <- gUnaryUnion(subset_shape)
-    #af <- st_union(subset_shape)
-    
-    # Initial simplification
-    af_simple <- gSimplify(af, tol = tolerance, topologyPreserve = TRUE)
-    #af_simple <- st_simplify(af, dTolerance = tolerance, preserveTopology = TRUE)
-    
-    # Remove tiny features
-    # Get all sub polygons and their areas
-    polys <- af_simple@polygons[[1]]@Polygons
-    areas <- sapply(polys, function(x) x@area)
-    
-    # If there is more than one sub polygon, remove the ditzels (many single-country subsets are a single polygon,
-    #   like Uganda, which would break these few lines)
-    if(length(areas)>1) {
-      # find top 5% by area
-      big_idx <- which(areas > quantile(areas, 0.95))
-      
-      # convert back into a spatialPolygons object
-      spoly <- SpatialPolygons(list(Polygons(polys[big_idx], ID = 1)))
-    }
-    if(length(areas)==1) {
-      spoly <- af_simple
-      big_idx <- 1
-    }
-    
-    # Buffer slightly
-    spoly <- gBuffer(spoly, width = buffer)
-    
-    # simplify again to reduce vertex count
-    spoly <- gSimplify(spoly, tol = tolerance, topologyPreserve = TRUE)
-    
-    # Get list of original polygons
-    polys2 <- af@polygons[[1]]@Polygons
-    
-    # Check if all are within the simple polygon
-    check_if_in_spoly <- function(the_poly, compare_to, the_proj = projection(master_shape)) {
-      the_poly <- SpatialPolygons(list(Polygons(list(the_poly), ID = 1)))
-      projection(the_poly) <- the_proj
-      projection(compare_to) <- the_proj
-      
-      if(suppressWarnings(gIsValid(the_poly)) == F) return(TRUE) #Ignore invalid polygons
-      
-      poly_intersect <- rgeos::gIntersection(the_poly, compare_to)
-      
-      if(is.null(poly_intersect)) {
-        return(FALSE)
-      } else {
-        return(ifelse((raster::area(poly_intersect) == raster::area(the_poly)), TRUE, FALSE))
-      }
-    }
-    
-    over_list <- sapply(polys2, function(x) check_if_in_spoly(x, compare_to = spoly))
-    
-    if (all(over_list) == FALSE) {
-      # Add back in polygons if missed by above procedure (e.g. islands dropped)
-      big_idx <- unique(c(big_idx, which(over_list == F)))
-      spoly <- SpatialPolygons(list(Polygons(polys[big_idx], ID = 1)))
-      spoly <- gBuffer(spoly, width = buffer)
-      spoly <- gSimplify(spoly, tol = tolerance, topologyPreserve = TRUE)
-    }
-    
-    # Now check again with new spoly
-    over_list <- sapply(polys2, function(x) check_if_in_spoly(x, compare_to = spoly))
-    
-    # If still not all enclosed, tolerance probably too high. Return warning
-    if (all(over_list) == FALSE) {
-      number_false = length(over_list[over_list == F])
-      number_total = length(over_list)
-      warning(paste0(number_false, " of ", number_total, " polygons are NOT enclosed within your simple polygon. \n",
-                     "Adjust your buffer and tolerance values."))
-    }
-    
-    # Return results
-    #message('Simplified vertices: ', npts(spoly))
-    message('Simplified vertices: ', vertices(spoly))
-    
-    # plot to check it encloses all of the important bits
-    if(makeplots) plot(spoly)
-    if(makeplots) plot(af, add = TRUE, border = grey(0.5))
-    
-    # turn into an SPDF
-    spoly_spdf <- SpatialPolygonsDataFrame(spoly,
-                                           data = data.frame(ID = 1),
-                                           match.ID = FALSE)
-    
-    # add projection information
-    projection(spoly_spdf) <- projection(master_shape)
-    #projection(spoly_spdf) <- st_crs(master_shape)
-    
     return(list(subset_shape=subset_shape,spoly_spdf=spoly_spdf))
   }
 }
@@ -907,119 +648,53 @@ empty_world_raster <- function(whole_world = FALSE) {
 }
 
 
-#' @title Build a simple raster and associated pop raster
-#' @description Builds a rasterized version of subset_shape to define
-#'   the raster version of the modeling domain. Also returns a
-#'   population raster for the modeling domain
-#' @param subset_shape A \code{SpatialPolygonsDataFrame} to be
-#'   rasterized. Usually output from
-#'   \code{\link[load_simple_polygon()]}.
-#' @param field Name of data entry in subset_shape to use as values in
-#'   simple_raster, Default: NULL
-#' @param raking Logical. Use raking shapefiles? Default: F
-#' @param link_table String or data.table. If data.table it is used as-is, if string it is the shapefile version to specify correct link table
-#' @param id_raster Raster. If building simple raster on link table, provide id_raster used for building the link table
-#' @param pop_measure String. name of population measure to return in pop_raster. Default: 'total'
-#' @param pop_release String. worldpop version date. If NULL, take most recent Default: NULL
-#' @param pop_start_year Integer. first year of worldpop to load. Default: 2000
-#' @param pop_end_year Integer. last year of worldpop to load. Default: 2018
-#' @param shapefile_version String. which shapefile version is used.
-#' @return A named list cotaining a 'simple_raster' and a 'pop_raster'
-#' @details Rasterizes subset_shape, giving pixels values of
-#'   \code{field}. Also loads and crops and returns a worldpop raster
-#'   for the same domain with annual layers.
-#' @examples
-#' \dontrun{
-#' if (interactive()) {
-#'   ## Load simple polygon template to model over
-#' adm_list           <- get_adm0_codes('wssa', shapefile_version = 'current')
-#' simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 1, tolerance = 0.4,
-#'   shapefile_version = 'current')
-#' subset_shape        <- simple_polygon_list[[1]]
-#' simple_polygon      <- simple_polygon_list[[2]]
-#'
-#' ## Load list of raster inputs (pop and simple)
-#' raster_list        <- build_simple_raster_pop(subset_shape)
-#' simple_raster      <- raster_list[['simple_raster']]
-#' pop_raster         <- raster_list[['pop_raster']]
-#' }
-#' }
-#' @seealso
-#'  \code{\link[raster]{mask}}
-#' @rdname build_simple_raster_pop
-#'
-#' @export
-#'
-#' @importFrom raster mask unique merge
-#'
-build_simple_raster_pop <- function(subset_shape,
-                                    field = NULL,
-                                    raking = FALSE,
-                                    link_table = modeling_shapefile_version,
-                                    id_raster = NULL,
-                                    pop_measure = 'total',
-                                    pop_release = NULL,
-                                    pop_start_year = 2000,
-                                    pop_end_year = 2018) {
-  
+## Load list of raster inputs (pop and simple)
+build_simple_raster_pop <- function(subset_shape, u5m=FALSE, field=NULL, raking=F, link_table=modeling_shapefile_version) {
+
   if (is.null(field)) {
     if ('GAUL_CODE' %in% names(subset_shape@data)) field <- 'GAUL_CODE'
     if ('ADM0_CODE' %in% names(subset_shape@data)) field <- 'ADM0_CODE'
   }
-  
-  if(raking) {
+
+  if(raking){
     field <- 'loc_id'
     # no 'loc_id' field in the link table, so we can't use it
     link_table <- NULL
   }
-  
-  ## if unspecified, get the most recent worldpop release
-  if (is.null(pop_release)) {
-    helper <- CovariatePathHelper$new()
-    pop_rast_path  <- helper$covariate_paths(covariates = 'worldpop',
-                                             measures = pop_measure,
-                                             releases = pop_release)
-    pop_release <- helper$newest_covariate_release(pop_rast_path)
+
+  if(u5m==FALSE){
+    master_pop <- brick('<<<< FILEPATH REDACTED >>>>/WorldPop_total_global_stack.tif')
+  } else {
+    master_pop <- brick(raster('/<<<< FILEPATH REDACTED >>>>/worldpop_a0004t_5y_2000_00_00.tif'),
+    raster('/<<<< FILEPATH REDACTED >>>>/worldpop_a0004t_5y_2005_00_00.tif'),
+    raster('/<<<< FILEPATH REDACTED >>>>/worldpop_a0004t_5y_2010_00_00.tif'),
+    raster('/<<<< FILEPATH REDACTED >>>>/worldpop_a0004t_5y_2015_00_00.tif'))
   }
-  
-  # To ensure correct "snap" method is used, first convert to a template raster that is masked to population
-  pop_rast <- brick(paste0("/snfs1/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/total/", pop_release, "/1y/worldpop_total_1y_2010_00_00.tif"))
-  template_raster <- raster::crop(pop_rast, raster::extent(subset_shape), snap = "out")
-  
-  # load in the population raster given the measure and the release
-  cropped_pop <- load_worldpop_covariate(template_raster,
-                                         covariate = 'worldpop',
-                                         pop_measure = pop_measure,
-                                         pop_release = pop_release,
-                                         start_year = pop_start_year,
-                                         end_year = pop_end_year,
-                                         interval = 12)[['worldpop']]
-  
+
+  cropped_pop <- crop(master_pop, extent(subset_shape), snap="out")
   ## Fix rasterize
-  initial_raster <- rasterize_check_coverage(subset_shape, cropped_pop, field = field, link_table = link_table, id_raster = id_raster)
-  if (length(subset(subset_shape, !(get(field) %in% unique(initial_raster)))) != 0) {
-    rasterized_shape <-
+  initial_raster <- rasterize_check_coverage(subset_shape, cropped_pop, field = field, link_table = link_table)
+  if(length(subset(subset_shape, !(get(field) %in% unique(initial_raster))))!=0) {
+    rasterized_shape <- 
       raster::merge(
         rasterize_check_coverage(subset(subset_shape, !(get(field) %in% unique(initial_raster))),
                                  cropped_pop,
                                  field = field,
-                                 link_table = link_table,
-                                 id_raster = id_raster),
+                                 link_table = link_table),
         initial_raster)
   }
-  if (length(subset(subset_shape, !(get(field) %in% unique(initial_raster)))) == 0) {
+  if(length(subset(subset_shape, !(get(field) %in% unique(initial_raster))))==0) {
     rasterized_shape <- initial_raster
   }
-  masked_pop <- raster::mask(x = cropped_pop, mask = rasterized_shape)
-  
+  masked_pop <- raster::mask(x=cropped_pop, mask=rasterized_shape)
+
   raster_list <- list()
   raster_list[['simple_raster']] <- rasterized_shape
   raster_list[['pop_raster']] <- masked_pop
-  
-  return(raster_list)
-  
-}
 
+  return(raster_list)
+
+}
 
 ## #############################################################################
 ## GET ADMIN CODES AND RELATED FUNCTIONS
@@ -1039,7 +714,7 @@ build_simple_raster_pop <- function(subset_shape,
 #'
 load_adm0_lookup_table <- function(){
   # Define consistent path to the ADM0 lookup table
-  lookup_table_filepath <- paste0('/home/j/WORK/11_geospatial/10_mbg/',
+  lookup_table_filepath <- paste0('/<<<< FILEPATH REDACTED >>>>/',
                                   'stage_master_list.csv')
   # If data.table is loaded, read in as a data.table
   if ('package:data.table' %in% search()){
@@ -1173,10 +848,10 @@ pull_custom_modeling_regions <- function(custom_regions){
     'dia_afr_horn' = 'dji+eri+eth+sdn+som+ssd+yem',
     'dia_cssa' = 'ago+caf+cod+cog+gab+gnq+stp',
     'dia_wssa' = 'ben+bfa+civ+cmr+cpv+gha+gin+gmb+gnb+lbr+mli+mrt+ner+nga+sen+sle+tcd+tgo',
-    'dia_name' = 'dza+egy+esh+lby+mar+tun',
+    'dia_name' = 'dza+egy+lby+mar+tun',
     'dia_sssa' = 'bwa+nam+zaf',
     'dia_mcaca' = 'blz+cri+cub+dma+dom+grd+gtm+hnd+hti+jam+lca+mex+nic+pan+slv+vct',
-    'dia_s_america' = 'bol+bra+col+ecu+guf+guy+per+pry+sur+tto+ven',
+    'dia_s_america' = 'bol+bra+col+ecu+guy+per+pry+sur+tto+ven',
     'dia_central_asia' = 'kgz+tjk+tkm+uzb',
     'dia_chn_mng' = 'chn+mng',
     'dia_se_asia' = 'khm+lao+mmr+mys+tha+vnm',
@@ -1185,8 +860,12 @@ pull_custom_modeling_regions <- function(custom_regions){
     'dia_mid_east' = 'afg+irn+irq+jor+pse+syr',
     'dia_essa' = 'bdi+com+ken+lso+mdg+moz+mwi+rwa+swz+syc+tza+uga+zmb+zwe',
     'dia_oceania' = 'asm+fji+fsm+kir+mhl+slb+ton+vut+wsm',
+    
+    # Additional custom regions for ORT
     'dia_s_america_n' = 'guy+col+sur+tto',
-    'dia_s_america_s' = 'bol+ecu+per+pry'
+    'dia_s_america_s' = 'bol+ecu+per+pry',
+    'dia_wssa_e' = 'cmr+ner+tcd',
+    'dia_wssa_w' = 'ben+bfa+civ+cpv+gha+gin+gmb+gnb+lbr+mli+mrt+sen+sle+tgo'
 
   )
   # Warn if there are any custom regions not in the reference list
@@ -1520,13 +1199,6 @@ gaul_convert <- function(countries, from = "iso3", verbose = F, shapefile_versio
   # Outputs: a vector of gaul codes
 
   # load reference table
-
-  if (Sys.info()["sysname"] == "Linux") {
-    j_root <- "/home/j/"
-  } else {
-    j_root <- "J:/"
-  }
-
   str_match <- stringr::str_match
 
   # Catch if already passed gaul codes
@@ -1726,7 +1398,7 @@ check_custom_regions <- function(region_list, shapefile_version = 'current') {
   reg_table <- merge(custom_reg_table, default_reg_table, all.x = T, all.y = T)
 
   # Grab the rest of the information about these gaul codes
-  info_table <- fread("/home/j/WORK/11_geospatial/10_mbg/stage_master_list.csv")
+  info_table <- fread("/<<<< FILEPATH REDACTED >>>>/stage_master_list.csv")
   reg_table <- merge(reg_table, info_table, all.x = T, all.y = F, by.x = "gaul_code", by.y = "GAUL_CODE")
 
   custom_not_default <- subset(reg_table, !is.na(custom_region) & is.na(default_region))
@@ -1792,7 +1464,7 @@ plot_custom_regions <- function(region_list,
 
   # Load gaul shapefile
   if (verbose == T) message("Loading shapefiles...")
-  world_shape <- readRDS('/share/geospatial/rds_shapefiles/simplified_shapefiles/g2015_2014_0_simp_tol_0.1.rds')
+  world_shape <- readRDS('/<<<< FILEPATH REDACTED >>>>/g2015_2014_0_simp_tol_0.1.rds')
   world_shape <- subset(world_shape, ADM0_NAME != "Antarctica")
   world_shape <- merge(world_shape, unique(reg_table), all.x = T, all.y = F, by.x = "ADM0_CODE", by.y = "gaul_code")
 
@@ -1898,31 +1570,20 @@ plot_custom_regions <- function(region_list,
 }
 
 
-#' set_root
-#'
-#' @description A function to set the "root" based on the OS used.
-#' @author Rebecca Stubbs
-#'
-set_root<-function(){
-  root<<-ifelse(Sys.info()[1]=="Windows", "J:/", "/home/j/") # Setting "root" as global variable
-}
-
 #' load_libs
 #'
 #' @description A function to load libraries based on whether the
 #' code is being run on cluster prod or the geos nodes. Tries
 #' to load each package, and returns errors or warnings if the package fails to
 #' load rather than breaking the loop.
-#' @author Rebecca Stubbs
 #'
 #' @param packages A vector or list of packages
 #' @param stop Boolean; if T will stop code if not all packages load. if F (default),
 #' the code will contiue and will throw a warning.
 load_libs<-function(packages,stop=F){
-  set_root() # Seting the "root" based on OS
   package_lib <- ifelse(grepl("geos", Sys.info()[4]),
-                        paste0(root,'temp/geospatial/geos_packages'),
-                        paste0(root,'temp/geospatial/packages'))
+                        paste0('<<<< FILEPATH REDACTED >>>>/geos_packages'),
+                        paste0('<<<< FILEPATH REDACTED >>>>/packages'))
   .libPaths(package_lib)
   message(paste0('Loading packages from ',package_lib))
 
@@ -1959,7 +1620,6 @@ load_libs<-function(packages,stop=F){
 #' @description  Crop the raster to the extent of a simple_raster object,
 #' set the extent, and then mask it based on the simple_raster object.
 #'
-#' @author Rebecca Stubbs
 #'
 #' @param raster_object A raster object (raster, Brick, etc) of a specific region
 #' @param simple_raster A simple raster object that serves as the template for that region
@@ -2006,7 +1666,7 @@ upload_config_to_db <- function(config, user, core_repo, indicator_group, indica
   config_binded[, datestamp:= paste0(Sys.time())]
 
   ## Open connection to database
-  dbpath <- "/share/geospatial/run_logs/config_db/run_db_20190216.sqlite"
+  dbpath <- "/<<<< FILEPATH REDACTED >>>>/run_db_20190216.sqlite"
   configdb <- DBI::dbConnect(RSQLite::SQLite(), dbpath)
 
   ## Upload config

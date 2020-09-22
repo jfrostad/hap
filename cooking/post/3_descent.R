@@ -1,30 +1,14 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
-# Author: JF
+# Author: #REDACTED
 # Date: 11/01/2019
 # Purpose: Calculate TAP PAFs
-#source('/homes/jfrostad/_code/lbd/hap/cooking/post/3_descent.R') 
 #***********************************************************************************************************************
 
 # ----CONFIG------------------------------------------------------------------------------------------------------------
 # clear memory
 rm(list=ls())
 
-# runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  j_root <- "/home/j/"
-  h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
-  ## Load libraries and  MBG project functions.
-  .libPaths(package_lib)
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-}
+#REDACTED
 
 #load external packages
 #TODO request adds to lbd singularity
@@ -37,20 +21,7 @@ interactive <- F  %>% #manual override
 
 if (interactive) {
   
-  ## Set repo location, indicator group, and some arguments
-  user <- 'jfrostad'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap"
-  indicator_group <- 'cooking'
-  indicator <- 'cooking_fuel_solid'
-  config_par   <- 'hap_sp_fine'
-  holdout <- 0
-  age <- 0
-  run_date <- '2020_09_01_11_42_52'
-  measure <- 'prev'
-  #region <- 'soas'
-  region <- 'essa-ERI-DJI-YEM'
-  cov_par <- paste(indicator_group, region, sep='_')
-  my_repo <- "/homes/jfrostad/_code/lbd/hap"
+  #REDACTED
   
 } else {
   
@@ -109,26 +80,16 @@ covs <- data.table(
   include = c(TRUE),
   release = c("2019_11_05")
 )
-
-#TODO pass from 2_entry.R?
-# config_par   <- 'hap_standard'
-# cov_par <- paste(indicator_groups[['hap']], region, sep='_')
-
-# print out session info so we have it on record
-sessionInfo()
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
 ##function lib##
 #load gbd fxs
-gbd.shared.function.dir <- '/ihme/cc_resources/libraries/current/r/'
-file.path(gbd.shared.function.dir, 'get_location_metadata.R') %>% source
+#REDACTED
 
 # load MBG packages
-#core_repo <- file.path(h_root, '_code/lbd/lbd_core/')
-core_repo <- file.path(h_root, '_code/lbd/hap/')
-my_repo <- file.path(h_root, '_code/lbd/hap/')
-package_list <- c(t(read.csv('/share/geospatial/mbg/common_inputs/package_list.csv',header=FALSE)))
+#REDACTED
+package_list <- c(t(read.csv('#REDACTED/package_list.csv',header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
 mbg_setup(package_list = package_list, repos = core_repo)
 
@@ -217,19 +178,19 @@ summstats <- eval(parse(text = config[V1 == 'summstats', V2]))
 
 # ---IN/OUT-------------------------------------------------------------------------------------------------------------
 #input dirs
-rr.dir <- file.path('/ihme/erf/GBD2019/air_pmhap/rr/model/')
-global_link_dir <- file.path('/home/j/WORK/11_geospatial/admin_shapefiles', modeling_shapefile_version) #TODO make official
+#REDACTED
+global_link_dir <- file.path('#REDACTED', modeling_shapefile_version) #TODO make official
 
 #intermediate data
-data.dir <- file.path('/share/geospatial/mbg/', indicator_group, 'data')
+data.dir <- file.path('#REDACTED', indicator_group, 'data')
 
 # create outputdir
-outputdir <- paste0('/share/geospatial/mbg/', indicator_group, '/post/', run_date)
+outputdir <- paste0('#REDACTED', indicator_group, '/post/', run_date)
   dir.create(paste0(outputdir, '/tmp/'), recursive = T)
   
 # prep GBD files and values ------------------------------------------------------------
 ##define share directory
-share_dir <- paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/output/', run_date, '/')
+share_dir <- paste0('#REDACTED', indicator_group, '/', indicator, '/output/', run_date, '/')
 
 ## start master timer
 tic('Master timer')
@@ -247,12 +208,12 @@ if(prep_gbd_files) {
   
   # load and format the GBD results
   gbd.hap.version <- '092419'
-  gbd.hap.pm <- file.path('/ihme/erf/GBD2019/air_hap/map/results/summary', gbd.hap.version, 
+  gbd.hap.pm <- file.path('/#REDACTED', gbd.hap.version, 
                           paste0('lm_map_', gbd.hap.version, '.csv')) %>% 
     fread %>% 
-    .[grouping!='indoor', .(location_id, year=year_id, hap_excess_pm25=mean, grouping)] %>% # use the mean, (or median?? bc logspace)
+    .[grouping!='indoor', .(location_id, year=year_id, hap_excess_pm25=mean, grouping)] %>% 
     merge(., locs, by='location_id', all.x=T) %>% 
-    .[nchar(iso3)<4] %>% #TODO, for now do not use subnationals as they do not merge to adm0 codes
+    .[nchar(iso3)<4] %>% 
     .[, ADM0_CODE := get_adm0_codes(iso3), by=iso3] #merge on ad0 code
   
   #duplicate children to make specific u5 category
@@ -268,7 +229,7 @@ if(prep_gbd_files) {
   gbd.hap.pm[grouping=='male', `:=` (age_group_id=10, sex_id=1)]
   
   #load the rr max for SEV
-  rr.max <- fread('/ihme/erf/GBD2019/air_hap/rr_max/air_hap.csv') %>% 
+  rr.max <- fread('/#REDACTED/air_hap.csv') %>% 
     setnames(., 'rr', 'rr_max') %>% 
     .[, draw := paste0("V", draw)] %>% 
     .[, rei := NULL] %>% #to save space
@@ -458,12 +419,7 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
       
       #calculate the hap proportion and other key hap indicators
       dt[, hap_pct := hap_pm/(aap_pm+hap_pm)]
-      
-      #calculate correlations between aap and hap
-      #TODO output this at pixel level instead and map?
-      #message('making correlation calculations')
-      #dt[, cor := corSpearman(aap_pm, hap_pm), by=.(pixel_id, draw)]
-  
+
       #calculate the TAP RR for LRI
       if (msg) message('-merging risk files and expanding dt')
       #first merge on the RR.max to expand the causes for our cellpred dt
@@ -539,7 +495,6 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
         setkeyv(agg, by_cols)
         agg[, miss := mbg_var %>% get %>% is.na %>% sum %>% as.numeric, by=key(agg)]
         agg[, miss := miss/.N, by=by_cols]
-        #TODO set up reporting diagnostic for units that are 100% missing
         
         #apply area fraction to weight the summed variables (pops)
         agg[, (sum_cols) := lapply(.SD, function(x) x * area_fraction), .SDcols=sum_cols]
@@ -548,7 +503,6 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
         if (msg) message('-producing means')
         agg[miss<1, paste0(mean_cols) := lapply(.SD,  Hmisc::wtd.mean, weights=pop), .SDcols=mean_cols, by=key(agg)] 
 
-        #TODO currently only summing pop so it has no C.I. -> how to handle C.I.s for counts?
         if (make_sums) agg[, (sum_cols) := lapply(.SD, sum, na.rm=T), .SDcols=sum_cols, by=key(agg)] 
         
         #select which cols to keep
@@ -600,7 +554,6 @@ calcTAP <- function(country, dir, rr_data=rr.dt,
     }  
 
     #define country parallelization
-    #TODO make this piece more memory efficient
     if(country%in%big_countries) country_cores <- ifelse(country%in%super_big_countries, 1, 3) 
     else country_cores <- 7
 
@@ -644,11 +597,6 @@ out_sev <- lapply(out, function(x) x[['sev_cell_pred']] %>% as.data.table) %>%
 toc(log=TRUE)
 
 #recombine SEVs into a deduped cell_pred (linking process generates duplicates)
-#TODO setup to check dims against original cellpred?
-# rdata_file <- paste0('/share/geospatial/mbg/cooking/cooking_fuel_solid/output/', run_dates$hap, '/',
-#                      'cooking_fuel_solid_raked_prev_cell_draws_eb_bin0_', region, "_0.RData")
-# load(rdata_file)
-#cell_pred_dims <- dim(raked_cell_pred)
 sev_cell_pred <- names(out_sev) %>% .[. %like% 'V'] %>%
   unlink_cell_pred(out_sev, cols=.)
 

@@ -1,16 +1,9 @@
-## these functions are being written specifically to help get the
-## Diarrhea #1 paper published, but they should be more generally
-## useful
-
 ## #######################################################################
-## they take cell pred type objects and make analagous (matrix where
+## Functions take cell pred type objects and make analagous (matrix where
 ## rows are observations at some level and columns are wide on draws)
-## annual-rate-of-change_pred (AROC_pred) type objects
-
-## these functions then also perform projections on make analgous
-## projection_pred objects
-
-## written by aoz / modified by chris troeger, then jon mosser
+## annual-rate-of-change_pred (AROC_pred) type objects.
+## These functions then also perform projections on make analgous
+## projection_pred objects,
 ## #######################################################################
 
 ## get_cell_pred_for_aroc ################################################
@@ -28,8 +21,6 @@
 #' @param matrix_pred_name In \code{sprintf} notation. The one object passed into
 #'   the string should will be a region name. this allows different regions to be
 #'   passed to different named matrix_preds (pixel level, ad0, ad1, ad2, ...)
-#'   e.g. 'had_diarrhea_cell_draws_eb_bin0_%s_diarrhea2_0.RData' which
-#'   will be passed to sprintf('had_diarrhea_cell_draws_eb_bin0_%s_0.RData', reg)
 #' @param skip_cols columns to skip when reading in the cell preds
 #'   For example, if the first two columns store non-pred information in your
 #'   file format, \code{skip_cols = 2} will read in all columns from 3 onwards
@@ -50,15 +41,12 @@ get_cell_pred_for_aroc <- function(ind_gp,
                                    shapefile_version = 'current') {
   # Load the relevant pred object - loads an object named cell_pred
   # Try both rds file and rdata file until we standardize this
-  rds_file <- sprintf(paste0('/share/geospatial/mbg/%s/%s/output/%s/',
-                             matrix_pred_name), ind_gp, ind, rd, reg, measure)
+  rds_file <- '<<<< FILEPATH REDACTED >>>>'
 
   if (rk) {
-    rdata_file <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                       ind, "_raked_cell_draws_eb_bin0_", reg, "_0.RData")
+    rdata_file <- '<<<< FILEPATH REDACTED >>>>'
   } else {
-    rdata_file <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                       ind, "_cell_draws_eb_bin0_", reg, "_0.RData")
+    rdata_file <- '<<<< FILEPATH REDACTED >>>>'
   }
 
   if (!is.null(matrix_pred_name) & file.exists(rds_file)) {
@@ -221,8 +209,6 @@ merge_sp_hierarchy <- function(df, admin_level, idx_col, sp_h = NULL, shapefile_
 #' @param matrix_pred_name In \code{sprintf} notation. The one object passed into
 #'   the string should will be a region name. this allows different regions to be
 #'   passed to different named matrix_preds (pixel level, ad0, ad1, ad2, ...)
-#'   e.g. 'had_diarrhea_cell_draws_eb_bin0_%s_diarrhea2_0.RData' which
-#'   will be passed to sprintf('had_diarrhea_cell_draws_eb_bin0_%s_0.RData', reg)
 #' @param type Type of aroc to create. Options include \code{cell}, \code{admin},
 #'   or \code{c('cell', 'admin')} for both.
 #' @param measure prevalence, incidence, mortality, etc
@@ -308,8 +294,8 @@ make_aroc <- function(ind_gp, ind, rd,
   }
 
   # define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
-  output_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
+  share_dir <- '<<<< FILEPATH REDACTED >>>>'
+  output_dir <- '<<<< FILEPATH REDACTED >>>>'
   dir.create(output_dir, showWarnings=F, recursive = T)
 
   ## load in regions used in this model and run_date
@@ -359,7 +345,7 @@ make_aroc <- function(ind_gp, ind, rd,
         ## we'll need to match pixels to countries so we load the region simple raster
         message('-- making simple raster')
         gaul_list <- get_adm0_codes(regions[ii], shapefile_version = shapefile_version)
-        simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 0.4, subset_only = T)
+        simple_polygon_list <- load_simple_polygon(gaul_list = gaul_list, buffer = 1, tolerance = 0.4, shapefile_version = shapefile_version, subset_only = T)
         subset_shape   <- simple_polygon_list[[1]]
         raster_list    <- build_simple_raster_pop(subset_shape)
         simple_raster  <- raster_list[['simple_raster']] ## this is what we really need
@@ -426,9 +412,8 @@ make_aroc <- function(ind_gp, ind, rd,
       message(sprintf('TESTING: Percent of NA rows per column is: %f%%', mean(is.na(aroc_draws[, 1]))))
       message('-- finished making AROC across draws. now saving')
       saveRDS(object = aroc_draws,
-              file = sprintf('%s/%s_%s_aroc_cell_draw_matrix_%s%s%s.RDs',
-                             output_dir, ind, measure, ifelse(uselogit, "logit_", ""), regions[ii],
-                             extra_file_tag))
+              file = '<<<< FILEPATH REDACTED >>>>')
+
     } # Close region loop
   } # if ('cell' %in% type)
 
@@ -437,12 +422,8 @@ make_aroc <- function(ind_gp, ind, rd,
     message('Working on ADMIN level')
     ## load the admin objects
     ## try two different locations until we standardize
-    file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_', 
-                      ifelse(raked, "raked", "unraked"), '.Rdata',
-                      ind_gp, ind, rd, ind, measure)
-    file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                     ind, '_', ifelse(raked, "raked", "unraked"),
-                     '_admin_draws_eb_bin0_0.RData')
+    file_1 <- '<<<< FILEPATH REDACTED >>>>'
+    file_2 <- '<<<< FILEPATH REDACTED >>>>'
 
     if (file.exists(file_1)) {
       load(file_1)
@@ -555,9 +536,7 @@ make_aroc <- function(ind_gp, ind, rd,
       colnames(final_aroc)[1] <- sprintf('ADM%i_CODE', aa)
 
       saveRDS(object = final_aroc,
-              file = sprintf('%s/%s_%s_aroc_adm%i_draw_matrix%s%s.RDs',
-                             output_dir, ind, measure, aa, ifelse(uselogit, "_logit", ""),
-                             extra_file_tag))
+              file = '<<<< FILEPATH REDACTED >>>>')
 
     } # For aa in admin
   } # if ('admin' %in% type)...
@@ -713,8 +692,6 @@ make_aroc_weights <- function(weighting_res,
 #' @param matrix_pred_name In \code{sprintf} notation. The one object passed into
 #'   the string should will be a region name. this allows different regions to be
 #'   passed to different named matrix_preds (pixel level, ad0, ad1, ad2, ...)
-#'   e.g. 'had_diarrhea_cell_draws_eb_bin0_%s_diarrhea2_0.RData' which
-#'   will be passed to sprintf('had_diarrhea_cell_draws_eb_bin0_%s_0.RData', reg)
 #' @param year_list Vector (integer) of years included in the model run / cell pred object
 #' @param uselogit Should this be done in logit space?
 #' @param extra_file_tag Appended at the end of all files generated from this run of the function. Useful if you're comparing different weights/resolutions to calcualte AROC and project
@@ -747,15 +724,12 @@ make_proj <- function(ind_gp, ind, rd,
                       ) {
 
   ## load in regions used in this model and run_date
-  regions <- get_output_regions(in_dir = paste0('/share/geospatial/mbg/',
-                                                ind_gp, '/',
-                                                ind, '/output/',
-                                                rd))
+  regions <- get_output_regions(in_dir = '<<<< FILEPATH REDACTED >>>>')
 
   # define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
-  aroc_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
-  output_dir <- paste0(share_dir, "/pred_derivatives/proj/")
+  share_dir <- '<<<< FILEPATH REDACTED >>>>'
+  aroc_dir <- '<<<< FILEPATH REDACTED >>>>'
+  output_dir <- '<<<< FILEPATH REDACTED >>>>'
 
   dir.create(output_dir, recursive = T, showWarnings = F)
 
@@ -779,9 +753,7 @@ make_proj <- function(ind_gp, ind, rd,
       # Load aroc object
       message('-- loading aroc')
 
-      aroc_draws <- readRDS(sprintf('%s/%s_%s_aroc_cell_draw_matrix_%s%s%s.RDs',
-                                    aroc_dir, ind, measure, ifelse(uselogit, "logit_", ""),
-                                    regions[ii], extra_file_tag))
+      aroc_draws <- readRDS('<<<< FILEPATH REDACTED >>>>')
 
       # Get number of draws
       num_draws <- ncol(aroc_draws)
@@ -836,9 +808,7 @@ make_proj <- function(ind_gp, ind, rd,
 
       lapply(1:length(proj_draws_list), function(i) {
         saveRDS(object = proj_draws_list[[i]],
-                file = sprintf('%s/%s_%s_%s_projections_cell_draw_matrix_%s%s.RDs',
-                               output_dir, ind, measure, names(proj_draws_list)[i],
-                               ifelse(uselogit, "logit_", ""), regions[ii]))
+                file = '<<<< FILEPATH REDACTED >>>>')
         })
     } # close regions loop
   } # if ('cell' %in% type)
@@ -850,12 +820,8 @@ make_proj <- function(ind_gp, ind, rd,
     ## load the admin objects
     ## try two different locations until we standardize
     message('- loading admin objects')
-    file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_', 
-                      ifelse(raked, "raked", "unraked"), '.Rdata',
-                 ind_gp, ind, rd, ind, measure)
-    file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                     ind, '_', ifelse(raked, "raked", "unraked"), 
-                     '_admin_draws_eb_bin0_0.RData')
+    file_1 <- '<<<< FILEPATH REDACTED >>>>'
+    file_2 <- '<<<< FILEPATH REDACTED >>>>'
 
     if (file.exists(file_1)) {
       load(file_1)
@@ -899,9 +865,7 @@ make_proj <- function(ind_gp, ind, rd,
 
       # load aroc
       message("-- loading aroc")
-      aroc_draws <- readRDS(sprintf('%s/%s_%s_aroc_adm%i_draw_matrix%s%s.RDs',
-                                    aroc_dir, ind, measure, aa, ifelse(uselogit, "_logit", ""),
-                                    extra_file_tag))
+      aroc_draws <- readRDS('<<<< FILEPATH REDACTED >>>>')
 
       # remove first column (spatial index) and store separately
       spatial_idx <- aroc_draws[, 1]
@@ -960,9 +924,7 @@ make_proj <- function(ind_gp, ind, rd,
       message('-- saving projections')
       lapply(1:length(proj_draws_list), function(i) {
         saveRDS(object = proj_draws_list[[i]],
-                file = sprintf('%s/%s_%s_%s_projections_adm%i_draw_matrix%s.RDs',
-                               output_dir, ind, measure, names(proj_draws_list)[i],
-                               aa, ifelse(uselogit, "_logit", "")))
+                file = '<<<< FILEPATH REDACTED >>>>')
         })
     } # close admin levels loop
    } # if ('admin' %in% type)
@@ -1068,8 +1030,6 @@ add_goal <- function(goal_obj = NULL,
 #' @param matrix_pred_name In \code{sprintf} notation. The one object passed into
 #'   the string should will be a region name. this allows different regions to be
 #'   passed to different named matrix_preds (pixel level, ad0, ad1, ad2, ...)
-#'   e.g. 'had_diarrhea_cell_draws_eb_bin0_%s_diarrhea2_0.RData' which
-#'   will be passed to sprintf('had_diarrhea_cell_draws_eb_bin0_%s_0.RData', reg)
 #' @param shapefile_version character string indicating version of shapefile to pull
 #' @return generates cell- and admin- level probabilities of meeting the specified goal,
 #'   according to what is specified in \code{goal_obj}.  Objects are written to
@@ -1107,17 +1067,14 @@ compare_to_target <- function(ind_gp,
                               shapefile_version = 'current'){
 
   ## load in regions used in this model and run_date
-  regions <- get_output_regions(in_dir = paste0('/share/geospatial/mbg/',
-                                                ind_gp, '/',
-                                                ind, '/output/',
-                                                rd))
+  regions <- get_output_regions(in_dir = '<<<< FILEPATH REDACTED >>>>')
 
 
   # define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
-  aroc_dir <- paste0(share_dir, "/pred_derivatives/aroc/")
-  proj_dir <- paste0(share_dir, "/pred_derivatives/proj/")
-  output_dir <- paste0(share_dir, "/pred_derivatives/target_probs/")
+  share_dir <- '<<<< FILEPATH REDACTED >>>>'
+  aroc_dir <- '<<<< FILEPATH REDACTED >>>>'
+  proj_dir <- '<<<< FILEPATH REDACTED >>>>'
+  output_dir <- '<<<< FILEPATH REDACTED >>>>'
 
   dir.create(output_dir, showWarnings = F, recursive = T)
 
@@ -1154,9 +1111,7 @@ compare_to_target <- function(ind_gp,
 
         # Load proj_draws object
         message("-- Loading proj_draws object...")
-        proj_draws <- readRDS(sprintf('%s/%s_%s_%s_projections_cell_draw_matrix%s_%s.RDs',
-                                      proj_dir, ind, measure, target_year,
-                                      ifelse(uselogit, "_logit",""), regions[ii]))
+        proj_draws <- readRDS('<<<< FILEPATH REDACTED >>>>')
 
         # Generate probabilities
         if (abs_rel == "absolute") {
@@ -1174,8 +1129,7 @@ compare_to_target <- function(ind_gp,
           # Save
           message("-- Saving probabilities...")
           saveRDS(object = absolute_goal_prob,
-                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_", abs_rel, "_",
-                                target_type, '_', target, '_cell_target_probs_', regions[ii], '.RDs'))
+                  file = '<<<< FILEPATH REDACTED >>>>')
 
           rm(absolute_goal_prob, absolute_goal_draws)
 
@@ -1210,9 +1164,7 @@ compare_to_target <- function(ind_gp,
           # Save
           message("-- Saving probabilities...")
           saveRDS(object = relative_goal_prob,
-                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_vs_",
-                                baseline_year, "_", abs_rel, "_", target_type, '_', target,
-                                '_cell_target_probs_', regions[ii], '.RDs'))
+                  file = '<<<< FILEPATH REDACTED >>>>')
 
           rm(relative_goal_prob, relative_proj_draws)
 
@@ -1230,9 +1182,7 @@ compare_to_target <- function(ind_gp,
 
         # Load proj_draws object
         message("-- Loading proj_draws object...")
-        proj_draws <- readRDS(sprintf('%s/%s_%s_%s_projections_adm%i_draw_matrix%s.RDs',
-                                      proj_dir, ind, measure, target_year, aa,
-                                      ifelse(uselogit, "_logit","")))
+        proj_draws <- readRDS('<<<< FILEPATH REDACTED >>>>')
 
         # Split off spatial index
         spatial_idx <- proj_draws[,1]
@@ -1257,8 +1207,7 @@ compare_to_target <- function(ind_gp,
 
           # RDS
           saveRDS(object = absolute_goal_prob,
-                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_", abs_rel, "_",
-                                target_type, '_', target, '_adm_', aa, '_target_probs.RDs'))
+                  file = '<<<< FILEPATH REDACTED >>>>')
 
           # CSV
           absolute_goal_prob <- merge_sp_hierarchy(df = absolute_goal_prob,
@@ -1267,8 +1216,7 @@ compare_to_target <- function(ind_gp,
                                                    sp_h = sp_h)
 
           write.csv(absolute_goal_prob,
-                    file = paste0(output_dir, ind, "_", measure, "_", target_year, "_", abs_rel, "_",
-                                target_type, '_', target, '_adm_', aa, '_target_probs.csv'),
+                    file = '<<<< FILEPATH REDACTED >>>>',
                     row.names = F)
 
         }
@@ -1278,10 +1226,8 @@ compare_to_target <- function(ind_gp,
           ## load the admin objects
           ## try two different locations until we standardize
           message('- loading admin objects')
-          file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_raked.Rdata',
-                       ind_gp, ind, rd, ind, measure)
-          file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                           ind, '_raked_admin_draws_eb_bin0_0.RData')
+          file_1 <- '<<<< FILEPATH REDACTED >>>>'
+          file_2 <- '<<<< FILEPATH REDACTED >>>>'
 
           if (file.exists(file_1)) {
             load(file_1)
@@ -1329,9 +1275,7 @@ compare_to_target <- function(ind_gp,
 
           message("-- Saving probabilities...")
           saveRDS(object = relative_goal_prob,
-                  file = paste0(output_dir, ind, "_", measure, "_", target_year, "_vs_",
-                                baseline_year, "_", abs_rel, "_", target_type, '_', target,
-                                '_adm_', aa, '_target_probs.RDs'))
+                  file = '<<<< FILEPATH REDACTED >>>>')
 
           # CSV
           relative_goal_prob <- merge_sp_hierarchy(df = relative_goal_prob,
@@ -1340,9 +1284,7 @@ compare_to_target <- function(ind_gp,
                                                    sp_h = sp_h)
 
           write.csv(relative_goal_prob,
-                    file = paste0(output_dir, ind, "_", measure, "_", target_year, "_vs_",
-                                baseline_year, "_", abs_rel, "_", target_type, '_', target,
-                                '_adm_', aa, '_target_probs.csv'),
+                    file = '<<<< FILEPATH REDACTED >>>>',
                     row.names = F)
 
         } # close relative loop
@@ -1409,8 +1351,8 @@ compare_all_admin_target <- function(ind_gp,
   sp_h <- get_sp_hierarchy(shapefile_version = shapefile_version)
 
   # Define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
-  proj_dir <- paste0(share_dir, "/pred_derivatives/proj/")
+  share_dir <- '<<<< FILEPATH REDACTED >>>>'
+  proj_dir <- '<<<< FILEPATH REDACTED >>>>'
 
   # Convenience
   aa <- admin_level
@@ -1419,9 +1361,7 @@ compare_all_admin_target <- function(ind_gp,
 
     # Load proj_draws object if working with projected data
     message("-- Loading proj_draws object...")
-    proj_draws <- readRDS(sprintf('%s/%s_%s_%s_projections_adm%i_draw_matrix%s.RDs',
-                                  proj_dir, ind, measure, target_year, aa,
-                                  ifelse(uselogit, "_logit","")))
+    proj_draws <- readRDS('<<<< FILEPATH REDACTED >>>>')
   } else if (proj == F) {
 
     # Load admin preds object if working with non-projected data
@@ -1430,10 +1370,8 @@ compare_all_admin_target <- function(ind_gp,
     message('Working on ADMIN level')
     ## load the admin objects
     ## try two different locations until we standardize
-    file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_raked.Rdata',
-                 ind_gp, ind, rd, ind, measure)
-    file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                     ind, '_raked_admin_draws_eb_bin0_0.RData')
+    file_1 <- '<<<< FILEPATH REDACTED >>>>'
+    file_2 <- '<<<< FILEPATH REDACTED >>>>'
 
     if (file.exists(file_1)) {
       load(file_1)
@@ -1564,8 +1502,8 @@ compare_admin_years <- function(ind_gp,
   sp_h <- get_sp_hierarchy(shapefile_version = shapefile_version)
 
   # Define directories
-  share_dir <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/')
-  proj_dir <- paste0(share_dir, "/pred_derivatives/proj/")
+  share_dir <- '<<<< FILEPATH REDACTED >>>>'
+  proj_dir <- '<<<< FILEPATH REDACTED >>>>'
 
   # Convenience
   aa <- admin_level
@@ -1578,9 +1516,7 @@ compare_admin_years <- function(ind_gp,
 
       # Load proj_draws object if working with projected data
       message("-- Loading proj_draws object...")
-      proj_draws <- readRDS(sprintf('%s/%s_%s_%s_projections_adm%i_draw_matrix%s.RDs',
-                                    proj_dir, ind, measure, pull_year, aa,
-                                    ifelse(uselogit, "_logit","")))
+      proj_draws <- readRDS('<<<< FILEPATH REDACTED >>>>')
     } else if (proj == F) {
 
       # Load admin preds object if working with non-projected data
@@ -1589,10 +1525,8 @@ compare_admin_years <- function(ind_gp,
       message('-- Loading admin pred object')
       ## load the admin objects
       ## try two different locations until we standardize
-      file_1 <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/%s_%s_admin_draws_raked.Rdata',
-                   ind_gp, ind, rd, ind, measure)
-      file_2 <- paste0('/share/geospatial/mbg/', ind_gp, '/', ind, '/output/', rd, '/',
-                       ind, '_raked_admin_draws_eb_bin0_0.RData')
+      file_1 <- '<<<< FILEPATH REDACTED >>>>'
+      file_2 <- '<<<< FILEPATH REDACTED >>>>'
 
       if (file.exists(file_1)) {
         load(file_1)

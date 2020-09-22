@@ -1,6 +1,4 @@
 # HEADER ------------------------------------------------------------------
-# Author: Jonathan Mosser (jmosser@uw.edu)
-# Date: 2017-07-13
 # Purpose: Functions to speed up shapefile processing
 #
 # Details: These functions are meant to allow synchronization of our main
@@ -32,8 +30,8 @@
 # Only new or more recently modified files will be changed (for speed)
 synchronize_shapefile_directories <- function(cores = NULL,
                                               verbose = F,
-                                              in_dir = '/home/j/WORK/11_geospatial/05_survey shapefile library/Shapefile directory/',
-                                              out_dir = '/share/geospatial/rds_shapefiles/') {
+                                              in_dir = '<<<< FILEPATH REDACTED >>>>',
+                                              out_dir = '<<<< FILEPATH REDACTED >>>>') {
 
   # This function performs a one-way sync from in_dir --> out_dir
   # Run this before using any of the fast shapefile functions
@@ -118,8 +116,8 @@ synchronize_shapefile_directories <- function(cores = NULL,
 # Function to convert from .shp to RDS
 save_shapefile_as_rds <- function(shapefile_path,
                                   verbose = F,
-                                  in_dir = '/home/j/WORK/11_geospatial/05_survey shapefile library/Shapefile directory/',
-                                  out_dir = '/share/geospatial/rds_shapefiles/') {
+                                  in_dir = '<<<< FILEPATH REDACTED >>>>',
+                                  out_dir = '<<<< FILEPATH REDACTED >>>>') {
 
   # Load one function from stringr
   str_match <- stringr::str_match
@@ -148,7 +146,7 @@ save_shapefile_as_rds <- function(shapefile_path,
 
 # Simple function to quickly load a shapefile
 fast_load_shapefile <- function(shape,
-                                fast_shapefile_dir = '/share/geospatial/rds_shapefiles/') {
+                                fast_shapefile_dir = '<<<< FILEPATH REDACTED >>>>') {
 
   wait_for_lock(shape)
   return(readRDS(paste0(fast_shapefile_dir, shape, ".rds")))
@@ -160,7 +158,7 @@ fast_load_shapefile <- function(shape,
 
 # Lock a shapefile (e.g. while editing / updating)
 lock_file <- function(shp,
-                      fast_shapefile_dir = '/share/geospatial/rds_shapefiles/') {
+                      fast_shapefile_dir = '<<<< FILEPATH REDACTED >>>>') {
 
   lockfile <- paste0(fast_shapefile_dir, ".",shp,"_lockfile.rds")
 
@@ -184,7 +182,7 @@ lock_file <- function(shp,
 #   If unable to obtain the lock in that time period, will throw a `stop()`
 #   Useful in case someone is trying to modify a shapefile that you want to read/write
 wait_for_lock <- function(shp,
-                        fast_shapefile_dir = '/share/geospatial/rds_shapefiles/',
+                        fast_shapefile_dir = '<<<< FILEPATH REDACTED >>>>',
                         tries = 20,
                         interval = 30) {
 
@@ -204,7 +202,7 @@ wait_for_lock <- function(shp,
 
 # Check to see if the file is locked
 check_for_lock <- function(shp,
-                           fast_shapefile_dir = '/share/geospatial/rds_shapefiles/') {
+                           fast_shapefile_dir = '/<<<< FILEPATH REDACTED >>>>') {
 
   lockfile <- paste0(fast_shapefile_dir, ".",shp,"_lockfile.rds")
 
@@ -220,7 +218,7 @@ check_for_lock <- function(shp,
 
 # Unlock a file (e.g. if done with updating it)
 unlock_file <- function(shp,
-                        fast_shapefile_dir = '/share/geospatial/rds_shapefiles/') {
+                        fast_shapefile_dir = '<<<< FILEPATH REDACTED >>>>') {
 
   lockfile <- paste0(fast_shapefile_dir, ".",shp,"_lockfile.rds")
 
@@ -272,32 +270,6 @@ isClean <- function(x) !(hasError(x) | hasWarning(x))
 value <- function(x) sapply(x, "[[", 1)
 cleanv <- function(x) sapply(x[isClean(x)], "[[", 1)
 
-# # Benchmarking
-# library(tictoc)
-# tic.clearlog()
-
-# shapes <- c("ALB_2000_MICS", "ALB_2005_MICS", "2007_ETH_Admin2_Altered", "1994_ETH_Admin2_Altered")
-
-# tic("ReadOGR from shapefile")
-# tmp <- lapply(shapes, function(shape) readOGR(dsn = in_dir, layer = shape))
-# toc(log = T)
-
-# tic("readRDS from rds file via new function", log = T)
-# tmp2 <- lapply(shapes, function(shape) fast_load_shapefile(shape))
-# toc(log = T)
-
-#tic.log(format = T)
-
-# compare_log <- tic.log(format = F)
-# compare_log <- lapply(compare_log, function(x) {
-#                        x <- unlist(x)
-#                        x <- t(x)
-#                        x <- as.data.table(x)
-#                        })
-# compare_log <- rbindlist(compare_log)
-# compare_log[, time := as.numeric(toc.elapsed) - as.numeric(tic.elapsed)]
-# compare_log[1, time] / compare_log[2, time]
-
 
 #####################################################################
 ## Functions relating to offical world shapefiles
@@ -311,7 +283,7 @@ cleanv <- function(x) sapply(x[isClean(x)], "[[", 1)
 #' the standard link table and standard id raster.
 #'
 get_admin_shape_dir <- function(version = "current") {
-    paste0("/snfs1/WORK/11_geospatial/admin_shapefiles/", version, "/")
+    paste0("<<<< FILEPATH REDACTED >>>>", version, "/")
 }
 
 ## get_admin_shapefile

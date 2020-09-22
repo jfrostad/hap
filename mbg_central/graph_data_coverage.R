@@ -1,7 +1,6 @@
 ## ###########################################################################
 ##
 ## GRAPH DATA COVERAGE
-## Authors: Jon Mosser (jmosser), Nat Henry (nathenry), Michael Collison (mlc314)
 ## Purpose: Functions to graph data coverage and completeness for the LBD team
 ##
 ## SECTIONS
@@ -26,25 +25,19 @@
 #' @description Produces standard diagnostic maps used to assess input data
 #'   coverage across Local Burden of Disease teams.
 #'
-#' @details This function should be run regularly by data analysts and
-#'   researchers to diagnose data availability across their modeling regions.
-#'   For additional information about required input fields and data types,
-#'   see the functions `dcp_validate_input_args()` and
-#'   `dcp_validate_input_data()`.
-#'
 #' ** ## PARAMETERS ## **
 #' ** Basic arguments **
 #' @param df The input data.frame or data.table used to create the plot.
 #'   Must contain at least the following columns, which will be coerced to the
 #'   following data types:
-#'   * 'nid' (integer):  This field was called 'svy_id' in the original code
+#'   * 'nid' (integer):  NID of survey
 #'   * 'country' (char): ISO3 code associated with the survey country
-#'   * 'source' (char):  Name of the data source category (eg, "MACRO_DHS")
+#'   * 'source' (char):  Name of the data source category
 #'   * 'year' (integer): Year, either when the data was collected or when an
 #'                         event occurred.
 #'   * 'N' (numeric):    The sample size at the given location.
 #'   * <VAR> (numeric):  The value of the outcome of interest at the survey site.
-#'                         Often expressed as a rate (eg. num events / sample size).
+#'                         Often expressed as a rate
 #'   * 'cluster_id' (character): Index assigning unique unique observations from
 #'                              the input data. Typically used for debugging.
 #'   * 'latitude' (numeric):  Latitude associated with the observation, if available
@@ -54,9 +47,7 @@
 #'                              latitude and longitude or a shapefile and location
 #'                              code, or else it will be dropped
 #'   * 'location_code' (integer): Location code in the given polygon that is
-#'                              associated with the observation. In the survey
-#'                              shapefile library and the codebooks, these are
-#'                              currently called the "GAUL_CODE"
+#'                              associated with the observation.
 #'   Rows containing NA or empty values in the first seven fields will be
 #'   dropped. All rows must have either 'latitude' and 'longitude' fields filled,
 #'   or they will be dropped. For more information about how input data is
@@ -69,37 +60,22 @@
 #'   observation falls within. Years not between `year_min` and `year_max` will
 #'   be dropped.
 #' @param year_min The earliest year of data to include in plots. The standard
-#'   for LBD is currently 1998.
+#'   for LBD is currently 2000.
 #' @param year_max The latest year of data to include in plots. The standard
 #'   for LBD is currently 2017.
-#' @param region Name of region that has been specified in ref_reg_list in
-#'   prep_functions. Region must be associated with "standard" (non-custom)
-#'   modeling regions that can be directly interpreted by get_adm0_codes().
-#'   Dictates which area of the world will be shown on the plots.
-#' @param region_title Custom region title that will be used to title plots and
-#'   create file names for saving. Defaults to NULL which uses the name of the
-#'   specified custom region.
+#' @param region Dictates which area of the world 
+#'   will be shown on the plots.
 #'
 #' ** Arguments controlling code execution and saving **
-#' @param cores The number of CPUs available to the function. On prod nodes,
-#'   this conservatively works out to about (# slots) / 2. On geos nodes, this
-#'   is approximately the same as the number of slots requested in your
-#'   qlogin. For more info, see Ian Davis' great writeup on the subject at
-#'   (https://hub.ihme.washington.edu/display/~imdavis/Cores%2C+memory%2C+and+slots)
+#' @param cores The number of CPUs available to the function. 
 #' @param indicator The indicator being estimated for this data coverage plot.
-#'   This argument controls where the data coverage plots will be saved: for
-#'   example, if `save_on_share` is `FALSE`, then this will save the output maps
-#'   to `"/home/j/WORK/11_geospatial/10_mbg/data_coverage_plots/<indicator>/"`.
+#'   This argument controls where the data coverage plots will be saved
 #' @param extra_file_tag (default `''`) If set to something other than an empty
 #'   string, adds additional text to the filepath that would end in
 #'   `.../<indicator>/` by default.
-#' @param save_on_share (default `FALSE`) If set to `FALSE`, the base save
-#'   directory will be `"/home/j/WORK/11_geospatial/10_mbg/data_coverage_plots/"`.
-#'   If set to `TRUE`, the base directory will be
-#'   `"/share/geospatial/mbg/data_coverage_plots/"`.
 #' @param out_dir (default `NULL`) Set a custom save directory. Overrides all
 #'   other parameters controlling filepaths above.
-#' @param core_repo (default `"/share/code/geospatial/lbd_core"`) The directory
+#' @param core_repo The directory
 #'   used to read in other MBG functions.
 #' @param log_dir (default `NULL`) Path to a directory where a log file will
 #'   optionally be saved. Useful mainly for debugging.
@@ -109,7 +85,7 @@
 #'   than interacting with shapefiles directly. This function should almost
 #'   always be set to TRUE, and the RDS files prepared beforehand using the
 #'   `synchronize_shapefile_directories()` function in
-#'   `"mbg_central/shapefile_functions.R"`.
+#'   `"shapefile_functions.R"`.
 #' @param new_data_plots (default `FALSE`) Toggles whether to create New Data
 #'   plots. Leaving this as the default, `FALSE`, speeds up function execution.
 #' @param since_date (default `NULL`) If New Data plots are created, specifies
@@ -177,16 +153,14 @@ graph_data_coverage_values <- function(df,
                                        year_min,
                                        year_max,
                                        region,
-                                       region_title=NULL,
-
+                                       
                                        cores,
                                        indicator,
                                        extra_file_tag = '',
-                                       save_on_share = FALSE,
                                        out_dir = NULL,
-                                       core_repo = '/share/code/geospatial/lbd_core/',
+                                       core_repo = '<<<< FILEPATH REDACTED >>>>',
                                        log_dir = NULL,
-
+                                       
                                        fast_shapefiles = TRUE,
                                        new_data_plots = FALSE,
                                        since_date = NULL,
@@ -195,7 +169,7 @@ graph_data_coverage_values <- function(df,
                                        prep_shiny = FALSE,
                                        return_maps = TRUE,
                                        debug = FALSE,
-
+                                       
                                        color_scheme = "classic",
                                        color_scheme_scatter = "brewer",
                                        high_is_bad = TRUE,
@@ -210,118 +184,118 @@ graph_data_coverage_values <- function(df,
                                        base_font_size = 18,
                                        map_point_size = 0.8,
                                        poly_line_width = 0.2,
-
+                                       
                                        remove_rank = TRUE
-                                       ) {
-
+) {
+  
   ## I. Load packages & miscellaneous setup ##################################
   message("\n#################################################################")
   message(paste0("** Generating ", indicator, " graphs for ", region, " **\n"))
-
+  
   ## Load packages
   message("Loading packages...")
   # Source package imports function
-  source(paste0(core_repo, '/mbg_central/setup.R'))
+  source(paste0(core_repo, '/setup.R'))
   # Load all external packages
   package_list <- c('data.table', 'ggplot2', 'parallel', 'doParallel', 'grid',
                     'gridExtra', 'stringr', 'RColorBrewer', 'rgdal', 'sp',
                     'raster', 'magrittr', 'dplyr', 'RMySQL', 'rgeos', 'tidyr')
   load_R_packages(package_list)
   # Load other MBG-specific functions
-  source(paste0(core_repo, '/mbg_central/gbd_functions.R'))
-  source(paste0(core_repo, '/mbg_central/prep_functions.R'))
-  source(paste0(core_repo, '/mbg_central/shapefile_functions.R'))
-
+  source(paste0(core_repo, '/gbd_functions.R'))
+  source(paste0(core_repo, '/prep_functions.R'))
+  source(paste0(core_repo, '/shapefile_functions.R'))
+  
   ## Manually keep order_var space_rank for now
   order_var <- 'space_rank'
-
+  
   ## Define root
-  assign("j_root", "/home/j/", envir = .GlobalEnv)
-
+  '<<<< FILEPATH REDACTED >>>>'
+  
   ## Set up ggplot base font size
   theme_set(theme_minimal(base_size = base_font_size))
-
+  
   #pull in list of stage 3 countries to grey out and remove from scatterplots
-  stage3 <- load_adm0_lookup_table()
+  stage3 <- load_gaul_lookup_table()
   stage3 <- stage3[Stage=='3',]
   stage3[, iso3 := toupper(iso3)]
-
+  
   ## II. Prep data ###########################################################
-
+  
   ## 1. Validate input arguments and dataframe -------------------------------
   in_args_all <- as.list(mget(names(formals()),
                               sys.frame(sys.nframe()))
-                         )
+  )
   dcp_validate_input_args(in_args_all)
-
+  
   df_prepped <- dcp_validate_input_data(df,
                                         var      = var,
                                         year_var = year_var,
                                         debug    = debug
-                                        )
-
+  )
+  
   ## 2. Pull in country table and merge onto input data ----------------------
   message("Pulling GBD region list...")
   # Pull in list of regions from GBD
   country_table <-suppressMessages(suppressWarnings(
-                  data.table(get_location_hierarchy(41))[, .(ihme_loc_id,
-                                                              level,
-                                                              location_name,
-                                                              region_name)]
-                  ))
+    data.table(get_location_hierarchy(41))[, .(ihme_loc_id,
+                                               level,
+                                               location_name,
+                                               region_name)]
+  ))
   # For now, subset to countries only
   #   Note: could change this for subnationals if desired!
   #   May be helpful if looking at a country for which we have tons of data (e.g. India)
   country_table <- country_table[level == 3]
   country_table[, level := NULL]
   setnames(country_table, "ihme_loc_id", "country")
-
-
+  
+  
   ## 2. Load data & split off relevant data sets -----------------------------
-
+  
   # 2. Load data & split off relevant data sets ------------------------------
   message("Preparing data sets...")
   # Create df_poly, df_point, and df_summary
   with_gbd_locs <- dcp_merge_with_gbd_locations(df_prepped, country_table, region)
-    df         <- with_gbd_locs[["df"]]                # Full data set
-    df_poly    <- with_gbd_locs[["df_poly"]]           # Polygon data only
-    df_point   <- with_gbd_locs[["df_point"]]          # Point data only
-    df_summary <- with_gbd_locs[["df_summary"]]        # One-row-per-NID summary
-    rm(with_gbd_locs)
-
+  df         <- with_gbd_locs[["df"]]                # Full data set
+  df_poly    <- with_gbd_locs[["df_poly"]]           # Polygon data only
+  df_point   <- with_gbd_locs[["df_point"]]          # Point data only
+  df_summary <- with_gbd_locs[["df_summary"]]        # One-row-per-NID summary
+  rm(with_gbd_locs)
+  
   # If new_data_plots is TRUE, check for new data
   # Save most recent data summary to a CSV
   message("Comparing against data from previous coverage plots...")
   df_summary <- dcp_find_new_data(df_summary, indicator, since_date)
-
+  
   # Grab a country list
-  list_output <- get_country_list(df, region, region_title)
-    reg_title    <- list_output[["reg_title"]]    # Formatted region title
-    region_list  <- list_output[["region_list"]]  # Subheadings for regions
-    country_list <- list_output[["country_list"]] # ISO3 codes for countries
-    rm(list_output)
-
+  list_output <- get_country_list(df, region)
+  reg_title    <- list_output[["reg_title"]]    # Formatted region title
+  region_list  <- list_output[["region_list"]]  # Subheadings for regions
+  country_list <- list_output[["country_list"]] # ISO3 codes for countries
+  rm(list_output)
+  
   # Make a summary data set to use for graphing, subset to region
   df_graph <- dcp_make_df_graph(df_summary, country_list)
-
+  
   # Similarly subset df_point and df_poly to just the region of interest
   df_graph_point <- df_point[country %in% country_list]
   df_graph_poly <- df_poly[country %in% country_list]
-
-
+  
+  
   # III. Load polygons #######################################################
-
+  
   # 1. Load polygons for the right (map) side of the figure ------------------
-
+  
   # The polygon map works by pulling shapefiles for each polygon in the
   #   data set, and then coloring those by the lastest year. Polygons are
   #   overlaid chronologically, so the most recent of two overlapping
   #   polygons will be visible.
-
+  
   # Set up point / polygon graphing data sets
   #   will create plots for polygons (latest year of data = color)
   #   and points (color = year of data) separately
-
+  
   # IF annual plots are being made, each individual year will be plotted
   if (annual_period_maps){
     df_graph_poly[, plot_year := year]
@@ -331,12 +305,12 @@ graph_data_coverage_values <- function(df,
     df_graph_poly  <- dcp_bin_years(df_graph_poly)
     df_graph_point <- dcp_bin_years(df_graph_point)
   }
-
+  
   # Only do this bit if there are polygons!
   if(nrow(df_graph_poly) > 0) {
-
+    
     message("Loading individual shapefiles for mapping...")
-
+    
     # Check for missing shapefiles & report if present
     shapefile_list <- dcp_check_for_missing_shapefiles(
       df_graph_poly,
@@ -344,31 +318,31 @@ graph_data_coverage_values <- function(df,
     )
     shapefiles <- shapefile_list[["shapefiles"]]
     not_real_shapefiles <- shapefile_list[["not_real_shapefiles"]]
-
+    
     if (length(not_real_shapefiles) > 0) {
       warning(paste0("  DROPPING ", length(not_real_shapefiles),
                      " MISSING SHAPES (in shapefile column but not shapefile dir)!"))
       if (!is.null(log_dir)) {
-        warning(paste0("  Writing list of missing shapefiles to ", log_dir,
+        warning(paste0("  Writing list of missing shapefiles to ", '<<<< FILEPATH REDACTED >>>>',
                        "missing_shapes.csv")
-                )
+        )
         not_real_shapefiles %>%
           as.data.table %>%
           setnames(., ".", "Missing shapefiles") %>%
-          write.csv(., file = paste0(log_dir, "missing_shapes.csv"))
+          write.csv(., file = '<<<< FILEPATH REDACTED >>>>')
       } else {
         warning(paste0("  Missing shapefiles: ", paste(not_real_shapefiles,
                                                        collapse = ", "))
-                )
+        )
       }
     }
-
+    
     rm(shapefile_list) # clean up
-
+    
     # Only pull shapefiles if there are any 'real' shapefiles left
     if (length(shapefiles) > 0){
       ## Pull shapes in parallel ---------------------------------------------
-
+      
       # Make a table of shapefiles & associated location codes
       df_shape_loc <- unique(df_graph_poly[, c("shapefile", "location_code")])
       # Pull all polygons in parallel
@@ -378,62 +352,57 @@ graph_data_coverage_values <- function(df,
                                           cores = cores,
                                           fast_shapefiles = fast_shapefiles)
       message("Done pulling polys.")
-
+      
       # Find if any broken shapes and, if so, report
       poly_shapes_all <- poly_list[["poly_shapes_all"]]
       broken_shapes <- poly_list[["broken_shapes"]]
-
+      
       if(length(broken_shapes) > 0) {
         message("Warning: the following shapes encountered errors :")
         print(broken_shapes)
       }
-
+      
       if(simplify_polys == T) {
         poly_shapes_all <- simplify_spdf(poly_shapes_all, tol = tolerance)
       }
       rm(poly_list)
     }
   } else {
-
+    
     message("There is no polygon data, so individual shapefiles were not pulled.")
-
+    
     # If no polygons, set products of the above to NULL
     poly_shapes_all <- NULL
     not_real_shapefiles <- NULL
     broken_shapes <- NULL
   }
-
-  # At this point, all errors should be in the code, not from user inputs
-  message(paste0("Note: At this point, all data and shapefiles have been loaded ",
-                 "successfully.\n  If the function breaks after this point, there ",
-                 "is likely an issue with the code.\n  For assistance, please ",
-                 "message Nat Henry or Michael Collison.")
-          )
-
-  # 2. Load master and disputed shapefiles ------------------------------------>
-
+  
+  # 2. Load master shapefile -------------------------------------------------
+  
   # This takes a while, so let's do it once only
   if (!("master_shape_all" %in% ls())) {
-    message("\nFast-loading master shapefile... ")
-    assign(
-      "master_shape_all",
-      readRDS('/share/geospatial/rds_shapefiles/gdcv_background_shp.rds'),
-      envir = globalenv()
-    )
+    
+    if (fast_shapefiles == T) {
+      message("\nFast-loading master shapefile... ")
+      assign("master_shape_all",
+             readRDS('<<<< FILEPATH REDACTED >>>>'),
+             envir = globalenv())
+    } else {
+      message("\nOpening master shapefile... (good time to go make a cup of coffee)")
+      assign("master_shape_all",
+             readOGR(dsn = '<<<< FILEPATH REDACTED >>>>',
+                     layer = '<<<< LAYER NAME REDACTED >>>>'),
+             envir = globalenv())
+    }
   } else {
     message("'master_shape_all' is already in the environment.")
   }
-  # Load the disputed shapefile
-  disputed_shp <- readRDS('/share/geospatial/rds_shapefiles/gdcv_disputed_shp.rds')
-  # Rename ADM0_CODE fields to GAUL_CODE
-  # (Note: These are really GADM codes, and the names should be changed in the
-  #   future)
-  setnames(master_shape_all@data, 'ADM0_CODE', 'GAUL_CODE')
-  setnames(disputed_shp@data, 'ADM0_CODE', 'GAUL_CODE')
-
-
+  # Rename ADM0_CODE field in master shapefile
+  names(master_shape_all)[names(master_shape_all) == "ADM0_CODE"] <- "GAUL_CODE"
+  
+  
   # IV. Make scatters and plots ##############################################
-
+  
   # 0. Make sure that all other devices outside of the null device are turned
   #  off, then sink all random graphical output to NULL; function specifies png
   #  where graphs actually desired
@@ -444,7 +413,7 @@ graph_data_coverage_values <- function(df,
     graphics_level <- dev.off()
   }
   pdf(NULL)
-
+  
   # 1. Make table and scatter plots for the left side of the graph -------------
   # Only execute this step if annual maps are not being made, as the annual
   #   map option does not produce the 4-period map!
@@ -475,27 +444,24 @@ graph_data_coverage_values <- function(df,
     g_data_new_legend  <- data_scatter_list[["g_data_new_legend"]] # legend for g_data_new
     rm(data_scatter_list)
   }
-
+  
   # 2a: Define map basics --------------------------------------------------
-
+  
   # Create a background map for the plot (just the country polygons)
   message("Constructing background map...")
   background_map_list <- make_background_map(region, endemic_gauls, simplify_polys,
                                              tolerance, fast_shapefiles,
-                                             master_shape_all, disputed_shp, 
-                                             stage3, stage_3_gray)
+                                             master_shape_all, stage3, stage_3_gray)
   background_outline <- background_map_list[[1]]
   background_map <- background_map_list[[2]]
   background_map_not_endemic <- background_map_list[[3]]
   background_extent <- background_map_list[[4]]
-  disputed_map <- background_map_list[[5]]
-  disputed_bg <- background_map_list[[6]]
   rm(background_map_list)
   message("  Finished constructing background map.")
-
+  
   color_list <- get_color_list(color_scheme)
   if (high_is_bad==TRUE) color_list <- rev(color_list)
-
+  
   # 2b: Make some graphs ---------------------------------------------------
   if (annual_period_maps){
     # IF annual plots are being made, each year will have its own period map
@@ -504,42 +470,33 @@ graph_data_coverage_values <- function(df,
     # Otherwise, plot the standard 4 maps
     map_these_periods <- c(2000,2005,2010,2015)
   }
-
+  
   # Create a list to store period objects
   period_map_storage <- vector('list', length=length(map_these_periods))
-
+  
   for(period in map_these_periods) {
     message(paste0("Making period map for ",period,"..."))
-    g_map <- make_a_period_map(
-      period, df, region, poly_shapes_all, background_map, background_outline, 
-      background_map_not_endemic, background_extent, disputed_map, disputed_bg, 
-      df_graph_poly, df_graph_point, not_real_shapefiles, color_list, 
-      legend_title, log_dir, base_font_size, map_point_size, cap, cap_type, 
-      legend_min, legend_max, poly_line_width, annual_period_maps
-    )
+    g_map <- make_a_period_map(period, df, region, poly_shapes_all,
+                               background_map, background_outline,
+                               background_map_not_endemic, background_extent,
+                               df_graph_poly, df_graph_point, not_real_shapefiles,
+                               color_list, legend_title, log_dir, base_font_size,
+                               map_point_size, cap, cap_type, legend_min, legend_max,
+                               poly_line_width, annual_period_maps)
     period_map_storage[[as.character(period)]] <- g_map
   }
-
-
+  
+  
   # V. Save plots ###########################################################
-
-  if (is.null(out_dir)) out_dir <- paste0('/snfs1/WORK/11_geospatial/10_mbg/data_coverage_plots/',
-                                          indicator, extra_file_tag, '/'
-                                          )
-  if(save_on_share==TRUE) out_dir <- paste0('/share/geospatial/mbg/data_coverage_plots/',
-                                            indicator, extra_file_tag, '/'
-                                            )
-  dir.create(out_dir, showWarnings = FALSE, recursive = T)
-
+  
+  if (is.null(out_dir)) out_dir <- '<<<< FILEPATH REDACTED >>>>'
+  #dir.create(out_dir, showWarnings = FALSE, recursive = T)
+  
   # Make the main plots - 4-up
   # SKIP THIS STEP IF ANNUAL PERIOD MAPS ARE BEING MADE, as the binned period
   #  maps that go into the main plot have not been created.
   if (!annual_period_maps){
-    if (is.null(region_title)){
-      out_file <- paste0(out_dir, 'data_coverage_', region, '.png')
-    } else {
-      out_file <- paste0(out_dir, 'data_coverage_', region_title, '.png')
-    }
+    out_file <- '<<<< FILEPATH REDACTED >>>>'
     message(paste0('Saving ', out_file))
     unlink(out_file) # Delete any old versions
 
@@ -548,8 +505,9 @@ graph_data_coverage_values <- function(df,
         width = 24.33,
         height = 12,
         pointsize = base_font_size,
-        res = 450
-        )
+        res = 1000
+    )
+
     dcp_make_4up_map(g_datamap = g_data,
                      g_data_legend = g_data_legend,
                      map_list = list(period_map_storage[['2000']],
@@ -563,26 +521,22 @@ graph_data_coverage_values <- function(df,
                      n_total = n_total,
                      polys_total = polys_total,
                      points_total = points_total
-                     )
+    )
     dev.off()
-
+    
     if (new_data_plots){
       # Repeat the main plot, but for new data
-      if (is.null(region_title)){
-        out_file <- paste0(out_dir, 'data_coverage_', region, '_new.png')
-      } else {
-        out_file <- paste0(out_dir, 'data_coverage_', region_title, '_new.png')
-      }
+      out_file <- '<<<< FILEPATH REDACTED >>>>'
       message(paste0('Saving ', out_file))
       unlink(out_file) # Delete any old versions
-
+      
       png(filename=out_file,
           units = "in",
           width = 24.33,
           height = 12,
           pointsize = base_font_size,
           res = 450
-          )
+      )
       dcp_make_4up_map(g_datamap = g_data_new,
                        g_data_legend = g_data_new_legend,
                        map_list = list(period_map_storage[['2000']],
@@ -596,48 +550,46 @@ graph_data_coverage_values <- function(df,
                        n_total = n_total,
                        polys_total = polys_total,
                        points_total = points_total
-                       )
+      )
       dev.off()
     }
   }
-
+  
   # Make the year bin plots - one for each of four years
   # Save these plots only if anunual period plots are being made or if they have
   #  been specified in the input arguments!
   if (annual_period_maps | save_period_maps){
     for (period in map_these_periods) {
-      if (is.null(region_title)){
-        out_file <- paste0(out_dir, 'map_', period, '_', region, '.png')
-      } else {
-        out_file <- paste0(out_dir, 'map_', period, '_', region_title, '.png')
-      }
+      
+      out_file <- paste0(out_dir, 'map_', period, '_', region, '.pdf')
       message(paste0('Saving ', out_file))
       unlink(out_file) # Delete any old versions
-
-      png(filename=out_file,
-          units = "in",
-          width = 17,
-          height = 10,
-          pointsize = 24,
-          res = 450)
-
+      
+      # png(filename=out_file,
+      #     units = "in",
+      #     width = 17,
+      #     height = 10,
+      #     pointsize = 24,
+      #     res = 450)
+      pdf(out_file)
+      
       print(period_map_storage[[as.character(period)]])
-
+      
       dev.off()
     }
   }
-
-
+  
+  
   # V. Finish up -------------------------------------------------------------
-
+  
   if (prep_shiny) {
     # Save some shiny outputs
     prep_data_coverage_shiny(df, df_graph_poly, poly_shapes_all, var, indicator)
   }
-
+  
   ## Return individual maps if requested
   if(return_maps==TRUE) return(period_map_storage)
-
+  
 }
 
 
@@ -663,7 +615,7 @@ dcp_validate_input_args <- function(input_list){
   # Evaluate all arguments so you don't get the variables containing the arguments
   input_list <- lapply(input_list, eval)
   # Ensure that all TRUE/FALSE arguments are actually booleans
-  boolean_args <- c("high_is_bad","return_maps","save_on_share","fast_shapefiles",
+  boolean_args <- c("high_is_bad","return_maps","fast_shapefiles",
                     "simplify_polys","remove_rank","prep_shiny","new_data_plots",
                     "stage_3_gray","annual_period_maps","save_period_maps")
   for (b_a in boolean_args){
@@ -716,22 +668,21 @@ dcp_validate_input_args <- function(input_list){
   if (year_min > year_max){
     stop("Check that year_min is less than or equal to year_max.")
   }
-
-
-  # # Check that the region is valid
-  # # This check must be kept up to date with the get_country_list() function!
-
-  #checks the input region against the reference list to see if valid
-  #outputs WARNING with undefined region and ERROR directing to ref list
-    if (length(get_gaul_codes(input_list[["region"]])) == 0) {
-    stop(paste0("The mapping region must be defined in the
-                get_admin0_code() reference list."))
-    }
-
+  # Check that the region is valid
+  # This check must be kept up to date with the get_country_list() function!
+  valid_regions <- c('africa','africa_no_yem','south_asia',
+                     'south_asia_ind_collaborators','se_asia','latin_america',
+                     'south_america','south_america_mex','central_america',
+                     'central_america_no_mex','eastern_europe','middle_east',
+                     'stage2')
+  if (!(input_list[['region']] %in% valid_regions)){
+    stop(paste0("The mapping 'region' must be one of the following:\n -",
+                paste(valid_regions, collapse='\n -')))
+  }
   # Check that the color scheme names are valid
   valid_color_schemes <- c('classic','darker_middle','red_blue','carto_red_blue',
                            rownames(brewer.pal.info[brewer.pal.info$category == "seq",])
-                           )
+  )
   if (!(input_list[['color_scheme']] %in% valid_color_schemes)){
     stop(paste0("'color_scheme' must be one of the following:\n -",
                 paste(valid_color_schemes, collapse='\n -')))
@@ -749,14 +700,14 @@ dcp_validate_input_args <- function(input_list){
                   " the format YYYY-MM-DD"))
     }
   }
-
+  
   # The input arguments have been successfully validated
   message("All non-data input arguments are valid.")
   return(NULL)
 }
 
 
-#' Validate input data.frame
+#' Validate input data.frane
 #'
 #' Description: Checks that the input data contains the minimum columns needed
 #'   to create the data coverage plots, and that those columns are coerced to the
@@ -768,24 +719,19 @@ dcp_validate_input_args <- function(input_list){
 #'   which will be coerced to the following data types:
 #'   * 'nid' (integer):  This field was called 'svy_id' in the original code
 #'   * 'country' (char): ISO3 code associated with the survey country
-#'   * 'source' (char):  Name of the data source category (eg, "MACRO_DHS")
+#'   * 'source' (char):  Name of the data source category
 #'   * 'year' (integer): Year, either when the data was collected or when an
 #'                         event occurred.
 #'   * 'N' (numeric):    The sample size at the given location.
 #'   * <VAR> (numeric):  The value of the outcome of interest at the survey site.
-#'                         Often expressed as a rate (eg. num events / sample size).
+#'                         Often expressed as a rate
 #'   * 'cluster_id' (integer): Index assigning unique unique observations from
 #'                              the input data. Typically used for debugging.
 #'   * 'latitude' (numeric):  Latitude associated with the observation, if available
 #'   * 'longitude' (numeric): Longitude associated with the observation, if available
-#'   * 'shapefile' (char):    Shapefile associated with the observation. NOTE:
-#'                              each observation must have either a valid
-#'                              latitude and longitude or a shapefile and location
-#'                              code, or else it will be dropped
+#'   * 'shapefile' (char):    Shapefile associated with the observation.
 #'   * 'location_code' (integer): Location code in the given polygon that is
-#'                              associated with the observation. In the survey
-#'                              shapefile library and the codebooks, these are
-#'                              currently called the "GAUL_CODE"
+#'                              associated with the observation.
 #'   Rows containing NA or empty values in the first seven fields will be
 #'   dropped. All rows must have either 'latitude' and 'longitude' fields filled,
 #'   or they will be dropped.
@@ -807,7 +753,7 @@ dcp_validate_input_data <- function(df,
                                     var      = 'outcome',
                                     year_var = 'year',
                                     debug    = FALSE
-                                    ){
+){
   message("Validating input data...")
   # Check that the input data type is a data.frame
   if(!("data.frame" %in% class(df))) stop(paste0("The input data type must be a",
@@ -821,17 +767,17 @@ dcp_validate_input_data <- function(df,
   if (length(missing_cols) > 0) stop(paste0("The input data is missing the ",
                                             "following fields: ",
                                             paste(missing_cols, collapse=', '))
-                                     )
+  )
   # Rename the var column to 'outcome'
   if (var != "outcome") df[,outcome := get(var)]
   # Rename the year_var column to 'year'
   if (year_var != "year") df[, year := get(year_var)]
-
+  
   # Subset to only necessary columns
   keep_cols[length(keep_cols)] <- 'outcome'
   keep_cols[length(keep_cols) - 1] <- 'year'
   df <- df[,keep_cols,with=FALSE]
-
+  
   # Helper function for coercing data fields
   coerce_field <- function(field, field_name, coerce_type){
     start_nas <- sum(is.na(field))
@@ -846,7 +792,7 @@ dcp_validate_input_data <- function(df,
                                     "' (", end_nas - start_nas,
                                     " introduced during coercion to ",
                                     coerce_type,")")
-                             )
+    )
     return(field)
   }
   # Coerce the following fields to integer vectors
@@ -895,7 +841,7 @@ dcp_validate_input_data <- function(df,
                                                 "including missing geography ",
                                                 "information)"),
                            debug = debug
-                           )
+  )
   # Drop any rows that do not have the required geography data (either 'latitude'
   #  and 'longitude' or 'shapefile' and 'location_code')
   has_latlong <- !is.na(df$latitude) & !is.na(df$longitude)
@@ -905,7 +851,7 @@ dcp_validate_input_data <- function(df,
                            keep_condition = has_geo_data,
                            drop_reason = "missing geographic data",
                            debug = debug
-                           )
+  )
   final_nrow <- nrow(df)
   # The input data has been cleaned and validated.
   message("  After input validation and cleaning, ",final_nrow," rows of data ",
@@ -940,9 +886,9 @@ dcp_validate_input_data <- function(df,
 dcp_merge_with_gbd_locations <- function(df, country_table, region) {
   message("Combining dataframe with GBD country data...")
   # 1. Merge on country identifiers ------------------------------------------
-
+  
   df <- merge(df, country_table, by = "country", all = T)
-
+  
   if (region %in% c("africa","africa_no_yem")) {
     # Rename "North Africa and Middle East" to just "North Africa"
     df <- df[region_name == "North Africa and Middle East",
@@ -952,22 +898,22 @@ dcp_merge_with_gbd_locations <- function(df, country_table, region) {
     df <- df[region_name == "North Africa and Middle East",
              region_name := "Middle East"]
   }
-
+  
   # Drop non-matched countries & notify user
   num_na_rows <- nrow(df[is.na(country)])
   if (num_na_rows > 0){
     message(paste0("  Dropping ", nrow(df[is.na(country)]),
                    " rows without matches in GBD country table.")
-            )
+    )
     message(paste0("  Countries affected: ",
                    paste(unique(df[is.na(country),location_name]), collapse=', '))
-            )
+    )
     message(paste0("  Cluster_ids affected: ",
                    paste(unique(df[is.na(country),cluster_id]), collapse=', '))
-            )
+    )
   }
   df <- df[!is.na(country),]
-
+  
   # Truncate long country names
   df <- df[location_name == "Democratic Republic of the Congo", location_name := "DRC"]
   df <- df[location_name == "Central African Republic", location_name := "CAR"]
@@ -976,14 +922,14 @@ dcp_merge_with_gbd_locations <- function(df, country_table, region) {
   df <- df[location_name == "Equatorial Guinea", location_name := "Eq. Guinea"]
   df <- df[location_name == "Saint Vincent and the Grenadines",
            location_name := "St. Vin. & Grenadines"]
-
-
+  
+  
   # 2. Generate subsets of data for further analysis -------------------------
-
+  
   # Split off a point & polygon data set for use later
   df_point <- df[pointpoly == "Point"]
   df_poly  <- df[pointpoly == "Polygon"]
-
+  
   # Sum over the N of the group - includes rows for countries with no data
   df_summary <- df[, .(n = sum(N), count = .N), by = .(source, country, year,
                                                        pointpoly, location_name,
@@ -1002,8 +948,7 @@ dcp_merge_with_gbd_locations <- function(df, country_table, region) {
 #' @param df_summary The summary prepped data.table object output by the
 #'   dcp_merge_with_gbd_locations() function
 #' @param indicator The indicator associated with this data, used to associate
-#'   with a filename in the folder '/home/j/WORK/11_geospatial/10_mbg/
-#'   data_coverage_plots/00_data_summary_tables'
+#'   with a filename in the folder <<<< FILEPATH REDACTED >>>>
 #' @param since_date The date used to compare against old plots, in the format
 #'   produced by as.character(Sys.Date()) - ie. YYYY-MM-DD. Defaults to the
 #'   last time data was added to the summary table
@@ -1012,13 +957,13 @@ dcp_merge_with_gbd_locations <- function(df, country_table, region) {
 #'   each row was added in the time since 'since_date'
 #'
 dcp_find_new_data <- function(df_summary, indicator, since_date) {
-
+  
   # Look for an existing data summary table
-  summary_dir <- paste0(j_root, "WORK/11_geospatial/10_mbg/data_coverage_plots/00_data_summary_tables/")
-  summary_file <- paste0(summary_dir, indicator, "_data_summary.csv")
-
+  summary_dir <- '<<<< FILEPATH REDACTED >>>>'
+  summary_file <- '<<<< FILEPATH REDACTED >>>>'
+  
   df_summary$date <- as.character(Sys.Date())
-
+  
   if (file.exists(summary_file)) {
     # read in old file
     df_summary_old <- fread(summary_file, stringsAsFactors = F)
@@ -1032,33 +977,33 @@ dcp_find_new_data <- function(df_summary, indicator, since_date) {
       nid_dates_old <- unique(df_summary_old[, c("nid", "date")])
       nid_dates_old <- nid_dates_old[!is.na(nid)]
       nid_dates_old <- nid_dates_old[!duplicated(nid),]
-
+      
       # Ensure that the nid and date fields are the correct data types
       nid_dates_old[, date_old := as.character(date)]
       suppressWarnings(nid_dates_old[, temp := as.integer(nid)])
       nid_dates_old[, nid := NULL]
       setnames(nid_dates_old, 'temp', 'nid')
       nid_dates_old <- nid_dates_old[, c("nid", "date_old"), with=F]
-
+      
       # merge
       df_summary <- merge(df_summary,
                           nid_dates_old,
                           by = c('nid'),
                           all.x = T)
-
+      
       # replace if an older date exists
       df_summary[(date != date_old) & !is.na(date_old), date := date_old]
       df_summary[, date_old := NULL]
     }
   }
-
+  
   #replace dates for country-rows with no data with "na"
   df_summary[is.na(nid), date := NA]
   df_summary <- df_summary[order(location_name)]
-
+  
   unlink(summary_file)
   write.csv(df_summary, file = summary_file, row.names=FALSE)
-
+  
   # Mark which data is new with a variable "new_data" (for graphing)
   if (is.null(since_date)) {
     df_summary[date == max(df_summary$date, na.rm = T), new_data := 1]
@@ -1067,9 +1012,9 @@ dcp_find_new_data <- function(df_summary, indicator, since_date) {
     df_summary[(as.Date(date) > as.Date(since_date)) & !is.na(date), new_data := 1]
     df_summary[!is.na(date) & is.na(new_data), new_data := 0]
   }
-
+  
   return(df_summary)
-
+  
 }
 
 
@@ -1079,17 +1024,16 @@ dcp_find_new_data <- function(df_summary, indicator, since_date) {
 #'
 #' @param df The dataframe output by the dcp_merge_with_gbd_locations() function
 #' @param region Name of the region to be modeled
-#' @param region_title Title used for plots: default is region to be modeled
 #'
 #' @return returns a list with the following 3 objects -
 #'  * 'reg_title': A character string of the region
 #'  * 'region_list': A vector of the modelling regions associated with the region passed in
 #'  * 'country_list': A vector of country ISO3 codes within the region
 #'
-get_country_list <- function(df, region, region_title) {
-
+get_country_list <- function(df, region) {
+  
   # Note: need to figure out how to deal with Oceania and Central Asia
-
+  
   if (region == 'africa') {
     reg_title <- "Africa"
     region_list <- c("North Africa",
@@ -1099,14 +1043,14 @@ get_country_list <- function(df, region, region_title) {
                      "Southern Sub-Saharan Africa")
     country_list <- unique(df[region_name %in% region_list]$country)
     country_list <- unique(c(country_list, "YEM"))
-
+    
     # This is tough because of NAME including middle east - need to manually remove and add some
     remove_countries <- c("AFG", "ARE", "IRN", "IRQ", "JOR", "OMN", "PSE", "SAU", "SYR", "TUR","KWT","LBN","QAT","BHR","CPV")
-
+    
     country_list <- country_list[!(country_list %in% remove_countries)]
   }
-
-  else if (region == 'africa_no_yem') {
+  
+  if (region == 'africa_no_yem') {
     reg_title <- "Africa"
     region_list <- c("North Africa",
                      "Central Sub-Saharan Africa",
@@ -1115,35 +1059,35 @@ get_country_list <- function(df, region, region_title) {
                      "Southern Sub-Saharan Africa")
     country_list <- unique(df[region_name %in% region_list]$country)
     # This is tough because of NAME including middle east - need to manually remove and add some
-    remove_countries <- c("AFG","ARE","IRN","IRQ","JOR","OMN","PSE","SAU",
+    remove_countries <- c("AFG","ARE","IRN","IRQ","JOR","OMN","PSE","SAU", 
                           "SYR","TUR","KWT","LBN","QAT","BHR","CPV","YEM")
     country_list <- country_list[!(country_list %in% remove_countries)]
   }
-
-  else if (region %in% c('south_asia','south_asia_ind_collaborators')) {
+  
+  if (region %in% c('south_asia','south_asia_ind_collaborators')) {
     reg_title <- "South Asia"
     region_list <- c("South Asia")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     # add Sri Lanka
     country_list <- unique(c(country_list, "LKA"))
   }
-
-  else if (region == 'se_asia') {
-    reg_title <- "East and Southeast Asia"
+  
+  if (region == 'se_asia') {
+    reg_title <- "Southeast Asia"
     region_list <- c("East Asia",
                      "Southeast Asia")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     # move Sri Lanka & the Maldives to south_asia
     remove_countries <- c("LKA", "MDV")
     country_list <- country_list[!(country_list %in% remove_countries)]
-
-    # add PNG and Mongolia
+    
+    # add PNG
     country_list <- unique(c(country_list, "PNG", "MNG"))
   }
-
-  else if (region == 'latin_america') {
+  
+  if (region == 'latin_america') {
     reg_title <- "Latin America and Caribbean"
     region_list <- c("Andean Latin America",
                      "Caribbean",
@@ -1152,75 +1096,75 @@ get_country_list <- function(df, region, region_title) {
     country_list <- unique(df[region_name %in% region_list]$country)
     country_list <- unique(c(country_list, "CUB"))
   }
-
-  else if (region == 'south_america') {
+  
+  if (region == 'south_america') {
     reg_title <- "South America"
     region_list <- c("Andean Latin America",
                      "Tropical Latin America")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     # add Venezuela & others
     add_countries <- remove_countries <- c("VEN", "COL", "GUY", "SUR")
     country_list <- unique(c(country_list, add_countries))
   }
-
-  else if (region == 'south_america_mex') {
+  
+  if (region == 'south_america_mex') {
     reg_title <- "South America"
     region_list <- c("Andean Latin America",
                      "Tropical Latin America")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     # add Venezuela & others
     add_countries <- remove_countries <- c("VEN", "COL", "GUY", "SUR", "MEX")
     country_list <- unique(c(country_list, add_countries))
   }
-
-  else if (region == 'central_america') {
+  
+  if (region == 'central_america') {
     reg_title <- "Central Latin America and Carribean"
     region_list <- c("Central Latin America",
                      "Caribbean")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     # remove Venezuela & others
     remove_countries <- c("VEN", "COL", "GUY", "SUR")
     country_list <- country_list[!(country_list %in% remove_countries)]
   }
-
-   else if (region == 'central_america_no_mex') {
+  
+  if (region == 'central_america_no_mex') {
     reg_title <- "Central Latin America and Carribean"
     region_list <- c("Central Latin America",
                      "Caribbean")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     # remove Venezuela & others
     remove_countries <- c("VEN", "COL", "GUY", "SUR", "MEX")
     country_list <- country_list[!(country_list %in% remove_countries)]
   }
-
-  else if (region == 'eastern_europe') {
+  
+  if (region == 'eastern_europe') {
     reg_title <- "Eastern Europe"
     region_list <- c("Eastern Europe")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     remove_countries <- c("RUS")
     country_list <- country_list[!(country_list %in% remove_countries)]
   }
-
-  else if (region == 'middle_east') {
+  
+  if (region == 'middle_east') {
     reg_title <- "Middle East and Central Asia"
     region_list <- c("Middle East")
     country_list <- unique(df[region_name %in% region_list]$country)
-
+    
     remove_countries <- c("EGY","SDN","TUN","DZA","LBY","MAR")
     country_list <- country_list[!(country_list %in% remove_countries)]
-
+    
     # Add in several Central Asia countries:
     # Uzbekistan, Turkmenistan, Tajikistan, Kyrgyzstan, Lebanon
     country_list <- unique(c(country_list, "UZB", "TKM", "TJK", "KGZ", "LBN"))
-
+    
   }
-
-  else if (region == 'stage2'){
+  
+  if (region == 'stage2'){
     reg_title <- 'Low and Middle-Income Countries'
     # Load stage metadata and subset to stage 2
     lookup_table <- load_gaul_lookup_table()
@@ -1229,49 +1173,7 @@ get_country_list <- function(df, region, region_title) {
     region_list <- unique(stage2[,reg_name])
     country_list <- toupper( unique(stage2[,iso3]) )
   }
-
-  else if (region == 'stage3'){
-    reg_title <- 'High-Income Countries'
-    # Load stage metadata and subset to stage 3
-    lookup_table <- load_gaul_lookup_table()
-    stage3 <- lookup_table[Stage = '3']
-    # Get all unique regions and countries in stage 3
-    region_list <- unique(stage3[,reg_name])
-    country_list <- toupper( unique(stage3[,iso3]) )
-  }
-
-  #statement to deal with custom cases
-  else {
-    #can manually specify region title for plot
-    if (is.null(region_title)){
-      reg_title <- toupper(region)
-    } else {
-      reg_title <- region_title
-    }
-
-    gaul_list <- get_gaul_codes(region)
-
-    #create dictionary
-    stage_master_list <- read.csv('/snfs1/WORK/11_geospatial/10_mbg/stage_master_list.csv')
-
-    #create gaul to iso3 name dictionary
-    iso3_names <- as.list(stage_master_list$iso3)
-    iso3_names <- lapply(iso3_names, as.character)
-    names(iso3_names) <- lapply(stage_master_list$GAUL_CODE, as.character)
-    iso3_dict <- list2env(iso3_names, hash = TRUE)
-
-    country_list = c()
-    #add to country list
-    for (gc in gaul_list){
-      iso3_nm <- get(as.character(gc), envir=iso3_dict)
-      country_list = unique(c(country_list,iso3_nm))
-    }#looks up country name in dictionary
-
-    region_list <- unique(df[country %in% country_list]$region_name)
-    region_list <- sort(region_list)
-
-  }
-
+  
   return(list("reg_title" = reg_title,
               "region_list" = region_list,
               "country_list" = country_list))
@@ -1291,7 +1193,7 @@ get_country_list <- function(df, region, region_title) {
 #'
 dcp_make_df_graph <- function(df_summary, country_list) {
   df_graph <- df_summary[country %in% country_list]
-
+  
   # Fix NAs so that they don't graph
   message(paste0("\nFound ", nrow(df_graph[is.na(pointpoly)]), " rows not designated by point or poly."))
   message("Typically, this indicates that there are countries with no data - check this assumption if a large number")
@@ -1299,14 +1201,14 @@ dcp_make_df_graph <- function(df_summary, country_list) {
   df_graph[is.na(pointpoly), n := 0]
   df_graph[is.na(pointpoly), source := unique(df_graph$source[!is.na(df_graph$source)])[1]]
   df_graph[is.na(pointpoly), pointpoly := "Point"]
-
+  
   df_graph$location_name <- factor(df_graph$location_name,
                                    levels = rev(sort(unique(df_graph$location_name))))
-
+  
   df_graph[new_data == 0, new_data_lab := "No"]
   df_graph[new_data == 1, new_data_lab := "Yes"]
   df_graph[is.na(new_data), new_data_lab := "No"]
-
+  
   return(df_graph)
 }
 
@@ -1322,13 +1224,13 @@ dcp_make_df_graph <- function(df_summary, country_list) {
 #'
 dcp_bin_years <- function(df_to_bin) {
   df_to_bin <- df_to_bin[, survey := paste0(source,'_',country,'_',year)]
-  df_to_bin <- subset(df_to_bin, year >= 1998)
-  df_to_bin <- df_to_bin[year > 1997 & year <= 2002, plot_year := 2000]
+  df_to_bin <- subset(df_to_bin, year > 1999)
+  df_to_bin <- df_to_bin[year > 1999 & year <= 2002, plot_year := 2000]
   df_to_bin <- df_to_bin[year > 2002 & year <= 2007, plot_year := 2005]
   df_to_bin <- df_to_bin[year > 2007 & year <= 2012, plot_year := 2010]
   df_to_bin <- df_to_bin[year > 2012, plot_year := 2015]
-
- return(df_to_bin)
+  
+  return(df_to_bin)
 }
 
 
@@ -1345,7 +1247,6 @@ dcp_bin_years <- function(df_to_bin) {
 #'
 #' @param spdf A SpatialPolygonsDataFrame to be simplified
 #' @param tol The tolerance which determines the degree of simplification
-#'   (see Douglas-Peuker algorithm)
 #'
 #' @return A simplified SpatialPolygonsDataFrame
 #'
@@ -1363,57 +1264,51 @@ simplify_spdf <- function(spdf, tol = tolerance) {
 #'
 #' @param shape_loc A data.table with columns 'shapefile' and 'location_code', where
 #'   'location_code' corresponds to the GAUL_CODE column of corresponding 'shapefile'
-#' @param fast_shapefiles Boolean. If true, reads in shapefile from RDS
-#'   (see lbd_core/mbg_central/polygon_functions.R), else reads from shapefile
-#'   directory
+#' @param fast_shapefiles Boolean. If true, reads in shapefile from RDS, else reads 
+#'   from shapefile directory
 #'
 #' @return A SpatialPolygonsDataFrame with polygons specified in shape_loc
 #'
 pull_polys <- function(shape_loc, fast_shapefiles) {
   # Function to pull in a shapefile and assign each polygon the latest year
   # that any data was collected within it (determines fill color)
-
+  
   # This is computationally intensive if many shapefiles
-
+  
   shape <- unique(shape_loc$shapefile)
   loc_codes <- unique(shape_loc$location_code)
-
+  
   message(paste0("  Working on ", shape))
-
+  
   # Read in the master shapefile
   if (fast_shapefiles == T) {
     master_shape <- fast_load_shapefile(shape)
   } else  {
-    master_shape <- readOGR(dsn = paste0(j_root, "WORK/11_geospatial/05_survey shapefile library/Shapefile directory"),
+    master_shape <- readOGR(dsn = '<<<< FILEPATH REDACTED >>>>',
                             layer = shape)
   }
-
+  
   message(paste0("    CRS: ",crs(master_shape)))
-
+  
   names(master_shape)[names(master_shape)=="GAUL_Code"] <- "GAUL_CODE"
-
+  
   # Subsetting will break if NAs in row index (GAUL_CODE)
   master_shape <- master_shape[!is.na(master_shape$GAUL_CODE),]
-
-  # Custom fixes for broken shapefiles
-  if (shape == "AZE_DHS_2006" & "GAUL_CODE" %in% names(master_shape) == F) {
-    master_shape$GAUL_CODE <- master_shape$REGCODE
-  }
-
+  
   # Subset to the relevant data & shapefile bits (by gaul code)
   subset_shape <- master_shape[master_shape@data$GAUL_CODE %in% loc_codes, ]
-
+  
   # Remove the data that we don't need & make a standard output format
   return_shape <- subset_shape[names(subset_shape) %in% c("GAUL_CODE")]
-
+  
   # Remove any duplicates
   return_shape <- return_shape[duplicated(return_shape$GAUL_CODE) == F, ]
-
+  
   # Convert GAUL_CODE to numeric
   return_shape@data$GAUL_CODE <- as.numeric(as.character(return_shape@data$GAUL_CODE))
-
+  
   return(return_shape)
-
+  
 }
 
 
@@ -1441,15 +1336,15 @@ pull_polys_in_parallel <- function(shape_loc_list,
                                    location_code_col = "location_code",
                                    cores,
                                    fast_shapefiles = fast_shapefiles) {
-
-
+  
+  
   # Format table & rename to standard format
   shape_loc_list <- shape_loc_list %>%
-                      as.data.table %>%
-                      unique %>%
-                      setnames(., c(shapefile_col, location_code_col),
-                                  c("shapefile", "location_code"))
-
+    as.data.table %>%
+    unique %>%
+    setnames(., c(shapefile_col, location_code_col),
+             c("shapefile", "location_code"))
+  
   # Check for NAs
   na_rows <- shape_loc_list[is.na(shapefile) | is.na(location_code)]
   if (nrow(na_rows) > 0) {
@@ -1458,73 +1353,73 @@ pull_polys_in_parallel <- function(shape_loc_list,
     print(na_rows)
     warning(paste0("NAs found in input data (", nrow(na_rows), " rows affected). These are being dropped! Check your input data & original source!"))
   }
-
+  
   # Drop NAs
   shape_loc_list <- shape_loc_list[!is.na(shapefile) & !is.na(location_code)]
-
+  
   # Get shapefiles
   shapefiles <- unique(shape_loc_list$shapefile)
-
+  
   # Set up cluster
   cores <- min(c(cores, length(shapefiles))) # just get enough cores for shapefiles
-
+  
   cl <- makeCluster(cores)
   registerDoParallel(cl)
-
+  
   if (fast_shapefiles == T) {
     message("Fast-pulling polys...")
     poly_shape_list <- lapply(1:length(shapefiles), function(i) {
-                               shape <- shapefiles[i]
-                               shape_loc <- shape_loc_list[shapefile == shape]
-                               pull_polys(shape_loc, fast_shapefiles = T)})
+      shape <- shapefiles[i]
+      shape_loc <- shape_loc_list[shapefile == shape]
+      pull_polys(shape_loc, fast_shapefiles = T)})
   } else {
-      message("Pulling polys in parallel. This may take a while ...")
+    message("Pulling polys in parallel. This may take a while ...")
     # Distribute packages
     clusterCall(cl, function(x) {
-      .libPaths("/home/j/temp/geospatial/packages")
+      .libPaths('<<<< FILEPATH REDACTED >>>>')
       library(rgdal)
       library(data.table)
     })
-
+    
     poly_shape_list <- foreach (i = 1:length(shapefiles),
                                 .export=c("j_root", "pull_polys", "fast_load_shapefile"),
                                 .errorhandling = 'pass') %dopar% {
-      shape <- shapefiles[i]
-      shape_loc <- shape_loc_list[shapefile == shape]
-      pull_polys(shape_loc, fast_shapefiles = FALSE)
-    }
-
+                                  shape <- shapefiles[i]
+                                  shape_loc <- shape_loc_list[shapefile == shape]
+                                  pull_polys(shape_loc, fast_shapefiles = FALSE)
+                                }
+    
     stopCluster(cl)
   }
-
+  
   # Find broken shapefiles
   find_broken_shapes <- function(shape) {
     if ('error' %in% class(shape)) {
       return(TRUE)
-      } else {
-        return(FALSE)
-      }
+    } else {
+      return(FALSE)
+    }
   }
-
+  
   names(poly_shape_list) <- shapefiles
-
+  
   broken_shape_names <- names(poly_shape_list)[unlist(lapply(poly_shape_list, find_broken_shapes))]
   working_shape_names <- names(poly_shape_list)[!(names(poly_shape_list) %in% broken_shape_names)]
-
+  
   broken_shape_list <- lapply(broken_shape_names, function(x) poly_shape_list[[x]])
-    names(broken_shape_list) <- broken_shape_names
+  names(broken_shape_list) <- broken_shape_names
   working_shape_list <- lapply(working_shape_names, function(x) poly_shape_list[[x]])
-    names(working_shape_list) <- working_shape_names
-
-    # Remake IDs to be unique across all of poly_shape_list (needed for rbind below)
+  names(working_shape_list) <- working_shape_names
+  
+  # Remake IDs to be unique across all of poly_shape_list (needed for rbind below)
   makeID_shiny <- function(shape) {
     shapefile <- poly_shape_list[[shape]]
     shapefile <- spChFIDs(shapefile, paste0(shape, "_", row.names(shapefile@data)))
     return(shapefile)
   }
-
+  
   working_shape_list <- lapply(names(working_shape_list), makeID_shiny)
-
+  
   ## check to make sure that all the projections are the same
   proj.strings <- unlist(lapply(working_shape_list, proj4string))
   if(length(unique(proj.strings)) > 1){
@@ -1540,19 +1435,19 @@ pull_polys_in_parallel <- function(shape_loc_list,
       proj4string(working_shape_list[[ss]]) <- common.proj
     }
   }
-
+  
   ## Combine all into one big SPDF
   poly_shapes_all <- do.call(rbind, working_shape_list)
   rm(working_shape_list)
-
+  
   # Pull out the shapefile name and assign this as a new field
   poly_shapes_all@data$id <- rownames(poly_shapes_all@data)
   poly_shapes_all$shapefile <- gsub("_[^_]+$", "", poly_shapes_all$id)
-
+  
   poly_shapes_all$location_code <- as.numeric(poly_shapes_all$GAUL_CODE)
-
+  
   return(list("poly_shapes_all" = poly_shapes_all, "broken_shapes" = broken_shape_list))
-
+  
 }
 
 #' Check for missing shapefiles
@@ -1571,80 +1466,28 @@ pull_polys_in_parallel <- function(shape_loc_list,
 dcp_check_for_missing_shapefiles <- function(df_graph_poly, fast_shapefiles) {
   # Pull a list of shapefiles for the polygon data for the region in question
   shapefiles <- unique(df_graph_poly$shapefile) %>% as.character %>% tolower
-
+  
   ## Check that all shapefile entries are real shapefiles and report bad entries
   if (fast_shapefiles){
     real_shapefiles <- gsub('.rds','',
-                            tolower(list.files("/share/geospatial/rds_shapefiles",
+                            tolower(list.files('<<<< FILEPATH REDACTED >>>>',
                                                pattern = '.rds'))
-                            )
+    )
   } else {
     real_shapefiles <- gsub('.shp','',
-                            tolower(list.files(paste0(j_root, "WORK/11_geospatial/",
-                                                      "05_survey shapefile library/",
-                                                      "Shapefile directory"),
+                            tolower(list.files('<<<< FILEPATH REDACTED >>>>',
                                                pattern = '.shp'))
-                            )
+    )
   }
   not_real_shapefiles <- shapefiles[!(shapefiles %in% real_shapefiles)]
-
+  
   shapefiles <- shapefiles[(shapefiles %in% real_shapefiles)]
-
+  
   return(list("shapefiles" = shapefiles,
               "not_real_shapefiles" = not_real_shapefiles))
 }
 
 
-## dcp_refresh_background_shps ------------------------------------------------>
-#' 
-#' @title Data Coverage Plots: refresh the DCP background and disputed shapefile
-#' 
-#' @description Load the newest version of the background shapefile (called
-#'   "master_shape_all" in the code) and the disputed borders shapefile to a 
-#'   central directory, "/share/geospatial/rds_shapefiles/gdcv_custom/"
-#' 
-#' @param core_repo LBD core path, used to load MBG functions and libraries
-#' 
-#' @return NULL
-#' 
-dcp_refresh_background_shps <- function(
-    core_repo = '/share/code/geospatial/lbd_core/'
-  ){
-  # Requires sourcing 'mbg_central/setup.R' from LBD core
-  source(paste0(core_repo,'/mbg_central/setup.R'))
-  load_R_packages(package_list=c('sf','sp','data.table','dplyr'))
-  # Define output folder
-  save_dir <- "/share/geospatial/rds_shapefiles/"
-
-  # Load most recent shapefiles
-  ad0_shp <- sf::read_sf(
-    get_admin_shapefile(admin_level=0, type='admin', version='current')
-  ) %>% as(., 'Spatial')
-  ad0_shp@data <- as.data.table(ad0_shp@data)  
-  disp_shp <- sf::read_sf(
-    get_admin_shapefile(type='disputed_mask', version='current')
-  ) %>% as(., 'Spatial')
-  disp_shp@data <- as.data.table(disp_shp@data)
-  disp_shp@data[, row_id := .I ]
-
-  # Load metadata for the disputed mask and merge onto the dataset
-  # NOTE: In the future, this is something that could be added directly to the
-  #  disputed shapefile in J:/WORK/11_geospatial
-  disp_meta <- fread(paste0(save_dir,'disputed_meta.csv'))
-  disp_meta_merged <- merge(
-    x = disp_shp@data,
-    y = disp_meta,
-    by = 'ADM0_NAME',
-    all.x = TRUE
-  )
-  disp_meta_merged <- disp_meta_merged[order(row_id)]
-  disp_shp@data$claimants <- disp_meta_merged$claimants
-
-  # Save both shapefiles to the 'quick shapefile' directory
-  saveRDS(ad0_shp, file=paste0(save_dir,'gdcv_background_shp.rds'))
-  saveRDS(disp_shp, file=paste0(save_dir,'gdcv_disputed_shp.rds'))
-  message("New background and disputed shapefiles saved successfully.")
-}
 
 
 ## ###########################################################################
@@ -1673,21 +1516,21 @@ dcp_make_table_new <- function(df_summary, country_list, year_min, year_max) {
   td <- td[,Count := sum(count), by=.(country, pointpoly)]
   td <- td[,N := sum(n), by=.(country, pointpoly)]
   td <- distinct(td, country, pointpoly, N, Count)
-
+  
   td[is.na(pointpoly), N := 0]
   td[is.na(pointpoly), Count := 0]
-
+  
   td_n <- td[,.(country, N)]
   td_n <- td[, N := sum(N), by=country]
   td_n <- distinct(td, country, N)
-
+  
   td_count <- td %>%
-                .[, N := NULL] %>%
-                spread(pointpoly, Count, fill = 0) %>%
-                as.data.table %>%
-                merge(., td_n, by = "country") %>%
-                setnames("country", "Country")
-
+    .[, N := NULL] %>%
+    spread(pointpoly, Count, fill = 0) %>%
+    as.data.table %>%
+    merge(., td_n, by = "country") %>%
+    setnames("country", "Country")
+  
   # Catch if either no point or no poly data
   if (!("Point" %in% names(td_count))) {
     td_count[, Point := 0]
@@ -1695,25 +1538,25 @@ dcp_make_table_new <- function(df_summary, country_list, year_min, year_max) {
   if (!("Polygon" %in% names(td_count))) {
     td_count[, Polygon := 0]
   }
-
+  
   setnames(td_count, c("Point", "Polygon"), c("Points", "Polygons"))
-
+  
   # Add in countries with no data
   no_data_countries <- country_list[!(country_list %in% unique(td_count$Country))]
   ## Catch the cases where all countries are filled
   if (length(no_data_countries) > 0){
     no_data_td <- data.table(Country = no_data_countries,
-                           Points = 0,
-                           Polygons = 0,
-                           N = 0)
-
+                             Points = 0,
+                             Polygons = 0,
+                             N = 0)
+    
     td_count <- rbind(td_count, no_data_td)
   }
-
+  
   if ("<NA>" %in% names(td)) td[, "<NA>" := NULL]
-
+  
   setcolorder(td_count, c("Country", "Points", "Polygons", "N"))
-
+  
   return(td_count)
 }
 
@@ -1727,13 +1570,13 @@ dcp_make_table_new <- function(df_summary, country_list, year_min, year_max) {
 #' @return A grob legend object
 #'
 gLegend<-function(a.plot){
-
+  
   if ("ggplot" %in% class(a.plot)) {
     tmp <- ggplot_gtable(ggplot_build(a.plot))
   } else if ("grob" %in% class(a.plot)) {
     tmp <- .gplot
   }
-
+  
   leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
   legend <- tmp$grobs[[leg]]
   return(legend)
@@ -1751,7 +1594,7 @@ gLegend<-function(a.plot){
 #' @return g_datamap with a color scale applied
 #'
 add_color_scheme_scatter <- function(g_datamap, color_scheme_scatter) {
-   if(color_scheme_scatter == "brewer") {
+  if(color_scheme_scatter == "brewer") {
     g_datamap <- g_datamap + scale_color_brewer(palette = "Paired")
   } else if (color_scheme_scatter == "binary") {
     g_datamap <- g_datamap + scale_colour_manual(values = c("No" = "gray", "Yes" = "firebrick"))
@@ -1812,79 +1655,78 @@ build_g_data_scatter <- function(df_graph,
                                  year_max,
                                  stage3,
                                  stage_3_gray) {
-
+  
   # Set up table data
   td <- copy(table_data)
   td[, N := NULL] # Don't display N column
   setnames(td, "Country", "country")
   td <- gather(td, type, value, -country) %>% as.data.table
-
+  
   # Add on regions
   reg_table <- subset(df_graph, select = c("country", "location_name", "region_name")) %>%
-                unique
+    unique
   td <- merge(td, reg_table, by="country")
-
+  
   if(stage_3_gray){
     td <- td[!(country %in% stage3$iso3),]
     df_graph <- df_graph[!(country %in% stage3$iso3),]
   }
-
+  
   base_font_size <- round(base_font_size * 0.8)
-
+  
   panel_spacing <- 2
   if (region_name %in% c("africa","africa_no_yem")) panel_spacing <- 1
   if (region_name == 'stage2') panel_spacing <- .5
-
-
+  
+  
   # Make the table part of the plot
-  # Note: weird 5/14 scalar from here: https://stackoverflow.com/questions/25061822/ggplot-geom-text-font-size-control
   g_table <- ggplot(data = td,
                     aes(x = type,
                         y = location_name,
                         label = value)) +
-             geom_text(size = base_font_size*(5/14)*(0.8)) +
-             theme_minimal(base_size = base_font_size) + #
-             scale_x_discrete(position = "top") +
-             theme(axis.title.x=element_blank(),
-                   axis.title.y=element_blank(),
-                   panel.grid.major.x = element_blank(),
-                   panel.grid.major.y = element_blank(),
-                   strip.text.x = element_blank(),
-                   axis.text.y = element_blank(),
-                   axis.text.x = element_text(size = rel(1)),
-                   panel.spacing.y = unit(panel_spacing, "lines")) +
-             facet_wrap(~region_name, scales="free_y", ncol = 1)
-
+    geom_text(size = base_font_size*(5/14)*(0.8)) +
+    theme_minimal(base_size = base_font_size) + #
+    scale_x_discrete(position = "top") +
+    theme(axis.title.x=element_blank(),
+          axis.title.y=element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_blank(),
+          strip.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.text.x = element_text(size = rel(1)),
+          panel.spacing.y = unit(panel_spacing, "lines")) +
+    facet_wrap(~region_name, scales="free_y", ncol = 1)
+  
   # Builds a data scatterplot
   g_datamap <- ggplot(data = df_graph,
                       aes(x = year,
                           y = location_name,
                           group = get(by_color))) +
-  geom_vline(xintercept = c(2000,2005,2010,2015)) +
-  geom_point(aes(size = capped_n,
-                 shape = pointpoly,
-                 color = get(by_color)),
-                 alpha = alpha_val) +
-  scale_size_area(limits = c(0, max(df_graph$capped_n[!is.na(df_graph$capped_n)])), max_size = 4) +
-  theme_minimal(base_size = base_font_size) +
-  xlim(year_min, year_max) +
-  labs(shape = "Data Type",
-       color = color_label,
-       size = size_lab) +
-  guides(color = guide_legend(order = 1, override.aes = list(shape = 15, size = 5)),
-         shape = guide_legend(order = 2, override.aes = list(size = 4)),
-         size = guide_legend(order = 3)) +
-  theme(axis.title.x=element_blank(),
-        axis.title.y=element_blank(),
-        strip.text.x = element_text(size = rel(1.3),
-                                    vjust = 0.5,
-                                    margin = margin(b = 20)),
-        panel.spacing.y = unit(panel_spacing, "lines"),
-        plot.margin = margin(l = 12)) +
-  facet_wrap(~region_name, scales="free_y", ncol = 1)
-
+    geom_vline(xintercept = c(2000,2005,2010,2015)) +
+    geom_point(aes(size = capped_n,
+                   shape = pointpoly,
+                   color = get(by_color)),
+               alpha = alpha_val) +
+    scale_size_area(limits = c(0, max(df_graph$capped_n[!is.na(df_graph$capped_n)])), max_size = 4) +
+    theme_minimal(base_size = base_font_size) +
+    xlim(year_min, year_max) +
+    labs(shape = "Data Type",
+         color = color_label,
+         size = size_lab) +
+    guides(color = guide_legend(order = 1, override.aes = list(shape = 15, size = 5)),
+           shape = guide_legend(order = 2, override.aes = list(size = 4)),
+           size = guide_legend(order = 3)) +
+    theme(axis.title.x=element_blank(),
+          axis.title.y=element_blank(),
+          strip.text.x = element_text(size = rel(1.3),
+                                      vjust = 0.5,
+                                      margin = margin(b = 20)),
+          panel.spacing.y = unit(panel_spacing, "lines"),
+          plot.margin = margin(l = 12)) +
+    facet_wrap(~region_name, scales="free_y", ncol = 1)
+  
   g_datamap <- add_color_scheme_scatter(g_datamap, color_scheme_scatter)
-
+  
   return(list(g_datamap, g_table))
 }
 
@@ -1902,44 +1744,44 @@ build_g_data_scatter <- function(df_graph,
 #' @return returns a grob object with combined table and scatterplot
 #'
 fix_g_data_scatter <- function(g_data_scatter_list, df_graph, stage3, stage_3_gray) {
-
+  
   # This function takes the data map objects and makes it
   # so that all of the heights are evenly distributed
   # returns a grob object instead of a ggplot object
   if(stage_3_gray) {
     df_graph <- df_graph[!(country %in% stage3$iso3),]
   }
-
+  
   height_fix <- function(g_data_scatter) {
     g_data_scatter <- ggplotGrob(g_data_scatter)
-
+    
     # Figure out # rows per region
     regions_table <- unique(df_graph[, c("country", "region_name")])
     regions_table <- as.data.frame(table(regions_table$region_name))
-
+    
     names(regions_table) <- c("region_name", "n")
-
+    
     # This is a bit weird
     # identify the indices of the relevant heights from the grob layout
     idx <- g_data_scatter$layout$b[grepl("panel", g_data_scatter$layout$name)]
-
+    
     # reset heights (relative heights, scaled to # rows)
     g_data_scatter$heights[idx] <- unit(regions_table$n, "null")
-
+    
     return(g_data_scatter)
   }
-
+  
   # Fix heights
   g_data_fixed_list <- lapply(g_data_scatter_list, height_fix)
-
+  
   g_data_combined <- cbind(g_data_fixed_list[[1]], g_data_fixed_list[[2]], size = "last")
   # Get index of the 2nd set of panels
   idx <- g_data_combined$layout$l[grepl("panel", g_data_combined$layout$name)] %>% unique
   g_data_combined$widths[idx[1]] <- unit(4, "null")
   g_data_combined$widths[idx[2]] <- unit(1.2, "null")
-
+  
   return(g_data_combined)
-
+  
 }
 
 
@@ -1984,81 +1826,81 @@ make_data_scatterplots <- function(df_graph,
                                    stage3,
                                    stage_3_gray,
                                    new_data_plots = FALSE) {
-
-    # Fix title if present
-    if(title != "") {
-      title <- paste0(title, " ")
-    }
-
-    # Set up heading for size (proportional to 'N')
-    size_lab <- 'Sample Size'
-
-    # Ensure that year_min, year_max are numeric
-    year_min <- as.numeric(year_min)
-    year_max <- as.numeric(year_max)
-
-    # Cap shape size at percentile
-    n_cap_pctile <- 0.9
-    df_graph <- df_graph[, capped_n := n]
-    df_graph <- df_graph[capped_n >= quantile(df_summary$n[!is.na(df_summary$n)], probs = n_cap_pctile),
-                         capped_n := quantile(df_summary$n[!is.na(df_summary$n)], probs = n_cap_pctile)]
-
-    g_data_list <- build_g_data_scatter(df_graph = df_graph,
-                                        alpha_val = 0.9,
-                                        by_color = "source",
-                                        color_label = "Data Source",
-                                        color_scheme_scatter = color_scheme_scatter,
-                                        size_lab = size_lab,
-                                        title = title,
-                                        reg_title = reg_title,
-                                        region_name = region_name,
-                                        table_data = table_data,
-                                        base_font_size = base_font_size,
-                                        year_min = year_min,
-                                        year_max = year_max,
-                                        stage3 = stage3,
-                                        stage_3_gray = stage_3_gray)
-    # Pull legends and then remove
-    g_data_legend <- gLegend(g_data_list[[1]])
-    g_data_list[[1]] <- g_data_list[[1]] + theme(legend.position="none")
-    g_data <- fix_g_data_scatter(g_data_list, df_graph, stage3, stage_3_gray)
-    message("  Successfully created scatter for main plot.")
-
-    # Optionally make new data scatterplots
-    if (new_data_plots){
-      message("  You have chosen to make New Data Plots. Making New Data scatters...")
-      g_data_new_list <- build_g_data_scatter(df_graph = df_graph,
-                                              alpha_val = 1,
-                                              by_color = "new_data_lab",
-                                              color_label = "New Data",
-                                              color_scheme_scatter = "binary",
-                                              size_lab = size_lab,
-                                              title = title,
-                                              reg_title = reg_title,
-                                              region_name = region_name,
-                                              table_data = table_data,
-                                              base_font_size = base_font_size,
-                                              year_min = year_min,
-                                              year_max = year_max,
-                                              stage3 = stage3,
-                                              stage_3_gray = stage_3_gray)
-      g_data_new_legend <- gLegend(g_data_new_list[[1]])
-      g_data_new_list[[1]] <- g_data_new_list[[1]] + theme(legend.position="none")
-      g_data_new <- fix_g_data_scatter(g_data_new_list, df_graph, stage3, stage_3_gray)
-    } else {
-      message("  You have chosen not to make New Data Plots. Skipping new data scatters.")
-      g_data_new_list <- NA
-      g_data_new_legend <- NA
-      g_data_new <- NA
-    }
-
-
-    message("Done making scatterplots.")
-    return(list("g_data_legend" = g_data_legend,
-                "g_data_new_legend" = g_data_new_legend,
-                "g_data" = g_data,
-                "g_data_new" = g_data_new))
-
+  
+  # Fix title if present
+  if(title != "") {
+    title <- paste0(title, " ")
+  }
+  
+  # Set up heading for size (proportional to 'N')
+  size_lab <- 'Sample Size'
+  
+  # Ensure that year_min, year_max are numeric
+  year_min <- as.numeric(year_min)
+  year_max <- as.numeric(year_max)
+  
+  # Cap shape size at percentile
+  n_cap_pctile <- 0.9
+  df_graph <- df_graph[, capped_n := n]
+  df_graph <- df_graph[capped_n >= quantile(df_summary$n[!is.na(df_summary$n)], probs = n_cap_pctile),
+                       capped_n := quantile(df_summary$n[!is.na(df_summary$n)], probs = n_cap_pctile)]
+  
+  g_data_list <- build_g_data_scatter(df_graph = df_graph,
+                                      alpha_val = 0.9,
+                                      by_color = "source",
+                                      color_label = "Data Source",
+                                      color_scheme_scatter = color_scheme_scatter,
+                                      size_lab = size_lab,
+                                      title = title,
+                                      reg_title = reg_title,
+                                      region_name = region_name,
+                                      table_data = table_data,
+                                      base_font_size = base_font_size,
+                                      year_min = year_min,
+                                      year_max = year_max,
+                                      stage3 = stage3,
+                                      stage_3_gray = stage_3_gray)
+  # Pull legends and then remove
+  g_data_legend <- gLegend(g_data_list[[1]])
+  g_data_list[[1]] <- g_data_list[[1]] + theme(legend.position="none")
+  g_data <- fix_g_data_scatter(g_data_list, df_graph, stage3, stage_3_gray)
+  message("  Successfully created scatter for main plot.")
+  
+  # Optionally make new data scatterplots
+  if (new_data_plots){
+    message("  You have chosen to make New Data Plots. Making New Data scatters...")
+    g_data_new_list <- build_g_data_scatter(df_graph = df_graph,
+                                            alpha_val = 1,
+                                            by_color = "new_data_lab",
+                                            color_label = "New Data",
+                                            color_scheme_scatter = "binary",
+                                            size_lab = size_lab,
+                                            title = title,
+                                            reg_title = reg_title,
+                                            region_name = region_name,
+                                            table_data = table_data,
+                                            base_font_size = base_font_size,
+                                            year_min = year_min,
+                                            year_max = year_max,
+                                            stage3 = stage3,
+                                            stage_3_gray = stage_3_gray)
+    g_data_new_legend <- gLegend(g_data_new_list[[1]])
+    g_data_new_list[[1]] <- g_data_new_list[[1]] + theme(legend.position="none")
+    g_data_new <- fix_g_data_scatter(g_data_new_list, df_graph, stage3, stage_3_gray)
+  } else {
+    message("  You have chosen not to make New Data Plots. Skipping new data scatters.")
+    g_data_new_list <- NA
+    g_data_new_legend <- NA
+    g_data_new <- NA
+  }
+  
+  
+  message("Done making scatterplots.")
+  return(list("g_data_legend" = g_data_legend,
+              "g_data_new_legend" = g_data_new_legend,
+              "g_data" = g_data,
+              "g_data_new" = g_data_new))
+  
 }
 
 
@@ -2081,8 +1923,6 @@ make_data_scatterplots <- function(df_graph,
 #' @param tolerance numeric value that influences the degree of simplification of polygons
 #'   (see Douglas-Peuker algorithm)
 #' @param master_shape_all a combined SPDF with all polygons necessary to make maps
-#' @param disputed_shp an SPDF of all polygons in disputed regions, which will
-#'   be plotted separately
 #' @param stage3 data.table of stage 3 countries to be removed
 #' @param stage_3_gray boolean. If true, removes stage 3 countries from scatterplot
 #'
@@ -2099,110 +1939,120 @@ make_background_map <- function(region,
                                 tolerance,
                                 fast_shapefiles,
                                 master_shape_all,
-                                disputed_shp,
                                 stage3,
                                 stage_3_gray) {
-  # Define a list of data coverage plot regions and their corresponding regions
-  #  in the `get_adm0_codes()` function
-  dcp_region_list = list(
-    'africa' = 'africa_dcp',
-    'africa_no_yem' = 'africa_dcp-yem',
-    'south_asia' = 'south_asia+LKA+MDV',
-    'south_asia_ind_collaborators' = 'south_asia+LKA+MDV+PAK',
-    'se_asia' = 'se_asia_dcp-LKA-MDV+PNG+TWN',
-    'latin_america' = 'latin_america_dcp+GUF+CUB',
-    'central_america_no_mex' = 'central_america-MEX',
-    'south_america' = 'south_america+GUF',
-    'south_america_mex' = 'south_america+GUF+MEX',
-    'middle_east' = 'middle_east_dcp',
-    'stage1' = 'all',
-    'stage2' = 'all',
-    'stage3' = 'all'
-  )
-  # Load the adm0 lookup table to use throughout this function (to avoid having
-  #  to read the same table repeatedly)
-  lookup_table <- load_adm0_lookup_table()
-  # Get the region that will be used for the background map
-  if(region %in% names(dcp_region_list)){
-    gaul_list <- suppressMessages(get_adm0_codes(
-      dcp_region_list[[region]],
-      lookup_table = lookup_table
-    ))
-  } else {
-    gaul_list <- suppressMessages(get_adm0_codes(
-      region,
-      lookup_table = lookup_table
-    ))
+  
+  # Create a background map for the plot (just the country polygons)
+  if (region == "africa") {
+    gaul_list <- get_gaul_codes('africa_dcp')
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
   }
-  # Subset the background map to just these admin0 codes
-  background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
-
+  if (region == "africa_no_yem") {
+    gaul_list <- get_gaul_codes('africa_dcp-yem')
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == 'south_asia') {
+    gaul_list <- get_gaul_codes('south_asia_dcp')
+    gaul_list <- unique(c(gaul_list, 154, 231)) # add Sri Lanka & Maldives
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
   if (region == 'south_asia_ind_collaborators') {
+    gaul_list <- get_gaul_codes('south_asia')
+    gaul_list <- unique(c(gaul_list, 154, 231)) # add Sri Lanka & Maldives & PNG
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
     message("  This region requires some extra shapefile processing...")
-    disputed_shp <- disputed_shp[FALSE,]
+    background_map[background_map@data$STATUS == "Sovereignty unsettled",
+                   "GAUL_CODE"] <- 115
+    # Keep the GAUL_CODEs for later
+    bg_map_gaul_order <- as.data.frame(unique(background_map@data$GAUL_CODE))
+    names(bg_map_gaul_order) <- 'GAUL_CODE'
+    # Dissolve
+    background_map <- gUnaryUnion(background_map, id = background_map@data$GAUL_CODE)
+    # Merge the GAUL_CODEs back on and convert to spatial polygons data frame
+    row.names(background_map) <- as.character(1:length(background_map))
+    background_map <- SpatialPolygonsDataFrame(background_map, bg_map_gaul_order)
   }
-
-  # Subset the disputed shapefile to keep only countries within the DCP region
-  check_in_gaul_list <- function(this_reg){
-    this_reg_gauls <- suppressMessages(get_adm0_codes(
-      this_reg, lookup_table=lookup_table
-    ))
-    overlapping_gauls <- intersect(this_reg_gauls,gaul_list)
-    return( (length(overlapping_gauls) > 0) )
+  if (region == 'se_asia') {
+    gaul_list <- get_gaul_codes('se_asia_dcp')
+    gaul_list <- gaul_list[!(gaul_list %in% c(154, 231))] # remove Sri Lanka, Maldives
+    add_countries <- c("PNG", "TWN")
+    add_gauls <- get_gaul_codes(add_countries)
+    gaul_list <- unique(c(gaul_list, add_gauls))
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
   }
-  disputed_shp_sub <- disputed_shp[ 
-    sapply(disputed_shp$claimants, FUN=check_in_gaul_list),
-  ]
-
-  ## Simplify, if specified, and then convert background SHP to a ggplot object
+  if (region == 'latin_america') {
+    gaul_list <- get_gaul_codes('latin_america_dcp')
+    gaul_list <- unique(c(gaul_list, 86, 63)) # Add French Guiana and Cuba
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == 'central_america') {
+    gaul_list <- get_gaul_codes('central_america')
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == 'central_america_no_mex') {
+    gaul_list <- get_gaul_codes('central_america')
+    remove_countries <- c("MEX")
+    remove_gauls <- get_gaul_codes(remove_countries)
+    gaul_list <- gaul_list[!(gaul_list %in% remove_gauls)]
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == 'south_america') {
+    gaul_list <- get_gaul_codes('south_america')
+    gaul_list <- c(gaul_list, 86) # Add French Guiana
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == 'south_america_mex') {
+    gaul_list <- get_gaul_codes('south_america')
+    gaul_list <- c(gaul_list, 86) # Add French Guiana
+    add_countries <- c("MEX")
+    add_gauls <- get_gaul_codes(add_countries)
+    gaul_list <- unique(c(gaul_list, add_gauls))
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == 'middle_east') {
+    gaul_list <- get_gaul_codes('middle_east_dcp')
+    add_countries <- c("UZB", "TKM", "TJK", "KGZ", "TUR", "ISR")
+    add_gauls <- get_gaul_codes(add_countries)
+    gaul_list <- unique(c(gaul_list, add_gauls))
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == 'eastern_europe') {
+    gaul_list <- get_gaul_codes('eastern_europe')
+    background_map <- master_shape_all[master_shape_all@data$GAUL_CODE %in% gaul_list, ]
+  }
+  if (region == "stage2") {
+    background_map <- copy(master_shape_all)
+  }
+  
   if(simplify_polys == T) background_map <- simplify_spdf(background_map, tol = tolerance)
-  background_map@data$id <- 1:dim(background_map@data)[1]
+  
+  background_map@data$id <- rownames(background_map@data)
   background_map_df <- suppressMessages(fortify(background_map))
   background_map_df <- merge(background_map_df, background_map@data[, c("id", "GAUL_CODE")], by = "id")
   background_map_df <- as.data.table(background_map_df)
-
+  
   background_outline_gg <- suppressMessages(
-                          geom_path(data = background_map,
-                                     aes(x = long,
-                                         y = lat,
-                                         group = group)))
-
+    geom_path(data = background_map,
+              aes(x = long,
+                  y = lat,
+                  group = group)))
+  
   background_map_gg <- suppressMessages(
-                       geom_polygon(data = background_map,
-                                    aes(x = long,
-                                        y = lat,
-                                        group = group),
-                                    fill = "white"))
-
-  ## Convert disputed shapefile into a ggplot object
-  disputed_shp_df <- as.data.table( suppressMessages(fortify(disputed_shp_sub)) )
-  if(nrow(disputed_shp_df)==0) disputed_shp_df <- data.table(
-    lat=numeric(0), long=integer(0), group=character(0)
-  )
-  disputed_bg_gg <- suppressMessages(
-    geom_path(
-      data = disputed_shp_df,
-      aes(x=long, y=lat, group=group),
-      color='white', size = .7
-    )
-  )
-  disputed_shp_gg <- suppressMessages(
-    geom_path(
-      data = disputed_shp_df,
-      aes(x=long, y=lat, group=group),
-      color='black', linetype = 'dotted', size = .5
-    )
-  )
-
+    geom_polygon(data = background_map,
+                 aes(x = long,
+                     y = lat,
+                     group = group),
+                 fill = "white"))
+  
   if (!is.null(endemic_gauls)) {
     background_map_df_not_endemic <- background_map_df[!(GAUL_CODE %in% endemic_gauls), ]
     background_map_gg_not_endemic <- geom_polygon(data = background_map_df_not_endemic,
-                                                 aes(x = long,
-                                                     y = lat,
-                                                     group = group),
-                                                 fill = "lightgray")
+                                                  aes(x = long,
+                                                      y = lat,
+                                                      group = group),
+                                                  fill = "lightgray")
   } else if (stage_3_gray) {
-    background_map_df_not_endemic <- background_map_df[(GAUL_CODE %in% stage3$gadm_geoid), ]
+    background_map_df_not_endemic <- background_map_df[(GAUL_CODE %in% stage3$GAUL_CODE), ]
     background_map_gg_not_endemic <- geom_polygon(data = background_map_df_not_endemic,
                                                   aes(x = long,
                                                       y = lat,
@@ -2211,11 +2061,8 @@ make_background_map <- function(region,
   } else {
     background_map_gg_not_endemic <- NULL
   }
-
-  return(list(
-    background_outline_gg, background_map_gg, background_map_gg_not_endemic, 
-    extent(background_map), disputed_shp_gg, disputed_bg_gg
-  ))
+  
+  return(list(background_outline_gg, background_map_gg, background_map_gg_not_endemic, extent(background_map)))
 }
 
 
@@ -2234,28 +2081,28 @@ get_color_list <- function(color_scheme) {
     color_list <- c('#a50026', '#d73027', '#f46d43', '#fdae61',
                     '#fee090', '#ffffbf', '#e0f3f8', '#abd9e9',
                     '#74add1', '#4575b4', '#313695')
-
+    
   } else if (color_scheme == "darker_middle") {
     color_list <- c("#A50026", "#960633", "#880D41", "#79144F",
                     "#6B1B5D", "#5C216B", "#4E2879", "#3F2F87",
                     "#313695")
-
+    
   } else if (color_scheme == "red_blue") {
     color_list <- c("#A50026", "#B22E3C", "#C05D52", "#CD8B69",
                     "#DBBA7F", "#E9E996", "#C4C595", "#9FA195",
                     "#7A7D95", "#555995", "#313695")
-
+    
   } else if (color_scheme == "carto_red_blue") {
     color_list <- c("#008080", "#70a494", "#b4c8a8", "#f6edbd",
                     "#edbb8a", "#de8a5a", "#ca562c")
-
+    
   } else if (color_scheme %in% rownames(brewer.pal.info[brewer.pal.info$category == "seq",])) {
     color_list <- rev(brewer.pal(9, color_scheme)[-1])
-
+    
   } else {
     stop(paste(color_scheme, "is not a recognized color scheme"))
   }
-
+  
   return(color_list)
 }
 
@@ -2276,8 +2123,6 @@ get_color_list <- function(color_scheme) {
 #'   with countries marked non-endemic or stage 3 grayed out. output of `make_background_map()`
 #' @param background_extent extent of polygon defining region.
 #'   output of `make_background_map()`
-#' @param disputed_map ggplot object for disputed territories
-#' @param disputed_bg ggplot BACKGROUND (white) object for disputed territories
 #' @param df_graph_poly data.table output of `dcp_make_df_graph()`, subsetted to countries
 #'   in region
 #' @param df_graph_point data.table output of `dcp_make_df_graph()`, subsetted to countries
@@ -2312,8 +2157,6 @@ make_a_period_map <- function(period,
                               background_outline,
                               background_map_not_endemic,
                               background_extent,
-                              disputed_map,
-                              disputed_bg,
                               df_graph_poly,
                               df_graph_point,
                               not_real_shapefiles,
@@ -2328,26 +2171,24 @@ make_a_period_map <- function(period,
                               legend_max,
                               poly_line_width,
                               annual_period_maps) {
-
+  
   # A blank theme
   theme_empty <- theme_classic(base_size = base_font_size) +
     theme(axis.line=element_blank(),axis.text.x=element_blank(),
           axis.text.y=element_blank(),axis.ticks=element_blank(),
           axis.title.x=element_blank(),
           axis.title.y=element_blank())
-
+  
   ## Subset data to this period
   df_period_polys <- df_graph_poly[plot_year == period, ]
   df_period_points <- df_graph_point[plot_year == period, ]
-
+  
   ## Drop if shapefile not found
   df_period_polys <- df_period_polys[!(shapefile %in% not_real_shapefiles)]
-
+  
   ## Initialize map
-  g_map <- ggplot() + 
-    background_map + 
-    background_map_not_endemic
-
+  g_map <- ggplot() + background_map + background_map_not_endemic
+  
   # Merge polygons for this period to master spdf and add each one to map
   merge_poly_data <- function(this_survey, poly_shapes_all) {
     survey_subset <- df_graph_poly[nid == this_survey, ]
@@ -2367,7 +2208,7 @@ make_a_period_map <- function(period,
     survey_shapes <- survey_shapes[!is.na(survey_shapes@data$outcome),]
     return(survey_shapes)
   }
-
+  
   # Function for printing informative warning messages about erroneous input data
   geog_warnings <- function(bad_data_df, geog_col, msg){
     setnames(bad_data_df, geog_col, 'geog_col')
@@ -2385,24 +2226,24 @@ make_a_period_map <- function(period,
                      "\n      ",geog_report_names[[geog_col]],": ",geogs))
     }
   }
-
+  
   # error checking - only do this if there is polygon data
   # otherwise, will leave the map as is - empty.
-
+  
   # set up list of bad polys
   bad_polys <- c()
   poly_outside_list <- list()
-
+  
   if (nrow(df_period_polys) > 0) {
-
+    
     all_period_polys <- lapply(unique(df_period_polys[, nid]), function(this_survey) {
       merge_poly_data(this_survey, poly_shapes_all)
     })
     assign(paste0('poly_data_', period), all_period_polys)
-
+    
     for(i in 1:length(all_period_polys)) {
       survey_spdf <- all_period_polys[[i]]
-
+      
       if(length(survey_spdf) == 0) {
         bad_polys <- c(bad_polys, unique(df_period_polys[, survey])[i])
       }
@@ -2414,16 +2255,16 @@ make_a_period_map <- function(period,
           head(survey_spdf@data)
           next
         }
-
+        
         # new table for polys that are outside the extent of the background
         poly_outside <-poly_dt[lat < background_extent@ymin | lat > background_extent@ymax |
                                  long < background_extent@xmin | long > background_extent@xmax,]
-
+        
         poly_drop <-poly_dt[lat < background_extent@ymin - 0.5 |
-                            lat > background_extent@ymax + 0.5 |
-                            long < background_extent@xmin - 0.5 |
-                            long > background_extent@xmax + 0.5, ]
-
+                              lat > background_extent@ymax + 0.5 |
+                              long < background_extent@xmin - 0.5 |
+                              long > background_extent@xmax + 0.5, ]
+        
         ## if a given polygon falls outside of the extend of the background region, throw a warning
         if(nrow(poly_outside)>0){
           geog_warnings(bad_data_df = poly_outside,
@@ -2431,7 +2272,7 @@ make_a_period_map <- function(period,
                         msg = "There are polygons outside of the background region range.")
           poly_outside_list[[length(poly_outside_list) + 1]] <- poly_outside
         }
-
+        
         if(nrow(poly_drop)>0) {
           geog_warnings(bad_data_df = poly_drop,
                         geog_col = 'location_code',
@@ -2442,32 +2283,32 @@ make_a_period_map <- function(period,
             poly_dt <- subset(poly_dt, group != grp)
           }
         }
-
+        
         g_map <- g_map +
-        geom_polygon(data = poly_dt,
-                     aes(x = long,
-                         y = lat,
-                         group = group,
-                         fill = outcome),
-                     color = "white",
-                     size = poly_line_width)
-
+          geom_polygon(data = poly_dt,
+                       aes(x = long,
+                           y = lat,
+                           group = group,
+                           fill = outcome),
+                       color = "white",
+                       size = poly_line_width)
+        
       }
     }
-
+    
     # Drop if more than 0.5 degrees away from extent of background map
     if (length(poly_outside_list) > 0) {
       poly_outside_list <- rbindlist(poly_outside_list)
     }
-
-
-
+    
+    
+    
   } else {
-
+    
     assign(paste0('poly_data_', period), NULL)
-
+    
   }
-
+  
   # Report out bad polys
   if (length(bad_polys) > 0) {
     warning("BAD SPECIFIC POLYGON MERGES - polygons have been dropped")
@@ -2478,16 +2319,16 @@ make_a_period_map <- function(period,
         write.csv(., file = paste0(log_dir, "bad_polys.csv"))
     }
   }
-
+  
   ## determine if there are points that fall outside the background extent
   points_outside <- df_period_points[latitude < background_extent@ymin | latitude > background_extent@ymax |
                                        longitude < background_extent@xmin | longitude > background_extent@xmax,]
-
+  
   point_drop <- df_period_points[latitude < background_extent@ymin - 0.5 |
-                                 latitude > background_extent@ymax + 0.5 |
-                                 longitude < background_extent@xmin - 0.5 |
-                                 longitude > background_extent@xmax + 0.5, ]
-
+                                   latitude > background_extent@ymax + 0.5 |
+                                   longitude < background_extent@xmin - 0.5 |
+                                   longitude > background_extent@xmax + 0.5, ]
+  
   ## if there are points outside of the extent, throw a warning and print the survey names + number of points outside
   if(nrow(points_outside)>0){
     geog_warnings(bad_data_df = points_outside,
@@ -2500,14 +2341,14 @@ make_a_period_map <- function(period,
                   msg = paste0("The following surveys have points that are VERY",
                                " far away from background polygon and will be dropped.\n",
                                "    Check the location of these points!")
-                  )
+    )
   }
-
+  
   df_period_points <- subset(df_period_points,
                              !(latitude < background_extent@ymin - 0.5 | latitude > background_extent@ymax + 0.5 |
-                               longitude < background_extent@xmin - 0.5 | longitude > background_extent@xmax + 0.5))
-
-
+                                 longitude < background_extent@xmin - 0.5 | longitude > background_extent@xmax + 0.5))
+  
+  
   ## Set up color scale
   range <- range(df$outcome, na.rm=T)
   ## If specified, set manual legend range values
@@ -2538,34 +2379,36 @@ make_a_period_map <- function(period,
                      "bound will remain at ",range[2],"."))
     }
   }
-
+  
   ## If the legend bounds are the same, add a very small number to the upper bound
   if(diff(range) <= 0){
     message(paste0("WARNING: The legend showed no variation in data. Increasing ",
                    "the upper bound slightly to avoid plotting erorrs."))
     range[2] <- range[1] + 1E-5
   }
-
+  
   digits <- 10^(floor(log10(diff(range))) - 1)
   limits <- c(digits*floor(range[1]/digits), digits*ceiling(range[2]/digits))
   brks <- round(seq(limits[1], limits[2], length.out = 5), -1*log10(digits))
   brks[c(1, 5)] <- limits
   labs <- format(brks)
-  if (cap_type != "none" | !(is.na(legend_max))) labs[5] <- paste0(labs[5], "+")
-
+  if (cap_type != "none" | !(is.na(legend_max))) labs[5] <- paste0(labs[5])
+  
   ## Finally, set up title text based on whether or not annual period maps are
   ##  being made
   if (annual_period_maps){
     title_text <- as.character(period)
   } else {
-    title_text <- paste0(period-2, "-", period+2)
+    if(period == 2000){
+      title_text <- paste0(period, "-", period+2)
+    }else{
+      title_text <- paste0(period-2, "-", period+2)
+    }
   }
-
+  
   ## Add points and finishing touches
   g_map <- g_map +
     background_outline +
-    disputed_bg +
-    disputed_map +
     geom_point(data = df_period_points,
                aes(x = longitude,
                    y = latitude,
@@ -2615,39 +2458,36 @@ dcp_make_4up_map <- function(g_datamap,
                              n_total,
                              polys_total,
                              points_total) {
-
+  
   #g_datamap = object for left side of map (lets you add new data map
-
+  
   # grab your legends using the predefined functions, then state their grid location
   p.legend <- gLegend(map_list[[1]])
   p.legend$vp <- grid::viewport(layout.pos.row = 1:12, layout.pos.col = 9)
-
+  
   # Note g_data_legend grabbed above while processing g_data
   g_data_legend$vp <- grid::viewport(layout.pos.row = 2:11, layout.pos.col = 4)
-
+  
   # Add a title
-  title_grob <- textGrob(paste0(title, ": ", reg_title),
-                    gp=gpar(fontsize=base_font_size*1.5))
+  title_grob <- textGrob(paste0(title, ":\n ", reg_title),
+                         gp=gpar(fontsize=base_font_size*1.5))
   title_grob$vp <- grid::viewport(layout.pos.row = 1, layout.pos.col = 1:3)
 
-  time_stamp <- Sys.Date()
   # Add notes at bottom
   note_grob <- textGrob(paste0("N: ", formatC(n_total, format="d", big.mark=","), "\n",
                                "Points: ", formatC(points_total, format="d", big.mark=","), "\n",
-                               "Polygons: ", formatC(polys_total, format="d", big.mark=","),
-                               "\n",
-                               format(time_stamp, format="%m/%d/%Y")),
+                               "Polygons: ", formatC(polys_total, format="d", big.mark=",")),
                         gp = gpar(fontsize = base_font_size))
   note_grob$vp <- grid::viewport(layout.pos.row = 11:12, layout.pos.col = 9)
-
+  
   # Set up based on number of countries
   if(n_countries > 24) g_datamap$vp <-  grid::viewport(layout.pos.row = 2:11, layout.pos.col = 1:3)
   if(n_countries > 12 & n_countries <= 24) g_datamap$vp <-  grid::viewport(layout.pos.row = 3:10, layout.pos.col = 1:3)
   if(n_countries <= 12) g_datamap$vp <-  grid::viewport(layout.pos.row = 4:9, layout.pos.col = 1:3)
-
+  
   # Initialize plot with master title
   grid.newpage()
-  pushViewport(grid::viewport(layout = grid.layout(nrow=12, ncol=9)))
+  pushViewport(grid::viewport(layout = grid.layout(12, 9)))
   vplayout <- function(x, y) grid::viewport(layout.pos.row = x, layout.pos.col = y, clip = "off")
   # Plot all data coverage maps
   #print(tbl, as.table=TRUE)
@@ -2657,24 +2497,15 @@ dcp_make_4up_map <- function(g_datamap,
   print(map_list[[3]] + theme(legend.position="none"), vp = vplayout(7:12, 5:6))
   print(map_list[[4]] + theme(legend.position="none"), vp = vplayout(7:12, 7:8))
   grid.draw(p.legend)
+  grid.draw(g_data_legend)
   grid.draw(title_grob)
   grid.draw(note_grob)
-  # If there are no data points, then the g_data_legend can fail
-  #  Try plotting it without recording first to make sure it works
-  plot_g_data_legend <- tryCatch({
-      grid.draw(g_data_legend, recording=FALSE)
-      return(TRUE)
-    }, error = function(e){
-      return(FALSE)
-    }
-  )
-  if(plot_g_data_legend) grid.draw(g_data_legend, recording=TRUE)
-
+  
 }
 
 
 ## ###########################################################################
-## SECTION 6 - SHINY PREP FUNCTIONS
+## SECTION 2 - SHINY PREP FUNCTIONS
 ## ###########################################################################
 
 
@@ -2696,7 +2527,7 @@ prep_data_coverage_shiny <- function(df,
                                      poly_shapes_all,
                                      var,
                                      indicator) {
-
+  
   ## Save polygons with data for Data Coverage Shiny
   makeID_save <- function(shape) {
     shapefile <- all_polygon_data[[shape]]
@@ -2708,10 +2539,10 @@ prep_data_coverage_shiny <- function(df,
       message(paste0("Not saving for geo_data Shiny: ", unique(df_graph_poly[, survey])[shape]))
     }
   }
-
+  
   # Check if any polygons
   if (nrow(df_graph_poly) > 0) {
-
+    
     ## Merge polygons for this period to master spdf and add each one to map
     merge_poly_data <- function(this_survey) {
       survey_subset <- df_graph_poly[survey == this_survey, ]
@@ -2726,7 +2557,7 @@ prep_data_coverage_shiny <- function(df,
       survey_shapes <- survey_shapes[!is.na(survey_shapes@data$outcome),]
       return(survey_shapes)
     }
-
+    
     all_polygon_data <- lapply(unique(df_graph_poly[, survey]), merge_poly_data)
     all_polygon_data <- lapply(1:length(all_polygon_data), makeID_save)
     all_polygon_data <- all_polygon_data[!sapply(all_polygon_data, is.null)]
@@ -2738,11 +2569,9 @@ prep_data_coverage_shiny <- function(df,
   } else {
     just_polygons <- list(NULL)
   }
-
-  save(list = 'just_polygons', file = paste0('/snfs1/WORK/11_geospatial/10_mbg/data_coverage_shiny/', indicator, '_polygons.RData'))
+  
+  save(list = 'just_polygons', file = '<<<< FILEPATH REDACTED >>>>')
   setnames(df, var, indicator)
-  write.csv(df, paste0('/snfs1/WORK/11_geospatial/10_mbg/data_coverage_shiny/', indicator, '_points.csv'))
-
+  write.csv(df, '<<<< FILEPATH REDACTED >>>>')
+  
 }
-
-

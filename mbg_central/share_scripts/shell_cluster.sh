@@ -1,7 +1,7 @@
 #!/bin/bash
 
-MEMINFO=/homes/miker985/code/mem-profiler/meminfo
-MEMINFO_ROOT=/ihme/scratch/users/miker985/session-meminfo
+MEMINFO=<<<< FILEPATH REDACTED >>>>
+MEMINFO_ROOT=<<<< FILEPATH REDACTED >>>>
 if [[ -z ${JOB_ID+x} ]]; then
     # JOB_ID unset. This is not a job, so record by PID as a fallback.
     F="$MEMINFO_ROOT/pids/$$"
@@ -15,9 +15,9 @@ fi
 
 # Determine R path
 if [[ $(hostname) == *geos* ]]; then
-    RPATH=/usr/bin/R
+    RPATH=<<<< FILEPATH REDACTED >>>>
 else
-    RPATH=/usr/local/codem/public_use_anaconda/bin/R
+    RPATH=<<<< FILEPATH REDACTED >>>>
 fi
 
 # Run meminfo and report usage every second

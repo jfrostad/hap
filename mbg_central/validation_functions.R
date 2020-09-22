@@ -6,9 +6,9 @@
 #             an will likely be run in a loop or apply function
 #
 ## Inputs:
-#          indicator_group: you know
-#          indicator: oh you know
-#          run_date: you definitely know
+#          indicator_group: indicator group
+#          indicator: indicator
+#          run_date: run date
 #          reg: string, region abbreviation, or just 'africa'
 #          addl_strat: ie c('age'=1), make age=0 for others
 #          holdout: holdout number
@@ -35,11 +35,10 @@ aggregate_validation <- function(holdoutlist = stratum_qt,
   require(raster); require(data.table)
 
   ## Load data
-  datdir <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/',indicator_group,indicator,run_date)
+  datdir <- '<<<< FILEPATH REDACTED >>>>'
 
   # cell draws
-  cdfile <- sprintf(paste0(datdir,cell_draws_filename),indicator,addl_strat,reg,holdout,vallevel)
-  #message(paste0('Loading cell draws from ',cdfile))
+  cdfile <- '<<<< FILEPATH REDACTED >>>>'
   load(cdfile) # loads cell pred
 
   # holdout data
@@ -70,24 +69,17 @@ aggregate_validation <- function(holdoutlist = stratum_qt,
   draws=dim(cell_pred)[2]
 
   # load simple raster
-  load(paste0('/share/geospatial/shapefiles/simple_raster',reg,'.RData'))
+  load(paste0('<<<< FILEPATH REDACTED >>>>/simple_raster',reg,'.RData'))
 
   # for each draw in cell_draws, pull the p
-  #message(paste('Pulling estimated rates for',dim(cell_pred)[2],'draws into rasters.'))
   r_list = list()
-  #  pb <- txtProgressBar(style = 3)
   for(i in 1:draws){
-    #    setTxtProgressBar(pb, i / draws)
     r_list[[length(r_list)+1]] <- insertRaster(simple_raster, matrix(cell_pred[,i],ncol = length(years)))
   }
-  #  close(pb)
 
   # extract probabilities from draw rasters
-  #message(paste('Extracting estimated probabilities at data locations for',draws,'draws rasters.'))
   ycol = match(d_oos$year,years)
-  #pb <- txtProgressBar(style = 3)
   for(i in 1:draws){
-    #  setTxtProgressBar(pb, i / draws)require(package, lib.loc = package_lib, character.only=TRUE)
     # extract at locations
     t=raster::extract(r_list[[i]],cbind(d_oos$longitude,d_oos$latitude))
     # match year and put into df
@@ -95,10 +87,8 @@ aggregate_validation <- function(holdoutlist = stratum_qt,
     d_oos[,paste0(indicator,'hat_full_',i)]= sapply(seq_along(ycol), function(x){t[x,ycol[x]]}) * d_oos$N
 
   }
-  #close(pb)
 
   # get binomial draws for each point-draw, and estimate the coverage based on X%ci
-  # message('Doing coverage using binomial draws. ') # NAs happen if points were in water
   x <- matrix(NA,ncol=draws,nrow=nrow(d_oos))
   for(i in 1:draws){
     x[,i] <- rbinom(nrow(d_oos),
@@ -115,7 +105,6 @@ aggregate_validation <- function(holdoutlist = stratum_qt,
   # collapse into areas
   d_oos[,names(addl_strat)]<-addl_strat
   d_oos$total_clusters=1
-  #message(names(d_oos))
   res <- d_oos[c(names(addl_strat),'fold','ho_id','year',indicator,'exposure',paste0('clusters_covered_',c(50,80,95)),'total_clusters',paste0(indicator,'hat_',1:draws))]
   f   <- as.formula(paste('.~ho_id+year+fold',names(addl_strat),sep='+'))
   resfull <- copy(res)
@@ -153,669 +142,12 @@ aggregate_validation <- function(holdoutlist = stratum_qt,
 }
 
 
-aggregate_validation_dev <- function( holdoutlist = stratum_qt,
-                                      cell_draws_filename = '%s_cell_draws_eb_bin%i_%s_%i%s.RData',
-                                      years = c(2000,2005,2010,2015),
-                                      indicator_group,
-                                      indicator,
-                                      run_date,
-                                      reg,
-                                      holdout,
-                                      vallevel = "",
-                                      addl_strat = c('age'=0),
-                                      iter=i){
-
-  require(raster); require(data.table)
-
-  ## Load data
-  datdir <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/',indicator_group,indicator,run_date)
-
-  # cell draws
-  cdfile <- sprintf(paste0(datdir,cell_draws_filename),indicator,addl_strat,reg,holdout,vallevel)
-  #message(paste0('Loading cell draws from ',cdfile))
-  load(cdfile)
-
-  # holdout data
-  d          <- as.data.table(holdoutlist[[sprintf('region__%s',reg)]])
-  if(holdout!=0) {
-    d_oos      <- d[d$fold==holdout,]
-  } else {
-    d_oos      <- d
-    d_oos$fold = 0
-  }
-  d_oos <- d_oos[, exposure := N * weight]
-  d_oos <- d_oos[, (indicator) := get(indicator) * weight]
-  draws=dim(cell_pred)[2]
-  # load simple raster
-  load(paste0('/share/geospatial/shapefiles/simple_raster',reg,'.RData'))
-
-  # for each draw in cell_draws, pull the p
-  #message(paste('Pulling estimated rates for',dim(cell_pred)[2],'draws into rasters.'))
-  r_list = list()
-  #  pb <- txtProgressBar(style = 3)
-  for(i in 1:draws){
-    #    setTxtProgressBar(pb, i / draws)
-    r_list[[length(r_list)+1]] <- insertRaster(simple_raster, matrix(cell_pred[,i],ncol = length(years)))
-  }
-  #  close(pb)
-
-  # extract probabilities from draw rasters
-  #message(paste('Extracting estimated probabilities at data locations for',draws,'draws rasters.'))
-  ycol = match(d_oos$year,years)
-  #pb <- txtProgressBar(style = 3)
-  for(i in 1:draws){
-    #  setTxtProgressBar(pb, i / draws)require(package, lib.loc = package_lib, character.only=TRUE)
-    # extract at locations
-    t=raster::extract(r_list[[i]],cbind(d_oos$longitude,d_oos$latitude))
-    # match year and put into df
-    d_oos[,paste0(indicator,'hat_',i)]= sapply(seq_along(ycol), function(x){t[x,ycol[x]]}) * d_oos$exposure
-  }
-  #close(pb)
-
-  # get binomial draws for each point-draw, and estimate the coverage based on X%ci (95% for now)
-  #message('Doing coverage using binomial draws. ')
-  # get binomial draws for each point-draw, and estimate the coverage based on X%ci (95% for now)
-  #message('Doing coverage using binomial draws. ')
-  x=matrix(rbinom(nrow(d_oos)*100,size=round(d_oos$exposure,0),prob=d_oos[,get(paste0(indicator,'hat_',i))]/d_oos$exposure),ncol=100)
-  for(c in c(50,80,95)){
-    coverage = c/100
-    li=apply(x,1,quantile,p=(1-coverage)/2,na.rm=T)
-    ui=apply(x,1,quantile,p=coverage+(1-coverage)/2,na.rm=T)
-    d_oos <- d_oos[, li := li]
-    d_oos <- d_oos[, ui := ui]
-    d_oos[get(indicator) >= li & get(indicator) <= ui, covered := 1]
-    d_oos[is.na(covered), covered := 0]
-    setnames(d_oos, 'covered', paste0('clusters_covered_',c))
-  }
-
-
-  # collapse into areas
-  d_oos[,names(addl_strat)]<-addl_strat
-  d_oos$total_clusters=1
-  #message(names(d_oos))
-  res <- d_oos[,c(names(addl_strat),'fold','ho_id','year',indicator,'exposure',paste0('clusters_covered_',c(50,80,95)),'total_clusters',paste0(indicator,'hat_',1:draws)), with=F]
-  f   <- as.formula(paste('.~ho_id+year+fold',names(addl_strat),sep='+'))
-  res   <- aggregate(f,data=res,FUN=sum)
-
-  # transform back to probability
-  res$p = res[,indicator]/res$exposure
-  res$region = reg
-  res$oos = res$fold != 0
-  for(i in 1:draws){
-    res[,paste0('phat_',i)]=res[,paste0(indicator,'hat_',i)]/res$exposure
-    res[,paste0(indicator,'hat_',i)]=NULL
-  }
-  res[,indicator]=NULL
-
-  message(sprintf('%i is finished in function as %s',iter,paste0(class(res),collapse=' ')))
-  ## return results table
-  return(data.table(res))
-
-}
-
-
-###################################################################################
-## this function is meant to plot your raw data (or something as close
-## to raw as possible) in a format that closely resembles your mbg
-## model output for comparison
-##
-## Inputs -
-##   data:    cleaned data.frame that will go into MBG run
-##   *_col:   string name of relevant columns in data
-##   smooth:  tuning for thin-plate spline smoothness
-##   raster_tmp: raster template to match its grid
-##
-## Output - layered raster brick/stack. different layers for different time periods
-###################################################################################
-
-plot_5q0 <- function(data = df,
-                     smooth     = 1,
-                     age_col    = "age",
-                     yr_col     = "year",
-                     died_col   = "died",
-                     N_col      = "N",
-                     weight_col = "weight",
-                     long_col   = "longitude",
-                     lat_col    = "latitude",
-                     dt_col     = "data_type", ## data type col
-                     save_dir   = "~",
-                     dim        = 10 ## height/width of pdf images
-){
-
-  ## load some libraries!
-  library(rgeos)
-  library(raster)
-  library(shapefiles)
-  library(fields)
-  library(akima)
-
-  ## get the dataframe we need set up
-  d <- as.data.frame(data)    ## for indexing carefulness
-  d[[died_col]]  <- d[[died_col]] * d[[weight_col]]
-  d[[N_col]]     <- d[[N_col]]    * d[[weight_col]]
-  d <- d[, c(long_col, lat_col, yr_col, age_col, died_col, N_col, dt_col)]
-  yrs <- sort(unique(d[[yr_col]]))
-
-  if(FALSE){ ## for interpolating onto raster locations vvvvv
-    ## load the population raster - we'll match the cells it uses
-    ## must be on cluster!
-    ## also, pull out info about the raster we'll use to predict and make the raster object
-    pop <- brick('/home/j/temp/geospatial/U5M_africa/data/raw/covariates/new_20160421/pop_stack.tif')
-    ## Convert raster to SpatialPointsDataFrame
-    r.pts <- rasterToPoints(pop, spatial=TRUE)
-    proj4string(r.pts)
-
-    ## reproject sp object
-    geo.prj <- "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"
-    r.pts <- spTransform(r.pts, CRS(geo.prj))
-    proj4string(r.pts)
-
-    ## Assign coordinates to @data slot, display first 6 rows of data.frame
-    r.pts@data <- data.frame(r.pts@data, long=coordinates(r.pts)[,1],
-                             lat=coordinates(r.pts)[,2])
-    head(r.pts@data)
-    ## make a matrix of locations where we want to project our smoothed estimate
-    proj.ll <- r.pts@data[, 5:6]
-
-  }
-
-  ## loop through the years and make a raster for each year
-  fq0_list_cbh <- list(NULL)
-  fq0_list_sbh <- list(NULL)
-  fq0_list <- list(NULL)
-
-
-  #  for(dt in c("cbh", "sbh")){
-  #    print(paste0("~~~ ON DATA TYPE: ", dt))
-  for(y in yrs){
-
-    print(paste0("On year: ", y))
-
-    dy <- d[which(d[[yr_col]] == y), ]#& d[[dt_col]] == dt), ] ## get the subset of the data for the year and data type
-
-    ## aggregate died_col by lat-long location and combine aggregates into one frame
-    f.dyd <- formula(paste0(died_col, "~", long_col, "+", lat_col, "+", age_col))
-    dya <- aggregate(f.dyd, dy, sum)
-
-    f.dyn <- formula(paste0(N_col, "~", long_col, "+", lat_col, "+", age_col))
-    dyn <- aggregate(f.dyn, dy, sum)
-    dya <- merge(dya, dyn)
-
-    ## merge on data_type
-    dyu <- unique(dy[, c(long_col, lat_col, dt_col)])
-    dya <- merge(dya, dyu)
-
-    ## now, for each unique lat-long, calculate 5q0
-    ll   <- unique(cbind(dya[[long_col]], dya[[lat_col]]))
-    colnames(ll) <- c(long_col, lat_col)
-    fq0    <- numeric(dim(ll)[1])
-    for(i in 1:length(fq0)){
-
-      ## get the part of the dataset at this location
-      llr  <- which(dya[[long_col]] == ll[i, 1] & dya[[lat_col]] == ll[i, 2])
-      dll  <- dya[llr, ]
-      ages <- dll[[age_col]]
-
-      ## get all the probabilities at this location
-      if(1 %in% ages){
-        r1 <- which(ages == 1)
-        p1 <- sum(dll[[died_col]][r1]) / sum(dll[[N_col]][r1])
-      }else{
-        p1 <-  0
-      }
-      if(2 %in% ages){
-        r2 <- which(ages == 2)
-        p2 <- sum(dll[[died_col]][r2]) / sum(dll[[N_col]][r2])
-      }else{
-        p2 <-  0
-      }
-      if(3 %in% ages){
-        r3 <- which(ages == 3)
-        p3 <- sum(dll[[died_col]][r3]) / sum(dll[[N_col]][r3])
-      }else{
-        p3 <-  0
-      }
-      if(4 %in% ages){
-        r4 <- which(ages == 4)
-        p4 <- sum(dll[[died_col]][r4]) / sum(dll[[N_col]][r4])
-      }else{
-        p4 <-  0
-      }
-
-      ## calculate 5q0 at this location
-      fq0[i] <- 1 - (1 - p1) ^ 1 *(1 - p2) ^ 11 * (1 - p3) ^ 24 * (1 - p4) ^ 24
-      ## store datatype
-      ##      data.t <- dll[[dt_col]]
-      ##      if(length(unique(data.t)) > 1){
-      ##        message(paste0("Different wts on row: ", i))
-      ##      }else{
-      ##        if(unique(data.t) == 'cbh') is.cbh[i]  <- 1
-      ##        if(unique(data.t) != 'cbh') is.cbh[i]  <- 0
-      ##}
-
-    }
-    ## summary(fq0) ## just a quick check
-
-    ## store results in a list for either sbh or cbh
-    ##      get(paste0("fq0_list_", dt))[[which(yrs == y)]] <- list('loc' = ll,
-    ##                                                              'fq0' = fq0)
-    ##      assign(paste0("fq0_list_", dt, "_", y), list('loc' = ll,
-    ##                                                   'fq0' = fq0)
-    ##            )
-    fq0_list[[which(yrs %in% y)]] <- list('loc' = ll, 'fq0' = fq0)
-
-  }
-  #  }
-
-  ## add year names to list
-  names(fq0_list_sbh) <- names(fq0_list_cbh) <- yrs
-  names(fq0_list) <- yrs
-
-  ## save pdfs for each year
-  library(fields)
-  ## load africa country shapefile
-  as <- shapefile("/home/j/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad0.shp")
-
-  ## ## find the range of the data and use that to make sure all legends
-  ## ## are on the same scale by making up a few datapoints outside the
-  ## ## scope of the plot. don't need this since it goes 0 to 1
-  ## for(i in 1:length(fq0_list)){
-  ##   fq0.r <- range(fq0_list[[i]][["fq0"]])
-  ##   if(i == 1) r <- fq0.r
-  ##   if(fq0.r[1] < r[1]) r[1] <- fq0.r[1]
-  ##   if(fq0.r[2] > r[2]) r[2] <- fq0.r[2]
-  ##   ##  message(fq0.r)
-  ##   ##  message(paste0("on", i))
-  ##   ##  message(sum(fq0_list[[i]][['fq0']] == 1))
-  ##   ##  message(length(fq0_list[[i]][['fq0']]))
-  ## }
-  ## ## for(i in 1:4){
-  ## ##   fq0_list[[i]][['loc']] <- rbind(fq0_list[[i]][['loc']], matrix(rep(10, 8), ncol = 2)) ## add locations in nigeria
-  ## ##   fq0_list[[i]][['fq0']] <- c(fq0_list[[i]][['fq0']], fq0.r, fq0.r) ## range
-  ## ##   fq0_list[[i]][['cbh']] <- c(fq0_list[[i]][['cbh']], 1, 1, 0, 0)   ## both cbh and sbh data
-  ## ## }
-
-
-  ## set the colors
-  breaks <- c(0, 25,
-              26:50,
-              51:200,
-              1000)
-  col.f1 <- colorRampPalette(c("#e58bba", "#f2e8b5"))
-  col.f2 <- colorRampPalette(c("#f2e8b5", "#ed152e"))
-  col   <- c("#74039E",
-             col.f1(25),
-             col.f2(150),
-             "#ED152E")
-
-
-  for(i in 1:4){
-    pdf(paste0(save_dir, "/raw_fq0_quilt_all", names(fq0_list)[i], ".pdf"), height = dim, width = dim)
-    par(mfrow = c(1, 1),
-        mar   = c(5, 4, 4, 4))
-    plot(as,  main = "",)
-    quilt.plot(fq0_list[[i]][['loc']][, 1],
-               fq0_list[[i]][['loc']][, 2],
-               fq0_list[[i]][['fq0']] * 1000,
-               main = "CBH",
-               add = T,
-               breaks = breaks, col = col,
-               FUN = median)
-    plot(as, add = T)
-
-    ## plot(as,  main = "SBH",)
-    ## quilt.plot(fq0_list_sbh[[i]][['loc']][, 1],
-    ##            fq0_list_sbh[[i]][['loc']][, 2],
-    ##            fq0_list_sbh[[i]][['fq0']] * 1000,
-    ##            main = "SBH",
-    ##            add = T,
-    ##            breaks = breaks, col = col,
-    ##            FUN = median)
-    ## plot(as, add = T)
-
-    dev.off()
-  }
-
-
-
-  if(FALSE){
-
-    ## akima::interp() attempt
-
-    save(list = ls(), file = "~/plot.RData")
-    load("~/plot.RData")
-
-    rows <- base:::sample(size = 2e4 ,1:length(fq0))
-    ##  rows <- 1:length(fq0)
-    library(akima)
-    system.time(fit  <- interp(ll[rows, 1], ll[rows, 2], fq0[rows], ))
-
-    pdf("~/interp.pdf", width=10, height=10)
-    image (fit)
-    contour(fit, add=TRUE)
-    points (ll[rows, ], pch = 3)
-    dev.off()
-  }
-
-  if(FALSE){
-    ## Thin plate spline attempt
-
-    ## now we make the thin-plate smoothed version
-    dircos<- function(x1){
-      coslat1 <- cos((x1[, 2] * pi)/180)
-      sinlat1 <- sin((x1[, 2] * pi)/180)
-      coslon1 <- cos((x1[, 1] * pi)/180)
-      sinlon1 <- sin((x1[, 1] * pi)/180)
-      cbind(coslon1*coslat1, sinlon1*coslat1, sinlat1)
-    }
-
-    tps.name  <- paste0("tps.fit.", y)
-    system.time( ## this is slow
-      tps.fit <- Tps(dircos(ll), fq0)
-    )
-    assign(tps.name, tps.fit)
-
-    ## project where we want to get estimates
-    ## preds <- predict(tps.fit, x=as.matrix(proj.ll))
-
-    ## now we just need to store these back in the raster correctly (or make a new raster)
-  }
-
-  print("Done making images")
-  message("Done making images")
-
-}
-
-#######################################################################################
-## this one does a coarser summed estimate
-## it sums exp in a box, sums deaths in a box and maps 1-(1-sum(death)/sum(exp))^60
-## WARNING: still in development though all the code needed to produce maps is located internally
-plot_5q0_summed <- function(data = df,
-                            smooth     = 1,
-                            age_col    = "age",
-                            yr_col     = "year",
-                            died_col   = "died",
-                            N_col      = "N",
-                            weight_col = "weight",
-                            long_col   = "longitude",
-                            lat_col    = "latitude",
-                            dt_col     = "data_type", ## data type col
-                            save_dir   = "~",
-                            dim        = 10 ## height/width of pdf images
-){
-
-  ## load some libraries!
-  library(rgeos)
-  library(raster)
-  library(shapefiles)
-  library(fields)
-  library(akima)
-
-  ## get the dataframe we need set up
-  d <- as.data.frame(data)    ## for indexing carefulness
-  d[[died_col]]  <- d[[died_col]] * d[[weight_col]]
-  d[[N_col]]     <- d[[N_col]]    * d[[weight_col]]
-  d <- d[, c(long_col, lat_col, yr_col, age_col, died_col, N_col, dt_col)]
-  yrs <- sort(unique(d[[yr_col]]))
-
-  if(FALSE){ ## for interpolating onto raster locations vvvvv
-    ## load the population raster - we'll match the cells it uses
-    ## must be on cluster!
-    ## also, pull out info about the raster we'll use to predict and make the raster object
-    pop <- brick('/home/j/temp/geospatial/U5M_africa/data/raw/covariates/new_20160421/pop_stack.tif')
-    ## Convert raster to SpatialPointsDataFrame
-    r.pts <- rasterToPoints(pop, spatial=TRUE)
-    proj4string(r.pts)
-
-    ## reproject sp object
-    geo.prj <- "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"
-    r.pts <- spTransform(r.pts, CRS(geo.prj))
-    proj4string(r.pts)
-
-    ## Assign coordinates to @data slot, display first 6 rows of data.frame
-    r.pts@data <- data.frame(r.pts@data, long=coordinates(r.pts)[,1],
-                             lat=coordinates(r.pts)[,2])
-    head(r.pts@data)
-    ## make a matrix of locations where we want to project our smoothed estimate
-    proj.ll <- r.pts@data[, 5:6]
-
-  }
-
-  ## set the colors
-  breaks <- c(0, 25,
-              26:50,
-              51:200,
-              202)
-  col.f1 <- colorRampPalette(c("#e58bba", "#f2e8b5"))
-  col.f2 <- colorRampPalette(c("#f2e8b5", "#ed152e"))
-  col   <- c("#74039E",
-             col.f1(25),
-             col.f2(150),
-             "#ED152E")
-
-  library(fields)
-  ## load africa country shapefile
-  as <- shapefile("/home/j/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad0.shp")
-
-  for(y in yrs){
-
-    print(paste0("On year: ", y))
-
-    pdf(paste0(save_dir, "/raw_fq0_new_all", y, ".pdf"), height = dim, width = dim)
-    par(mfrow = c(1, 1),
-        mar = c(5, 4, 4, 5))
-
-    #   for(dt in c("cbh", "sbh")){
-    #    print(paste0("~~~ ON DATA TYPE: ", dt))
-
-    dy <- d[which(d[[yr_col]] == y), ]#& d[[dt_col]] == dt), ] ## get the subset of the data for the year and data type
-
-    ## ## aggregate died_col by lat-long location and combine aggregates into one frame
-    ## f.dyd <- formula(paste0(died_col, "~", long_col, "+", lat_col, "+", age_col))
-    ## dya <- aggregate(f.dyd, dy, sum)
-
-    ## f.dyn <- formula(paste0(N_col, "~", long_col, "+", lat_col, "+", age_col))
-    ## dyn <- aggregate(f.dyn, dy, sum)
-    ## dya <- merge(dya, dyn)
-
-    ## ## merge on data_type
-    ## dyu <- unique(dy[, c(long_col, lat_col, dt_col)])
-    ## dya <- merge(dya, dyu)
-
-    ## get the prob of dying in the age bin from the sums in the square
-    ## first, make a grid that will be constant for y and dt
-    gr.y.dt <- discretize.image(x = dy[, 1:2], m = 64, n = 64, grid = NULL, boundary.grid = FALSE)$grid
-
-    for(a in 1:4){
-      ## subset the data
-      dya <- subset(dy, get(age_col) == a)
-
-      ## now we use the hacked quilt.plot to sum on grid squares
-      sum.deaths <- as.image(Z = dya$died, x = dya[, 1:2], nx = 64, ny = 64, na.rm = TRUE,
-                             grid = gr.y.dt, FUN = sum)
-      sum.exps   <- as.image(Z = dya$N, x = dya[, 1:2], nx = 64, ny = 64, na.rm = TRUE,
-                             grid = gr.y.dt, FUN = sum)
-
-      sum.ratio  <- sum.deaths$z / sum.exps$z
-      not.na.z <- which(!is.na(sum.ratio))
-
-      if(a == 1){
-        dyp  <- cbind(not.na.z,
-                      sum.ratio[not.na.z])
-        colnames(dyp) <- c("n.na.z", paste0("s.r", a))
-      }else{
-        dy.t <-  cbind(not.na.z,
-                       sum.ratio[not.na.z])
-        colnames(dy.t) <- c("n.na.z", paste0("s.r", a))
-        dyp <- merge(dyp, dy.t, all = T, ny = "n.na.z")
-      }
-    }
-
-    ## fill in NAs with zeros
-    dyp <- as.matrix(dyp)
-    dyp[which(is.na(dyp))] <- 0
-
-    ## make 5q0 estimates
-    fq0 <- 1 - (1 - dyp[, 2]) ^ 1 *  (1 - dyp[, 3]) ^ 11 *  (1 - dyp[, 4]) ^ 24 *  (1 - dyp[, 5]) ^ 24
-
-    ## mask values higher than 200 to 201 for plotting purposes
-    ## the color scale stops at 200 anyways
-    fq0[which(fq0 > 200)] <- 201
-
-
-    ## make '5q0' estimate from the summed guys
-    ##    fq0.z <- 1 - (1 - sum.deaths$z/sum.exps$z) ^ 60
-
-
-    ## set up quilt.plot
-    plot.im <-  as.image(Z = dy$died, x = dy[, 1:2], nx = 64, ny = 64, na.rm = TRUE,
-                         grid = gr.y.dt, FUN = sum)
-
-    ## fill z with our numbers
-    z <- plot.im$z
-    z[dyp[, 1]] <- fq0
-    plot.im$z <- z * 1000 ## convert to counts
-
-    ## now we can plot it
-    plot(as,  main = "All")
-    image.plot(plot.im, nlevel = length(col), col = col, add = TRUE, breaks = breaks)
-    plot(as, add = TRUE)
-
-    dev.off()
-
-  }
-
-  #    dev.off()
-  #  }
-
-  ## add year names to list
-  names(fq0_list_sbh) <- names(fq0_list_cbh) <- yrs
-
-  ## save pdfs for each year
-  library(fields)
-  ## load africa country shapefile
-  as <- shapefile("/home/j/temp/geospatial/U5M_africa/data/clean/shapefiles/africa_ad0.shp")
-
-  ## ## find the range of the data and use that to make sure all legends
-  ## ## are on the same scale by making up a few datapoints outside the
-  ## ## scope of the plot. don't need this since it goes 0 to 1
-  ## for(i in 1:length(fq0_list)){
-  ##   fq0.r <- range(fq0_list[[i]][["fq0"]])
-  ##   if(i == 1) r <- fq0.r
-  ##   if(fq0.r[1] < r[1]) r[1] <- fq0.r[1]
-  ##   if(fq0.r[2] > r[2]) r[2] <- fq0.r[2]
-  ##   ##  message(fq0.r)
-  ##   ##  message(paste0("on", i))
-  ##   ##  message(sum(fq0_list[[i]][['fq0']] == 1))
-  ##   ##  message(length(fq0_list[[i]][['fq0']]))
-  ## }
-  ## ## for(i in 1:4){
-  ## ##   fq0_list[[i]][['loc']] <- rbind(fq0_list[[i]][['loc']], matrix(rep(10, 8), ncol = 2)) ## add locations in nigeria
-  ## ##   fq0_list[[i]][['fq0']] <- c(fq0_list[[i]][['fq0']], fq0.r, fq0.r) ## range
-  ## ##   fq0_list[[i]][['cbh']] <- c(fq0_list[[i]][['cbh']], 1, 1, 0, 0)   ## both cbh and sbh data
-  ## ## }
-
-
-  ## set the colors
-  breaks <- c(0, 25,
-              26:50,
-              51:200,
-              1000)
-  col.f1 <- colorRampPalette(c("#e58bba", "#f2e8b5"))
-  col.f2 <- colorRampPalette(c("#f2e8b5", "#ed152e"))
-  col   <- c("#74039E",
-             col.f1(25),
-             col.f2(150),
-             "#ED152E")
-
-
-  for(i in 1:4){
-    pdf(paste0(save_dir, "/raw_fq0_quilt_cbh_sbh", names(fq0_list_cbh)[i], ".pdf"), height = dim, width = dim * 2)
-    par(mfrow = c(1, 2),
-        mar   = c(5, 4, 4, 10))
-    plot(as,  main = "CBH",)
-    quilt.plot(fq0_list_cbh[[i]][['loc']][, 1],
-               fq0_list_cbh[[i]][['loc']][, 2],
-               fq0_list_cbh[[i]][['fq0']] * 1000,
-               main = "CBH",
-               add = T,
-               breaks = breaks, col = col,
-               FUN = median)
-    plot(as, add = T)
-
-    plot(as,  main = "SBH",)
-    quilt.plot(fq0_list_sbh[[i]][['loc']][, 1],
-               fq0_list_sbh[[i]][['loc']][, 2],
-               fq0_list_sbh[[i]][['fq0']] * 1000,
-               main = "SBH",
-               add = T,
-               breaks = breaks, col = col,
-               FUN = median)
-    plot(as, add = T)
-
-    dev.off()
-  }
-
-
-
-  if(FALSE){
-
-    ## akima::interp() attempt
-
-    save(list = ls(), file = "~/plot.RData")
-    load("~/plot.RData")
-
-    rows <- base:::sample(size = 2e4 ,1:length(fq0))
-    ##  rows <- 1:length(fq0)
-    library(akima)
-    system.time(fit  <- interp(ll[rows, 1], ll[rows, 2], fq0[rows], ))
-
-    pdf("~/interp.pdf", width=10, height=10)
-    image (fit)
-    contour(fit, add=TRUE)
-    points (ll[rows, ], pch = 3)
-    dev.off()
-  }
-
-  if(FALSE){
-    ## Thin plate spline attempt
-
-    ## now we make the thin-plate smoothed version
-    dircos<- function(x1){
-      coslat1 <- cos((x1[, 2] * pi)/180)
-      sinlat1 <- sin((x1[, 2] * pi)/180)
-      coslon1 <- cos((x1[, 1] * pi)/180)
-      sinlon1 <- sin((x1[, 1] * pi)/180)
-      cbind(coslon1*coslat1, sinlon1*coslat1, sinlat1)
-    }
-
-    tps.name  <- paste0("tps.fit.", y)
-    system.time( ## this is slow
-      tps.fit <- Tps(dircos(ll), fq0)
-    )
-    assign(tps.name, tps.fit)
-
-    ## project where we want to get estimates
-    ## preds <- predict(tps.fit, x=as.matrix(proj.ll))
-
-    ## now we just need to store these back in the raster correctly (or make a new raster)
-  }
-
-  print("Done making images")
-  message("Done making images")
-
-}
-
 ## ################################
-## is_oos_preds
+## is_oos_preds_testing
 ##
 ## this function takes the data that went into our MBG framework and
 ## returns an array containing: location, observed value, in sample
 ## predictions, and out of sample predictions (when applicable), country, year, N
-##
-## INPUT:
-##
-## OUTPUT:
 ##
 ## #################################
 
@@ -831,11 +163,10 @@ is_oos_preds_testing <- function(rd = run_date,
 ){
 
   ## place to look for things
-  output.dir <- sprintf("/share/geospatial/mbg/%s/%s/output/%s/",
-                        indic_group, indic, rd)
+  output.dir <- '<<<< FILEPATH REDACTED >>>>'
 
   ## Load data
-  datdir <- sprintf('/share/geospatial/mbg/%s/%s/output/%s/',indic_group,indic,rd)
+  datdir <- '<<<< FILEPATH REDACTED >>>>'
 
   ## holdout data
   if(!is.null(holdoutlist)){
@@ -845,7 +176,7 @@ is_oos_preds_testing <- function(rd = run_date,
   }
 
   ## load the simple raster for this region
-  load(paste0('/share/geospatial/shapefiles/simple_raster',reg,'.RData'))
+  load(paste0('<<<< FILEPATH REDACTED >>>>/simple_raster',reg,'.RData'))
 
   ## setup the data in the data order to return
   if(holdouts == 0){
@@ -871,8 +202,7 @@ is_oos_preds_testing <- function(rd = run_date,
     for(hh in 1:holdouts){
 
       ## load the associated preds
-      load(sprintf(paste0('/share/geospatial/mbg/%s/%s/output/%s/', cell_draws_filename),
-                   indic_group, indic, rd, indic, 0, reg, hh))
+      load(paste0('<<<< FILEPATH REDACTED >>>>', cell_draws_filename))
 
       ## average across the draws
       mean.cell.pred <- rowMeans(cell_pred)
@@ -912,8 +242,7 @@ is_oos_preds_testing <- function(rd = run_date,
   d.is$fold <- 0
 
   ## load the associated preds
-  load(sprintf(paste0('/share/geospatial/mbg/%s/%s/output/%s/', cell_draws_filename),
-               indic_group, indic, rd, indic, 0, reg, hh))
+  load(sprintf(paste0('<<<< FILEPATH REDACTED >>>>', cell_draws_filename))
 
   ## average across the draws
   mean.cell.pred <- rowMeans(cell_pred)
@@ -1016,7 +345,7 @@ get_is_oos_draws <- function(ind_gp,
   message("Load input data used in model")
   
   # load regions that were used in modeling
-  mod.dir <- sprintf("/share/geospatial/mbg/%s/%s/output/%s/", ind_gp, ind, rd)
+  mod.dir <- '<<<< FILEPATH REDACTED >>>>'
   all.regions <- get_output_regions(mod.dir)
   
   # load raw data
@@ -1024,7 +353,9 @@ get_is_oos_draws <- function(ind_gp,
     df <- fread(paste0(mod.dir, "input_data.csv")) ## raw input data
     df <- merge_with_ihme_loc(df, shapefile_version = shapefile_version)
   } else {
-    df <- rbindlist(lapply(readRDS(paste0(mod.dir, "stratum.rds")), data.table))
+    df <- lapply(paste0(mod.dir, "stratum_", all.regions, ".rds"), readRDS)
+    for (i in 1:length(df)) df[[i]] <- data.table(df[[i]][[1]])
+    df <- rbindlist(df)
   }
   
   # rename year column for convenience
@@ -1116,10 +447,11 @@ get_is_oos_draws <- function(ind_gp,
       
       # load cell pred objects
       message(paste("......load cell preds for holdout", this_fold))
-      load(paste0(mod.dir, sprintf("%s_cell_draws_eb_bin%i_%s_%i.RData", ind, age, rr, this_fold)))
+      load('<<<< FILEPATH REDACTED >>>>')
       
       # extract draws
       df.r[fold == this_fold, paste0("draw", 1:ncol(cell_pred)) := as.data.table(cell_pred[cell_pred_id, ])]
+      
     }
     
     # return combined draws and draws
@@ -1148,10 +480,7 @@ plot.rfs <- function(ind.gp = indicator_group,
 
   require(ggrepel) ## for labels
 
-  regions <- get_output_regions(in_dir = paste0('/share/geospatial/mbg/',
-                                                ind.gp, '/',
-                                                ind, '/output/',
-                                                rd))
+  regions <- get_output_regions(in_dir = '<<<< FILEPATH REDACTED >>>>')
 
   for(rr in regions){
 
@@ -1162,7 +491,7 @@ plot.rfs <- function(ind.gp = indicator_group,
     if(rr == 'sssa') rr_name = "Southern Sub-Saharan Africa"
     if(rr == 'cssa') rr_name = 'Central Sub-Saharan Africa'
 
-    in_dir  <- paste0('/share/geospatial/mbg/', ind.gp, '/', ind, '/output/', rd)
+    in_dir  <- '<<<< FILEPATH REDACTED >>>>'
     default_rf_path <- paste0(in_dir, '/', ind, '_rf.csv')
     all_rfs <- fread(default_rf_path)
     gaul_list = get_adm0_codes(rr, shapefile_version = shapefile_version)
@@ -1225,8 +554,7 @@ plot.rfs <- function(ind.gp = indicator_group,
                           sssa_rf_labs + margin,
                           wssa_rf_labs + margin,
                           ncol=2)
-  ggsave(filename = sprintf('%s%s_all_rfs_labs.png',
-                            output.dir, ind),
+  ggsave(filename = '<<<< FILEPATH REDACTED >>>>',
          all.rfs, width = 12, height = 16)
 }
 
@@ -1243,7 +571,7 @@ model_fit_table_list <- function(regions, rd=run_date, holdout = 0,
                                  age = 0,
                                  ind= indicator,
                                  ind_gp = indicator_group,
-                                 sharedir = sprintf('/share/geospatial/mbg/%s/%s',indicator_group,indicator)){
+                                 sharedir = '<<<< FILEPATH REDACTED >>>>'){
   ## load models
   require(INLA)
   message(sprintf('Pulling together results for %s models',rd))
@@ -1256,15 +584,13 @@ model_fit_table_list <- function(regions, rd=run_date, holdout = 0,
 
     message("::::loading in pre-INLA objects to get spde")
     pathaddin  <-  paste0('_bin',age,'_',rr,'_',holdout)
-    load(paste0('/share/geospatial/mbg/', ind_gp, '/',
-                ind, '/model_image_history/', rd, pathaddin,
+    load(paste0('<<<< FILEPATH REDACTED >>>>', rd, pathaddin,
                 '.RData'))
 
     modnames = c('gam','gbm','ridge','enet','lasso')
 
     full_raster_list <- cov_list
 
-    ## hotfix!! inv.logit ## TODO ## TODO don't need this if either
     ##   1) resolve logit fits
     ##   2) have new runs where I didn't logit stackers
     for(mm in modnames){
@@ -1291,8 +617,7 @@ model_fit_table_list <- function(regions, rd=run_date, holdout = 0,
     ## this is what we neede!
 
     message('::::loading in INLA fit\n')
-    f <-  sprintf('%s/output/%s/inla_model_fit_pre_preds_%s_holdout_%i.RDS',
-                  sharedir,rd,reg, holdout)
+    f <-  '<<<< FILEPATH REDACTED >>>>'
     res_fit <- readRDS(f)
 
     ## now we extract what we need from the fit to get transformed spatial params
@@ -1472,7 +797,7 @@ plot_of_plots <- function(run_date,
   # load in neeed data
   folds <- c()
   for(i in 1:nfolds){
-    if(file.exists(sprintf('%s/output/%s/fin_bin%i_%s_%i',sharedir,run_date,age,reg,i))){
+    if(file.exists('<<<< FILEPATH REDACTED >>>>')){
       folds <- c(folds,i)
     }
   }
@@ -1485,9 +810,9 @@ plot_of_plots <- function(run_date,
     for(i in folds){
       message(i)
       patt <- sprintf('%s_aggval_bin%i_%s_%i',indicator,age,reg,i)
-      for(f in list.files(path   =sprintf('%s/output/%s/',sharedir,run_date),pattern=patt)){
+      for(f in list.files(path   ='<<<< FILEPATH REDACTED >>>>',pattern=patt)){
         message(f)
-        tmp       <- fread(sprintf('%s/output/%s/%s',sharedir,run_date,f))
+        tmp       <- fread('<<<< FILEPATH REDACTED >>>>')
         tmp$model <- gsub('.csv','',gsub(paste0(patt,'_'),'',f))
         d         <- rbind(d,tmp)
       }
@@ -1539,8 +864,8 @@ plot_of_plots <- function(run_date,
     legend <- get_legend(p3)
     p3 <- p3 + theme(legend.position="none")
 
-    message(paste0('saving ',sprintf('%s/output/%s/plot_of_plots_bin%i_%s.pdf',sharedir,run_date,age,reg)))
-    pdf(sprintf('%s/output/%s/plot_of_plots_bin%i_%s.pdf',sharedir,run_date,age,reg))
+    message(paste0('saving ', '<<<< FILEPATH REDACTED >>>>'))
+    pdf(s'<<<< FILEPATH REDACTED >>>>')
     grid.arrange(p1, p2, p3, legend, ncol = 2, top = sprintf('OOS Predictive Validity: Age Bin %i, %s. %i/%i folds analyzed',age,reg,length(folds),nfolds))
     dev.off()
   } else {
@@ -1551,7 +876,7 @@ plot_of_plots <- function(run_date,
 
 
 ####################################################################################################################
-## INPUT: # data file matching /share/geospatial/mbg/child_growth_failure/wasting_mod_b/output/2017_06_29_01_24_15/output_draws_data.csv
+## INPUT: # data file matching <<<< FILEPATH REDACTED >>>>/output_draws_data.csv
 ## OUTPUT SUMMARIZED PREDICTIVE VALIDITY METRICS
 ##
 ####################################################################################################################
@@ -1615,10 +940,7 @@ plot_of_plots <- function(run_date,
 #' )
 #' 
 #' # Load the IS/OOS draws created above
-#' draws.df <- fread(sprintf(
-#'   "/share/geospatial/mbg/%s/%s/output/%s/output_draws_data.csv",
-#'   indicator_group, indicator, run_date
-#' ))
+#' draws.df <- fread('<<<< FILEPATH REDACTED >>>>')
 #' 
 #' # run the PV table function
 #' pvtable.reg <- get_pv_table(
@@ -1683,7 +1005,6 @@ get_pv_table <- function(d,
     d[, Y := get(indicator) * round(N) / N] # adjust observed number of cases for effect of rounding N
   }
   if (family == "gaussian") {
-    message("NICK: THIS SHOULD WORK IF YOU HAVE DRAWS OF PRECISION NAMED tau_1,...tau_1000 BUT THIS IS UNTESTED")
     x <- sapply(1:draws, function(i) rnorm(nrow(d), sqrt(d[[paste0("tau_", i)]]), d[[paste0("draw", i)]]))
     d[, Y := get(indicator)]
   }
@@ -1724,20 +1045,19 @@ get_pv_table <- function(d,
     res[, abs_error := abs(error)]
     
     ## Collapse to calculate predictive validity metrics
-    weighted.rmse <- function(error, w) {
-      sqrt(sum((w / sum(w)) * ((error) ^ 2)))
-    }
     if (weighted) res$weight <- res$exposure else res$weight <- 1
-    res2 <- 
-      res[, c(lapply(.SD, function(x) weighted.mean(x, weight)),
-                    rmse = weighted.rmse(error, weight),
+    res2 <- res[, c(lapply(.SD, function(x) weighted.mean(x, weight)),
+                    rmse = rmse(error, weight),
                     median_SS = median(exposure),
-                    cor = boot::corr(cbind(p, mean_draw), weight)),
-          by = result_agg_over,
-          .SDcols = c("error", "abs_error", "mean_draw", "p", paste0("clusters_covered_", coverage_probs))]
-    
-    setnames(res2, c("error", "abs_error", "p", paste0("clusters_covered_", coverage_probs)),
-             c("me", "mae", "mean_p", paste0("coverage_", coverage_probs)))
+                    cor = boot::corr(cbind(p, mean_draw), weight)
+    ),
+    by = result_agg_over,
+    .SDcols = c("error", "abs_error", "mean_draw", "p", paste0("clusters_covered_", coverage_probs))
+    ]
+    setnames(
+      res2, c("error", "abs_error", "p", paste0("clusters_covered_", coverage_probs)),
+      c("me", "mae", "mean_p", paste0("coverage_", coverage_probs))
+    )
     
     return(list(res = res, res2 = res2))
   })
@@ -1943,8 +1263,6 @@ get_pv_table <- function(d,
 #' 
 #' This function returns average RMSE, Bias, Mean Absolute Error, and Standard Error for admin 0 /admin 1 / admin 2
 #'
-#' @author Lauren Woyczynski, \email{lpw3@uw.edu}
-#'
 #' @param indicator indicator name used in file structure for mbg
 #' @param indicator_group indicator group
 #' @param strata Regions specified from your model
@@ -1954,10 +1272,10 @@ get_pv_table <- function(d,
 #' @param nic_col This is the name of the unique survey variable, usually labeled "nid" but other teams might use different terminology
 #' @param samp_col This is the name of the column that contains the sum of the sample weights for the collapsed points.
 #' @param shapefile_version String indicating version of shapefile to pull
-#' @param input_file If your team does not use the standard `/share/geospatial/mbg/input_data/{indicator}.csv` input data filepath, supply the filepath to your data here
-#' @param admin0_file If your team does not use the standard `'/share/geospatial/mbg/',indicator_group, '/', indicator, '/output/',run_date, '/pred_derivatives/admin_summaries/',indicator, '_admin_0_unraked_summary.csv'` directory to save unraked aggregated admin summaries, supply the correct filepath here
-#' @param admin1_file If your team does not use the standard `'/share/geospatial/mbg/',indicator_group, '/', indicator, '/output/',run_date, '/pred_derivatives/admin_summaries/',indicator, '_admin_1_unraked_summary.csv'` directory to save unraked aggregated admin summaries, supply the correct filepath here
-#' @param admin2_file If your team does not use the standard `'/share/geospatial/mbg/',indicator_group, '/', indicator, '/output/',run_date, '/pred_derivatives/admin_summaries/',indicator, '_admin_2_unraked_summary.csv'` directory to save unraked aggregated admin summaries, supply the correct filepath here
+#' @param input_file If your team does not use the standard `'<<<< FILEPATH REDACTED >>>>'` input data filepath, supply the filepath to your data here
+#' @param admin0_file If your team does not use the standard `'<<<< FILEPATH REDACTED >>>>'` directory to save unraked aggregated admin summaries, supply the correct filepath here
+#' @param admin1_file If your team does not use the standard `'<<<< FILEPATH REDACTED >>>>'` directory to save unraked aggregated admin summaries, supply the correct filepath here
+#' @param admin2_file If your team does not use the standard `'<<<< FILEPATH REDACTED >>>>'` directory to save unraked aggregated admin summaries, supply the correct filepath here
 #' 
 #' @return a table with bias, rmse, mae, and se for each admin level
 #' @export
@@ -1978,8 +1296,8 @@ get_admin_pv <- function(indicator,
 ){
   message('Pulling in input data...')
   if(is.null(input_file)){
-    if(!file.exists(paste0('/share/geospatial/mbg/input_data/', indicator, '.csv'))) stop('Indicator input data does not exist in /share - please specify a file path with the input_file arg')
-    input.dt <- fread(paste0('/share/geospatial/mbg/input_data/', indicator, '.csv'))
+    if(!file.exists(paste0('<<<< FILEPATH REDACTED >>>>', indicator, '.csv'))) stop('Indicator input data does not exist in /share - please specify a file path with the input_file arg')
+    input.dt <- fread(paste0('<<<< FILEPATH REDACTED >>>>', indicator, '.csv'))
   } else{
     input.dt <- fread(input_file)
   }
@@ -1998,28 +1316,19 @@ get_admin_pv <- function(indicator,
   #Read in admin level results
   message("Pulling in admin results")
   if(is.null(admin0_file)){
-    ad0_mbg <- fread(paste0('/share/geospatial/mbg/',
-                            indicator_group, '/', 
-                            indicator, '/output/',
-                            run_date, '/pred_derivatives/admin_summaries/',
+    ad0_mbg <- fread(paste0('<<<< FILEPATH REDACTED >>>>',
                             indicator, '_admin_0_unraked_summary.csv'))
   } else{
     ad0_mbg <- fread(admin0_file)
   }
   if(is.null(admin1_file)){
-    ad1_mbg <- fread(paste0('/share/geospatial/mbg/',
-                            indicator_group, '/', 
-                            indicator, '/output/',
-                            run_date, '/pred_derivatives/admin_summaries/',
+    ad1_mbg <- fread(paste0('<<<< FILEPATH REDACTED >>>>',
                             indicator, '_admin_1_unraked_summary.csv'))
   } else{
     ad1_mbg <- fread(admin1_file)
   }
   if(is.null(admin2_file)){
-    ad2_mbg <- fread(paste0('/share/geospatial/mbg/',
-                            indicator_group, '/', 
-                            indicator, '/output/',
-                            run_date, '/pred_derivatives/admin_summaries/',
+    ad2_mbg <- fread(paste0('<<<< FILEPATH REDACTED >>>>',
                             indicator, '_admin_2_unraked_summary.csv'))
   } else{
     ad2_mbg <- fread(admin2_file)

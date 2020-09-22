@@ -1,32 +1,12 @@
 ###############################################################################
 ## MBG launch script
-##
-## Modified for ORT by Kirsten Wiens starting on 2018/08/10
-##
 ###############################################################################
-
-
 ## Setup -------------------------------------------------------------------------
 
 ## Clear environment
 rm(list=ls())
 
-# runtime configuration
-if (Sys.info()["sysname"] == "Linux") {
-  j_root <- "/home/j/"
-  h_root <- file.path("/ihme/homes", Sys.info()["user"])
-  
-  package_lib    <- file.path(h_root, '_code/_lib/pkg')
-  ## Load libraries and  MBG project functions.
-  .libPaths(package_lib)
-  
-  # necessary to set this option in order to read in a non-english character shapefile on a linux system (cluster)
-  Sys.setlocale(category = "LC_ALL", locale = "C")
-  
-} else {
-  j_root <- "J:"
-  h_root <- "H:"
-}
+#REDACTED
 
 #load external packages
 #TODO request adds to lbd singularity
@@ -41,23 +21,7 @@ interactive <- F  %>% #manual override
 if (interactive) {
   warning('interactive is set to TRUE - if you did not mean to run MBG interactively then kill the model and set interactive to FALSE in parallel script')
 
-  ## Set repo location, indicator group, and some arguments
-  user <- 'jfrostad'
-  core_repo <- "/homes/jfrostad/_code/lbd/hap"
-  indicator_group <- 'cooking'
-  indicator <- 'cooking_fuel_solid'
-  reg <- 'MNG'
-  
-  config_par   <- 'hap_sp_fine'
-  cov_par <- paste(indicator_group, reg, sep='_')
-
-  parallel_script <- file.path('model/3_orbit')
-  plot_covariates <- T
-  covariate_plotting_only <- F
-  use_geos_nodes <- T
-  proj_arg <- ifelse(use_geos_nodes, 'proj_geo_nodes', 'proj_geospatial_dia')
-  run_date <- '2020_09_13_22_24_27'
-  my_repo <- core_repo
+  #REDACTED
 
   
 } else {
@@ -89,16 +53,15 @@ if (interactive) {
 }
   
 ## Singularity version
-sing_dir <- '/share/singularity-images/lbd/testing_INLA_builds/'
-# which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v3.simg')
-which_sing <- file.path(sing_dir, 'lbd_rpkgs3.6.0gcc9mklrstudioserver1.2.1511_v4.simg')
+sing_dir <- 'REDACTED'
+which_sing <- file.path(sing_dir, '#REDACTED')
 
 ## Released Singularity imgs
-sing_dir <- '/share/singularity-images/lbd/releases/'
-which_sing <- file.path(sing_dir, 'lbd_full_20200128.simg')
+sing_dir <- 'REDACTED'
+which_sing <- file.path(sing_dir, '#REDACTED')
 
 ## Load MBG packages
-package_list <- c(t(read.csv(paste0(core_repo, '/mbg_central/share_scripts/common_inputs/package_list.csv'), header=FALSE)))
+package_list <- c(t(read.csv(paste0(core_repo, '/#REDACTED/package_list.csv'), header=FALSE)))
 source(paste0(core_repo, '/mbg_central/setup.R'))
   mbg_setup(package_list = package_list, repos = core_repo)
   
@@ -133,7 +96,7 @@ config <- set_up_config(repo            = my_repo,
                         )
 
 ## Create output folder with the run_date
-outputdir      <- paste('/share/geospatial/mbg', indicator_group, indicator, 'output', run_date, '', sep='/')
+outputdir      <- paste('#REDACTED', indicator_group, indicator, 'output', run_date, '', sep='/')
   dir.create(outputdir, recursive=T)
 
 ## save config type
@@ -196,7 +159,7 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
                                ss_col     = ss_col,
                                yr_col     = yr_col,
                                seed       = 98112,
-                               save.file = paste0('/share/geospatial/mbg/',
+                               save.file = paste0('REDACTED',
                                                   indicator_group, '/',
                                                   indicator, '/output/',
                                                   run_date, '/stratum_', reg, '.rds'))
@@ -220,7 +183,7 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
     shapefile_admin <- crop(shapefile_admin, extent(subset_shape))
     
     # load mask raster and crop by region
-    raster_mask <- raster('/home/j/WORK/11_geospatial/09_MBG_maps/misc_files/global_files/global_mask_master.grd')
+    raster_mask <- raster('REDACTED')
     raster_mask <- crop(raster_mask, extent(simple_raster))
     
     # make admin 2 holdouts
@@ -241,7 +204,7 @@ if(as.logical(makeholdouts) & !as.logical(skiptoinla)){
                              ss_col = ss_col,
                              yr_col = yr_col,
                              seed = 98112,
-                             save.file = paste0('/share/geospatial/mbg/',
+                             save.file = paste0('#REDACTED/',
                                                 indicator_group, '/',
                                                 indicator, '/output/',
                                                 run_date, '/stratum_', reg, '.rds'))

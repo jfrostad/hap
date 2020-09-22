@@ -32,7 +32,7 @@ aggregate_input_data <- function(reg,
   # ---------------------------------------------------------------
   # Set-up
   # Set arguments
-  output_dir <- file.path('/share/geospatial/mbg', indicator_group, 
+  output_dir <- file.path('#REDACTED', indicator_group, 
                          indicator, 'output', run_date, '/pred_derivatives/admin_summaries/') %T>% 
     dir.create(recursive=T) # create if first run
   output_file <- paste0(output_dir,  '/', reg, "_adm_input_data.fst")
@@ -43,19 +43,19 @@ aggregate_input_data <- function(reg,
     # Load necessary objects
     
     # Load input data
-    input_data <- paste0('/share/geospatial/mbg/input_data/', indicator, '.csv') %>% fread %>% 
+    input_data <- paste0('#REDACTED', indicator, '.csv') %>% fread %>% 
       .[, prop := get(indicator)/N]
     
     # Reading in shapefiles & population raster
-    file_dir <- paste0('/home/j/WORK/11_geospatial/admin_shapefiles/', modeling_shapefile_version, '/')
+    file_dir <- paste0('#REDACTED', modeling_shapefile_version, '/')
     a0_shp <- readRDS(paste0(file_dir,'lbd_standard_admin_0.rds'))
     a1_shp <- readRDS(paste0(file_dir,'lbd_standard_admin_1.rds'))
-    pop_ras <- paste0('/home/j/WORK/11_geospatial/01_covariates/00_MBG_STANDARD/worldpop/',
+    pop_ras <- paste0('#REDACTED',
               'total/1y/',
               'worldpop_total_1y_2010_00_00.tif') %>% raster
     
     # Read in lookup table
-    lookup <- fread('/home/j/WORK/11_geospatial/10_mbg/stage_master_list.csv')
+    lookup <- fread('#REDACTED/stage_master_list.csv')
     # ------------------------------------------------------------------------------
     
     # ----------------------------------------------------------------------------------------------------------------
@@ -103,28 +103,6 @@ aggregate_input_data <- function(reg,
 }
 # -----------------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------------------------
-# aggregate_child_stackers()
-#
-# Written by Kirsten Wiens
-#
-# 07/24/2019
-# Function that aggregates child stacker results in a population-weighted manner
-#
-# Inputs:
-# Indicator, indicator group, run date, reg (which can be a vector of regions),
-# shapefile version, population measure for population-weighted aggregation, age, and holdout
-#
-# Outputs:
-# List of admin 0 (ad0) and admin 1 (ad1) aggregated child stacker results
-#
-# TODO:
-# - Update so that we don't need to load master shapefile each time
-# - Add in option to supply simple polygon or raster separately 
-# - Add option to save output (which would be helpful if added to parallel script)
-# ---------------------------------------------------------------------------------------------
-
-
 # -----------------------------------------------------------------------------------
 # Start function
 aggregate_child_stackers <- function(reg,
@@ -144,7 +122,7 @@ aggregate_child_stackers <- function(reg,
   message(paste0('Aggregating stackers for: ', reg))
   
   # Set arguments
-  output_dir <- file.path('/share/geospatial/mbg', indicator_group, 
+  output_dir <- file.path('#REDACTED', indicator_group, 
                           indicator, 'output', run_date, '/pred_derivatives/admin_summaries/') %T>% 
     dir.create(recursive=T) # create if first run
   output_file <- paste0(output_dir,  '/', reg, "_adm_input_stackers.fst")
@@ -168,9 +146,9 @@ aggregate_child_stackers <- function(reg,
     pixel_id <- raster_outputs[['pixel_id']]
     
     # Add stacking children to this process
-    covs = fetch_from_rdata(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', 
+    covs = fetch_from_rdata(paste0('#REDACTED', indicator_group, '/', indicator, '/model_image_history/', 
                                    run_date, '_bin', age,'_', reg, '_', holdout, '.RData'), 'cov_list')
-    fes = fetch_from_rdata(paste0('/share/geospatial/mbg/', indicator_group, '/', indicator, '/model_image_history/', 
+    fes = fetch_from_rdata(paste0('#REDACTED', indicator_group, '/', indicator, '/model_image_history/', 
                                   run_date, '_bin', age,'_', reg, '_', holdout, '.RData'), 'all_fixed_effects')
     submodels = trimws(strsplit(fes, '+', fixed = T)[[1]])
     covs = covs[submodels]
