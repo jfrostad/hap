@@ -1,5 +1,5 @@
 # ----HEADER------------------------------------------------------------------------------------------------------------
-# Author: JF
+# Author: REDACTED
 # Purpose: Produce HAP maps and figures
 #***********************************************************************************************************************
 
@@ -27,7 +27,7 @@ package_list    <- package_list <- fread('#REDACTED/package_list.csv') %>% t %>%
 # Use setup.R functions to load common LBD packages and mbg_central "function" scripts
 message('Loading in required R packages and MBG functions')
 source(paste0(core_repo, '/mbg_central/setup.R'))
-  mbg_setup(package_list = package_list, repos = core_repo)
+mbg_setup(package_list = package_list, repos = core_repo)
 
 #capture date
 today <- Sys.Date() %>% gsub("-", "_", .)
@@ -229,7 +229,7 @@ reg_grob <- ggplotGrob(reg_map)
 ggsave(filename=file.path(save.dir, 'region_legend.png'), plot=reg_map, width=12, height=6, units='in', dpi=900)
 
 #***********************************************************************************************************************
- 
+
 # ---FIGURE 2-----------------------------------------------------------------------------------------------------------
 #SDG projection probabilities
 #append the ADM2 files
@@ -266,7 +266,7 @@ target_threshold <- .05
 prob_threshold <- .95
 
 plot.dt <- 
-probs[target==target_threshold & year==2030] %>% 
+  probs[target==target_threshold & year==2030] %>% 
   merge(., dt[type=='TAP'&year==max(year), .(ADM2_CODE, pop_total)], by='ADM2_CODE') %>% 
   .[absolute_goal_prob<=.5, status := 'may fail'] %>% 
   .[absolute_goal_prob<=(1-prob_threshold), status := 'fail'] %>% 
@@ -278,8 +278,8 @@ probs[target==target_threshold & year==2030] %>%
   .[, .(pop_share=sum(pop_total, na.rm=T)/country_pop,
         pop_fail,
         pop_success
-        ), 
-    by=.(ADM0_NAME, status, super_region_id)] %>% 
+  ), 
+  by=.(ADM0_NAME, status, super_region_id)] %>% 
   unique(., by=c('ADM0_NAME', 'status', 'super_region_id')) %>% 
   .[, ratio := pop_fail/pop_success] %>% 
   .[status%like%'fail', pop_share := pop_share*-1] %>% #create mirroring effect
@@ -287,7 +287,7 @@ probs[target==target_threshold & year==2030] %>%
   .[, status := factor(status, levels=c('success', 'may succeed', 'fail', 'may fail'))] 
 
 plot <-
-plot.dt %>%
+  plot.dt %>%
   ggplot(aes(x = forcats::fct_reorder(ADM0_NAME, -ratio), 
              y = pop_share, alpha = status, fill=super_region_id %>% as.factor)) +
   geom_bar(stat = "identity") +
@@ -345,10 +345,10 @@ pop_plot <-
                      tap_cutoff = 750,
                      smoother=.1)
 death_plot <-
-makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
-                   wt_var='atr_count_mean', 
-                   tap_cutoff = 750,
-                   smoother=.1)
+  makeTapDensityPlot(input_dt=plot.dt, locs=biggest_countries_sr[1:6, iso3], 
+                     wt_var='atr_count_mean', 
+                     tap_cutoff = 750,
+                     smoother=.1)
 
 #extract legend and set coordinates
 legend <- get_legend(pop_plot)
@@ -398,7 +398,7 @@ death_plot <-
 plot.dt <- plot.dt[!(iso3 %in% biggest_countries_sr[1:6, iso3])] #remove the biggest countries
 sapply(unique(plot.dt$region_id), makeFig3Loclist, dt=plot.dt) %>%
   flatten2 %>%
-    mclapply(., makeRegFigure3s, mc.cores=5)
+  mclapply(., makeRegFigure3s, mc.cores=5)
 #***********************************************************************************************************************
 
 # ---FIGURE 4-----------------------------------------------------------------------------------------------------------
